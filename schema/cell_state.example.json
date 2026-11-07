@@ -1,0 +1,20 @@
+[
+  {
+    "cell": "C3",
+    "bounds": [[42.3490, -70.7520], [42.3500, -70.7500]],
+    "status": "CLEARED",
+    "prob": 0.02,
+    "cum_pod": 0.86,
+    "last_seen_ts": 1794079200.0,
+    "reason": ""
+  },
+  {
+    "cell": "D3",
+    "bounds": [[42.3490, -70.7500], [42.3500, -70.7480]],
+    "status": "SEARCHED_NOT_TRUSTED",
+    "prob": 0.11,
+    "cum_pod": 0.18,
+    "last_seen_ts": 1794079200.0,
+    "reason": "warm background, likely glare"
+  }
+]

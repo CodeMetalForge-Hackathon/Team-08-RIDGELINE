@@ -1,0 +1,8 @@
+{
+  "type": "calibration",
+  "name": "placeholder, replace with values fitted from our trials",
+  "target_c": 30.0,
+  "coef": { "b0": -1.0, "b_range": -2.5, "b_contrast": 0.35, "b_std": -1.5 },
+  "false_alarm_rate": 0.02,
+  "trials": 0
+}

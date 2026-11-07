@@ -40,3 +40,8 @@ Desktop.ini
 *.onnx
 *.pt
 *.hef
+
+# Raw third-party datasets (may contain real people, keep them local)
+data/raw/
+*.mp4
+*.zip

@@ -1,0 +1,13 @@
+source,kind,condition,sea_temp_c,target_temp_c,contrast_c,altitude_m,pixels_on_target,result,note
+medic2024,observed,night swimsuit,20.7,22.5,1.8,20,33,usable,body and head both read 22.5 C
+medic2024,observed,night swimsuit,20.7,22.5,1.8,110,3,max usable altitude,only the head stands out at this altitude
+medic2024,observed,night survival suit (face),20.7,29.0,8.3,20,80,usable,suit read 18.5 to 18.7 C and the face 29 C. contrast computed by us from the face
+medic2024,observed,night survival suit (face),20.7,29.0,8.3,120,4,usable at max tested altitude,
+burke2019,model,0.5 m target seen as 5 px,,,10,397,5,max altitude for detection,FLIR Duo Pro R 640x512 with 13 mm lens
+burke2019,model,0.5 m target seen as 5 px,,,3,119,5,max altitude for detection,
+burke2019,model,0.5 m target seen as 10 px,,,10,199,10,max altitude for detection,
+burke2019,model,0.5 m target seen as 10 px,,,3,60,10,max altitude for detection,
+burke2019,geometry,prone person 1.7 m long,,,,50,25,apparent length in px,
+burke2019,geometry,prone person 1.7 m long,,,,100,15,apparent length in px,
+burke2019,geometry,head and shoulders 0.5 m wide,,,,50,9,apparent width in px,
+burke2019,geometry,upright person seen from above,,,,100,4,apparent width in px,

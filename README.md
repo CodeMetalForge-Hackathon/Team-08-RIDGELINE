@@ -66,7 +66,10 @@ Pre-existing open-source libraries, frameworks, SDKs, and datasets used in this 
 
 | Name | License | Used for |
 | --- | --- | --- |
-| TBD | TBD | TBD |
+| Medić et al. 2024, Drones 8(3) 76 | CC BY 4.0 | Thermal contrast and altitude numbers for a person in water (`data/literature/`) |
+| Burke et al. 2019, Drones 3(4) 78 | CC BY 4.0 | Detection altitude versus contrast and pixel size (`data/literature/`) |
+| NOAA NDBC buoy 44013 | U.S. Government data, public domain | Snapshot of water temperature, wind and waves (`data/ndbc/`) |
+| SeaDronesSee Multi-Object Tracking (planned) | CC0 1.0 | Replay of real drone telemetry, kept out of the repo (`data/raw/`) |
 
 ## Submission checklist
 
