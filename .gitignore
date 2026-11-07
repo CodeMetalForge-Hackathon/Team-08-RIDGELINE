@@ -1,0 +1,42 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+
+# Local notes, imports, and temporary review artifacts
+.local/
+tmp/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# JavaScript
+node_modules/
+dist/
+build/
+.next/
+coverage/
+
+# Operating systems and editors
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+
+# Large captures and weights (use Git LFS or link externally)
+*.iq
+*.cfile
+*.sigmf-data
+*.onnx
+*.pt
+*.hef
