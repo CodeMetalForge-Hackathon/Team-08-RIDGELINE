@@ -4,6 +4,10 @@ LiDAR on UAVs, integrated sensor data to detect floating humans
 Incorporate live updating ocean currents data
 Into SLAM (simultaneous localization and mapping)
 
+Ask mentors about:
+How does USCG detect people in water?
+IR, Radar, Audio?
+
 
 
 Idea L: 
