@@ -1,0 +1,12 @@
+{
+  "type": "observation",
+  "id": "pass-0042",
+  "ts": 1794079200.0,
+  "sensor": "thermal-1",
+  "platform": "uas-1",
+  "bounds": [[42.3490, -70.7520], [42.3510, -70.7480]],
+  "cells": [
+    { "cell": "C3", "range_m": 0.6, "bg_median_c": 21.4, "bg_std_c": 0.3, "detected": false, "strength": 0.0 },
+    { "cell": "D3", "range_m": 0.9, "bg_median_c": 33.8, "bg_std_c": 1.9, "detected": false, "strength": 0.0 }
+  ]
+}
