@@ -9,8 +9,9 @@
    - on Reveal, the error against the hidden demo spot from data/moran/solver_grid.json. The phone never gets that spot.
 
    index.html calls TEAM8_LIVE.start(ctx) once. While TEAM8_LIVE.on is true it takes its layers, panel texts, camera
-   points and the small phone from here. Clicking a step or the map leaves the live view, the next phone event brings
-   it back. On file:// or a plain static server (no /state) nothing happens. */
+   points and the small phone from here. Clicking a step or the map, or Leave live view, leaves the live view; the next
+   lock, undo, re-aim or new fix on the phone brings it back (route and settings updates are kept but do not). On
+   file:// or a plain static server (no /state) nothing happens. */
 (function () {
 'use strict';
 const POLL_MS = 500, GRID_URL = 'data/moran/solver_grid.json', D2R = Math.PI / 180;
