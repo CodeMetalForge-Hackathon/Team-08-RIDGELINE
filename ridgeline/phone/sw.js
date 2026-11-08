@@ -7,7 +7,7 @@
    /api/* is never touched: the Lock relay must reach the PC or fail, and the page keeps the newest
    state and sends it again when the link is back. */
 'use strict';
-const VERSION = 'ridgeline-v1';
+const VERSION = 'ridgeline-judging-review-20261108';
 const PREFIX = 'ridgeline-';
 const TIMEOUT_MS = 2500;
 const CORE = [

@@ -8,7 +8,7 @@ What ATAK gets for one fix
   RIDGELINE-1.r95      the 95% circle, an ATAK drawing circle (u-d-c-c)
   RIDGELINE-1.route    the way out, an ATAK drawing polyline (u-d-f)
   RIDGELINE-1.hide-1   HIDE and SIGNAL marks as spot markers (b-m-p-s-m), labeled HIDE 1, SIGNAL 1, ...
-  RIDGELINE-1.gps      a GPS reading the phone rejected (outside the 95% circle), red spot marker "GPS REJECTED"
+  RIDGELINE-1.gps      a simulated GPS reading outside the terrain circle, red spot marker "GPS DISAGREES"
 Items that disappear (reset, new fix, fewer marks) are removed with t-x-d-d delete events (__forcedelete).
 
 Sources for the formats
@@ -268,9 +268,9 @@ def survivor_remarks(fix: dict) -> str:
     parts = [f"Terrain fix from {fix['n']} peaks, no GPS, 95% radius {round(fix['r95'])} m."]
     gps = fix.get('gps')
     if gps and gps['verdict'] == 'REJECTED':
-        parts.append('GPS reading rejected' + (f", {fmt_m(gps['dist_m'])} from this fix." if gps['dist_m'] is not None else '.'))
+        parts.append('Simulated GPS disagrees with the terrain estimate' + (f", {fmt_m(gps['dist_m'])} from this fix." if gps['dist_m'] is not None else '.') + ' Cause unknown. Either estimate may be wrong.')
     elif gps and gps['verdict'] == 'AGREE':
-        parts.append('GPS reading agrees' + (f", {fmt_m(gps['dist_m'])} from this fix." if gps['dist_m'] is not None else '.'))
+        parts.append('Simulated GPS is consistent with the terrain estimate' + (f", {fmt_m(gps['dist_m'])} from this fix." if gps['dist_m'] is not None else '.') + ' Agreement does not verify either position.')
     if fix.get('mgrs'):
         parts.append(f"MGRS {fix['mgrs']}.")
     route = fix.get('route')
@@ -385,8 +385,8 @@ def build(fix, now: float, ground_fn=None) -> list[tuple[str, str]]:
     gps = fix.get('gps')
     if gps and gps['verdict'] == 'REJECTED':
         far = f", {fmt_m(gps['dist_m'])} from the terrain fix" if gps['dist_m'] is not None else ''
-        out.append((UID + '.gps', xml(spot_event(UID + '.gps', 'GPS REJECTED', ARGB['GPS'], gps['lat'], gps['lon'], now,
-                                                 f'GPS reading rejected{far}, outside the 95% circle. Possible spoofing, do not trust it.', HOW_GPS,
+        out.append((UID + '.gps', xml(spot_event(UID + '.gps', 'GPS DISAGREES', ARGB['GPS'], gps['lat'], gps['lon'], now,
+                                                 f'Simulated GPS disagrees{far}, outside the modelled 95% circle. Cause unknown. Either estimate may be wrong. Cross-check before moving.', HOW_GPS,
                                                  ground(gps['lat'], gps['lon'])))))
     return out
 
