@@ -51,6 +51,19 @@ class Page {
     await this.send('Input.dispatchKeyEvent', {type: 'keyDown', ...base, ...(text ? {text} : {})});
     await this.send('Input.dispatchKeyEvent', {type: 'keyUp', ...base});
   }
+  async keyHold(key, ms) {   // a long press on a key
+    const K = {Enter: [13, 'Enter', '\r']}, [vk, code, text] = K[key];
+    const base = {key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers: 0};
+    await this.send('Input.dispatchKeyEvent', {type: 'keyDown', ...base, text});
+    await sleep(ms);
+    await this.send('Input.dispatchKeyEvent', {type: 'keyUp', ...base});
+  }
+  async press(x, y, ms) {   // a mouse press at page pixels, held for ms (a tap when short, a long press when long)
+    await this.send('Input.dispatchMouseEvent', {type: 'mouseMoved', x, y});
+    await this.send('Input.dispatchMouseEvent', {type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1});
+    await sleep(ms);
+    await this.send('Input.dispatchMouseEvent', {type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1});
+  }
   async frame() { await this.eval('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))'); }
   async shot(file) { const r = await this.send('Page.captureScreenshot', {format: 'png'}); writeFileSync(join(OUT, file), Buffer.from(r.data, 'base64')); return file; }
 }
@@ -101,9 +114,11 @@ async function lockAndTime(phone, viewer, expectLocks, label) {
   const seq0 = await viewer.eval('window.TEAM8_LIVE_LAST ? TEAM8_LIVE_LAST.seq : 0');
   const t0 = Date.now();
   await phone.key('Enter');
-  await viewer.until(`window.TEAM8_LIVE_LAST && TEAM8_LIVE_LAST.seq > ${seq0} && TEAM8_LIVE_LAST.locks === ${expectLocks}`, 5000, 20);
+  await viewer.until(`window.TEAM8_LIVE_LAST && TEAM8_LIVE_LAST.seq > ${seq0} && TEAM8_LIVE_LAST.locks === ${expectLocks} && TEAM8_LIVE_LAST.painted_at_ms`, 8000, 20);
   await viewer.until(`(window.TEAM8_DECK.props.layers || []).some(l => l.id === 'live-fix')`, 3000, 20);
-  const ms = Date.now() - t0;
+  // Enter on the phone to the first viewer frame painted with the lock (both clocks are this computer's). Watching
+  // from here would add the time this script waits for a busy page to answer, which is not what the judge sees.
+  const ms = (await viewer.eval('TEAM8_LIVE_LAST.painted_at_ms')) - t0, seen_ms = Date.now() - t0;
   const ph = await phone.eval(`({meter: document.getElementById('lock-count')?.textContent, fix: document.getElementById('fix-line')?.textContent,
     wrong: document.querySelector('.wrong-box span')?.textContent || null, solve_ms: liveRes && liveRes.ms, notice: document.getElementById('notice')?.textContent,
     r95_m: liveRes && liveRes.hdr95 ? liveRes.hdr95.radius_m : null})`);
@@ -111,7 +126,7 @@ async function lockAndTime(phone, viewer, expectLocks, label) {
     verdict: document.getElementById('verdict').textContent, lag_ms_sent_to_shown: TEAM8_LIVE_LAST.lag_ms, r95_m: TEAM8_LIVE.geometry.r95,
     layers: TEAM8_DECK.props.layers.filter(l => l.id.startsWith('live') && l.props.data && l.props.data.length).map(l => l.id)})`);
   log(`  ${label}: viewer showed it ${ms} ms after Enter (sent to shown ${vw.lag_ms_sent_to_shown} ms) | phone ${ph.meter} · ${ph.fix}${ph.wrong ? ' · WRONG: ' + ph.wrong : ''} | viewer "${vw.title}" ±${vw.r95_m} m`);
-  return {label, viewer_update_ms: ms, same_r95: ph.r95_m === vw.r95_m, phone: ph, viewer: vw};
+  return {label, viewer_update_ms: ms, seen_by_test_ms: seen_ms, same_r95: ph.r95_m === vw.r95_m, phone: ph, viewer: vw};
 }
 
 async function main() {
@@ -188,12 +203,66 @@ async function main() {
     res.checks.relock = {locks: await phone.eval('locks.map(l => l.peak_id)'), meter: w3.phone.meter, wrong: w3.phone.wrong};
     const fin2 = await phone.eval(`document.getElementById('lock-count').textContent`);
     await phone.shot('phone_6_relock.png'); await viewer.shot('viewer_6_relock.png');
-    // Enter on the phone uses the fix
+    // Enter on the phone uses the fix, then P1.2: a destination and a safe route, followed on the judge map
     if (/Enough/.test(fin2)) {
       await phone.key('Enter');
-      await phone.until(`screen === 'guide'`, 3000);
-      res.checks.phone_guide = await phone.eval(`document.querySelector('.coordinates')?.textContent || ''`);
-      await phone.shot('phone_7_fix.png');
+      await phone.until(`screen === 'guide' && !!document.getElementById('destmap')`, 3000);
+      res.checks.phone_guide = await phone.eval(`[...document.querySelectorAll('.dest-list button')].map(b => b.textContent)`);
+      await phone.shot('phone_7_dest.png');
+      // a saved point at the able limit
+      const seqA = await viewer.eval('TEAM8_LIVE_LAST.seq');
+      const tA = Date.now();
+      await phone.eval(`document.querySelector('[data-dest="rendezvous"]').click()`);
+      await phone.until(`screen === 'guide' && liveRoute && liveRoute.ok`, 3000);
+      await viewer.until(`TEAM8_LIVE_LAST.seq > ${seqA} && TEAM8_DECK.props.layers.some(l => l.id === 'live-route' && l.props.data && l.props.data.length)`, 5000, 20);
+      const able = await phone.eval(`({next: document.getElementById('route-next')?.textContent, stats: document.getElementById('route-stats')?.textContent,
+        say: document.getElementById('route-say')?.textContent, arrow: document.getElementById('route-arrow')?.style.transform, plan_ms: liveRoute.ms})`);
+      res.checks.route_able = {...able, viewer_ms: Date.now() - tA, viewer_title: await viewer.eval(`document.getElementById('stepTitle').textContent`),
+        viewer_text: await viewer.eval(`document.getElementById('stepText').textContent`)};
+      log(`  route to the rendezvous: ${able.stats} | ${able.next} | on the judge map ${res.checks.route_able.viewer_ms} ms after the tap`);
+      await sleep(1500);   // let the camera settle on the route
+      await phone.shot('phone_8_route.png'); await viewer.shot('viewer_8_route.png');
+      // injured: no safe route from here, so Stay. Signal. Wait. on both screens
+      await phone.eval(`document.getElementById('injury').click()`);
+      await phone.until(`screen === 'stay'`, 3000);
+      await viewer.until(`document.getElementById('stepTitle').textContent === 'Stay. Signal. Wait.'`, 3000, 20);
+      res.checks.injured_stay = {phone: await phone.eval(`document.querySelector('.heading h1').textContent + ' | ' + document.querySelector('.stay-title').textContent + ' | ' + document.querySelector('.danger-block .muted').textContent`),
+        viewer: await viewer.eval(`document.getElementById('stepText').textContent`)};
+      log('  injured:', res.checks.injured_stay.phone);
+      await phone.shot('phone_9_stay.png'); await viewer.shot('viewer_9_stay.png');
+      // back to able; a long press on the map locks a pin on the route, a tap does not move it, unlocking takes two taps
+      await phone.eval(`document.getElementById('healthy').click()`);
+      await phone.until(`screen === 'guide' && liveRoute && liveRoute.ok`, 3000);
+      const xy = await phone.eval(`(() => { const cv = document.getElementById('destmap'); cv.scrollIntoView({block: 'center'}); const k = liveRoute.dist.findIndex(d => d > 900), p = liveRoute.path[k];
+        const r = cv.getBoundingClientRect(), [x, y] = mapXY(p[0], p[1], r.width, r.height); return [r.left + x, r.top + y]; })()`);
+      await phone.press(xy[0], xy[1], 900);
+      await phone.until(`pinLocked && dest && dest.kind === 'pin'`, 3000);
+      await phone.until(`screen === 'guide' || screen === 'stay'`, 2000);
+      const pinAt = await phone.eval(`({lon: pin.lon, lat: pin.lat, route_ok: !!(liveRoute && liveRoute.ok), say: liveRoute && liveRoute.say})`);
+      const xy2 = await phone.eval(`(() => { const cv = document.getElementById('destmap'); cv.scrollIntoView({block: 'center'}); const r = cv.getBoundingClientRect(); return [r.left + r.width * 0.2, r.top + r.height * 0.3]; })()`);
+      await phone.press(xy2[0], xy2[1], 80);
+      await sleep(100);
+      const pinAfter = await phone.eval(`({lon: pin.lon, lat: pin.lat, locked: pinLocked, notice})`);
+      await phone.eval(`document.getElementById('unlock-pin').click()`);
+      const afterOne = await phone.eval('pinLocked');
+      await phone.eval(`document.getElementById('unlock-yes').click()`);
+      const afterTwo = await phone.eval('pinLocked');
+      res.checks.pin = {locked_at: pinAt, after_tap: pinAfter, did_not_move: pinAt.lon === pinAfter.lon && pinAt.lat === pinAfter.lat,
+        unlock_after_one_action_still_locked: afterOne, unlock_after_two_actions_locked: afterTwo};
+      log('  pin:', JSON.stringify(res.checks.pin));
+      await phone.shot('phone_10_pin.png'); await viewer.shot('viewer_10_pin.png');
+      // keyboard: arrows move the cursor, a short Enter drops the pin, a held Enter locks it
+      await phone.eval(`document.getElementById('destmap').focus()`);
+      const c0 = await phone.eval('({...mapCursor})');
+      await phone.key('ArrowLeft'); await phone.key('ArrowLeft'); await phone.key('ArrowUp');
+      await phone.key('Enter');
+      await sleep(100);
+      const kDrop = await phone.eval(`({lon: pin.lon, lat: pin.lat, locked: pinLocked, cursor: {...mapCursor}})`);
+      await phone.keyHold('Enter', 900);
+      await phone.until('pinLocked', 2000);
+      res.checks.keyboard_pin = {cursor_start: c0, dropped: kDrop, moved_west: kDrop.lon < c0.lon, moved_north: kDrop.lat > c0.lat,
+        dropped_unlocked: kDrop.locked === false, locked_by_hold: await phone.eval('pinLocked'), screen: await phone.eval('screen')};
+      log('  keyboard pin:', JSON.stringify(res.checks.keyboard_pin));
     }
     // leaving and coming back
     await viewer.eval(`document.querySelector('[data-live="leave"]').click()`);
@@ -205,7 +274,12 @@ async function main() {
       reveal_inside_95: res.checks.reveal.inside, page_errors: phone.errors.length + viewer.errors.length,
       same_r95_phone_and_viewer: res.locks.every(l => l.same_r95), target_is_flagged_peak: res.checks.target_after_wrong === want,
       second_wrong_flagged: !!res.checks.second_wrong.message, relock_replaced: res.checks.relock.locks.length === 3 && /Enough/.test(res.checks.relock.meter),
-      phone_used_fix: !!res.checks.phone_guide};
+      phone_used_fix: !!(res.checks.phone_guide && res.checks.phone_guide.length),
+      route_shown_on_viewer_ms: res.checks.route_able ? res.checks.route_able.viewer_ms : null,
+      injured_stay_signal_wait: !!(res.checks.injured_stay && /Stay/.test(res.checks.injured_stay.phone)),
+      pin_locked_by_long_press: !!(res.checks.pin && res.checks.pin.did_not_move && res.checks.pin.after_tap.locked),
+      unlock_needs_two_actions: !!(res.checks.pin && res.checks.pin.unlock_after_one_action_still_locked === true && res.checks.pin.unlock_after_two_actions_locked === false),
+      keyboard_pin: !!(res.checks.keyboard_pin && res.checks.keyboard_pin.moved_west && res.checks.keyboard_pin.dropped_unlocked && res.checks.keyboard_pin.locked_by_hold)};
     log('summary', JSON.stringify(res.summary));
   } catch (err) {
     res.error = String(err && err.stack || err);
@@ -225,7 +299,8 @@ async function main() {
   }
   const s = res.summary;
   const ok = s && s.within_1s && s.wrong_aim_flagged && !s.page_errors && s.same_r95_phone_and_viewer && s.target_is_flagged_peak && s.second_wrong_flagged &&
-    s.relock_replaced && s.phone_used_fix;
+    s.relock_replaced && s.phone_used_fix && s.route_shown_on_viewer_ms < 1500 && s.injured_stay_signal_wait && s.pin_locked_by_long_press &&
+    s.unlock_needs_two_actions && s.keyboard_pin;
   if (!ok) { console.error('E2E FAILED'); process.exitCode = 1; } else log('E2E PASSED, results in', OUT);
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });
