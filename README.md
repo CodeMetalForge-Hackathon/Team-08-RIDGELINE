@@ -95,7 +95,7 @@ Open [the phone page](http://localhost:8768) in Chrome **on the phone**, and [th
 ④ Run the checks from the repository root.
 
 ```bash
-node --test ridgeline/test/solver.test.js ridgeline/test/hide.test.js ridgeline/test/skyline.test.js terrain_viewer/tests/nav_water.test.mjs
+node --test ridgeline/test/solver.test.js ridgeline/test/hide.test.js ridgeline/test/skyline.test.js ridgeline/test/lock.test.js terrain_viewer/tests/nav_water.test.mjs
 python -I -m unittest discover -s ridgeline/test -p "test_*.py"
 ```
 
@@ -117,7 +117,7 @@ For optional ATAK setup and CoT details, see [Hand-off to ATAK](ridgeline/README
 
 ⑦ For the model sensitivity results, open [Trust](http://localhost:8768/trust) on the PC. Label this view as simulation.
 
-For a laptop dry run, arrows aim and Enter Locks. **A** is keyboard-only demo assist that aims at the current card. After Enter, wait for the target name to change before pressing A for the next observation. Rapid Locks within the 120 ms update window can record the same target more than once. This known input issue is not fixed by the visual redesign. A board map click generates a simulated three-Lock trial. Clearly label either fallback as simulation, and never present it as a phone measurement.
+For a laptop dry run, arrows aim and Enter Locks. **A** is keyboard-only demo assist that aims at the current card. After Enter, wait for the target name to change before pressing A for the next observation. Further taps, clicks or Enter presses are ignored from the moment a Lock is accepted until it has been solved and drawn, so a quick double tap records the peak once. A board map click generates a simulated three-Lock trial. Clearly label either fallback as simulation, and never present it as a phone measurement.
 
 ## What we measured
 
@@ -130,7 +130,7 @@ For a laptop dry run, arrows aim and Enter Locks. **A** is keyboard-only demo as
 | Misidentified wall cards | Three earlier hand-held trials with cards in the wrong order | Each flagged a mismatch and requested another observation of the last card |
 | Solver simulation | 200 fixes at the demo position with Gaussian 3° aim error and random constant heading offset | Median error 98 m, 90th percentile 184 m, truth inside the 95% bubble in 99.0%, slowest solve 156 ms |
 | Solver simulation across the tile | 120 random positions with three visible peaks | Median error 132 m, 90th percentile 540 m, truth inside the bubble in 99.2% |
-| JavaScript checks, rerun after merging the judging review on Nov 8 | Solver, visibility suggestions, walkable start, expected skyline and route water checks | 28 of 28 passing, comprising 6 solver, 9 hide, 6 skyline and 7 route tests |
+| JavaScript checks, rerun after merging the judging review on Nov 8 | Solver, visibility suggestions, walkable start, expected skyline, Lock input and route water checks | 33 of 33 passing, comprising 6 solver, 9 hide, 6 skyline, 5 Lock input and 7 route tests |
 | Python checks, rerun after merging the judging review on Nov 8 | Stand-in TAK client, local push listener and the trial capture script | 20 of 20 passing. The 10 CoT tests cover fix, uncertainty, route, marks, the disagreeing GPS test point, reconnect and reset deletes. Previously recorded Lock relay under 0.25 s with the test client connected |
 
 Source is [the detailed test log](ridgeline/README.md#test-results-gate-a), dated Nov 8, 2026. The phone rows are historical observations, not new measurements of this merged revision, and they are not a five-trial series or a field-accuracy estimate. Earlier mismatches and a less accurate wall setup are retained in [the evidence document](docs/JUDGING_EVIDENCE.md#recorded-phone-observations). Simulation results are a separate evidence class, conditional on the simulation inputs, and are not hand-held accuracy or human performance measurements. The 42 m result is one wall trial, not guaranteed accuracy. No outdoor trial, battery test or real RF spoofing test is recorded.

@@ -927,16 +927,24 @@ function start() {
   if (source === 'sensor' && performance.now() - sensorSeen > 1500 && !('ontouchstart' in window)) source = 'keyboard';
   solveNow(); go('aim');
 }
+// From the moment a Lock is accepted until it is solved and drawn, another tap, click or Enter is the same
+// tap again. target and the mismatch suspect are only updated by that solve, so it would record the peak twice.
+let lockBusy = false;
 function doLock(ev) {
+  if (lockBusy) return;
   const v = meanVec(300);
   if (!v || v.flat || !target) return;
+  lockBusy = true;
   if (navigator.vibrate) navigator.vibrate(v.steady ? 40 : [20, 40, 20]);
   const sus = result && result.status === 'mismatch' ? result.suspect : null;
   if (sus) locks.splice(sus.lock_index, 1);
   locks.push({ peak_id: target, heading_deg: +v.h.toFixed(3), elevation_deg: +v.t.toFixed(2), at: new Date().toISOString(), steady: v.steady, stream: source === 'keyboard' ? 'keyboard' : orientMode });
   skip = 0;
   // post only after the solve, so the board, CoT and marks always get lat, lon and r95 with the new Lock
-  setTimeout(() => { solveNow(); render(); post(); }, reduce ? 0 : 120);
+  setTimeout(() => {
+    try { solveNow(); render(); } finally { lockBusy = false; }
+    post();
+  }, reduce ? 0 : 120);
 }
 function skipTarget() {
   const rest = wallIds.filter(id => !locks.some(l => l.peak_id === id));
