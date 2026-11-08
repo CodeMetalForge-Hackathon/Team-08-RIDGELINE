@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain Fix 3D</title>
+<style>
+  :root {
+    --bg: #0e1114;
+    --panel: rgba(14, 17, 20, 0.88);
+    --panel-solid: #12161a;
+    --line: #262d33;
+    --text: #e8edf0;
+    --muted: #93a1ab;
+    --cyan: #28e1ff;
+    --red: #eb4034;
+    --yellow: #ffd666;
+    --white: #ffffff;
+    --teal: #3cdcc8;
+    --green: #4cd27a;
+    --sky-top: #0e141c;
+    --sky-bottom: #283440;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; font-size: 14px; }
+  body { display: grid; grid-template-rows: 46px 1fr 58px; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 14px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--panel-solid); min-width: 0; }
+  .brand { font-weight: 700; letter-spacing: 0.14em; font-size: 13px; color: var(--cyan); white-space: nowrap; }
+  .tagline { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .dots { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #2c353c; transition: background .3s; }
+  .dot.on { background: var(--cyan); box-shadow: 0 0 8px rgba(40, 225, 255, .7); }
+  main { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(320px, 1fr); min-height: 0; }
+  .panel { position: relative; min-height: 0; overflow: hidden; }
+  #bird { border-right: 1px solid var(--line); }
+  #birdDeck, #eyeDeck { position: absolute; inset: 0; }
+  #right { display: grid; grid-template-rows: minmax(0, 1.25fr) auto; min-height: 0; }
+  #eye { background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-bottom) 62%, #1c252d 100%); border-bottom: 1px solid var(--line); }
+  #eyeDeck { transition: opacity .35s; }
+  .card { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; pointer-events: none; backdrop-filter: blur(3px); }
+  .kicker { font-size: 11px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; font-weight: 600; }
+  .title { font-size: 19px; font-weight: 700; margin-top: 3px; line-height: 1.25; }
+  .sub { color: #cde8f0; margin-top: 4px; line-height: 1.4; }
+  .metrics { display: flex; gap: 14px; margin-top: 8px; flex-wrap: wrap; }
+  .metric b { display: block; font-size: 17px; color: var(--text); }
+  .metric span { font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+  #stageCard { left: 14px; top: 14px; max-width: min(460px, calc(100% - 28px)); }
+  #legend { left: 14px; bottom: 34px; font-size: 12px; line-height: 1.7; max-width: calc(100% - 28px); }
+  .sw { display: inline-block; width: 22px; height: 10px; border-radius: 2px; margin-right: 8px; vertical-align: middle; }
+  .swl { display: inline-block; width: 22px; height: 0; border-top: 3px solid; margin-right: 8px; vertical-align: middle; }
+  .sym { display: inline-block; width: 22px; text-align: center; margin-right: 8px; font-weight: 700; }
+  #routeCard { right: 14px; bottom: 34px; max-width: 300px; }
+  #banner { left: 50%; top: 42%; transform: translate(-50%, -50%); text-align: center; border: 2px solid var(--red); padding: 18px 26px; display: none; max-width: min(520px, calc(100% - 32px)); background: rgba(30, 10, 10, .9); }
+  #banner .big { font-size: 34px; font-weight: 800; letter-spacing: .02em; }
+  #banner .sub { color: #f2c9c4; }
+  #north { position: absolute; right: 16px; top: 14px; width: 44px; height: 44px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); pointer-events: none; }
+  #north svg { width: 100%; height: 100%; transition: transform .2s; }
+  #credits { position: absolute; left: 0; right: 0; bottom: 0; padding: 5px 14px; font-size: 11px; color: #7f8c95; background: linear-gradient(0deg, rgba(14,17,20,.92), rgba(14,17,20,0)); pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #eyeHead { left: 12px; top: 12px; right: 12px; padding: 10px 12px; }
+  #eyeHead .title { font-size: 16px; }
+  #nextChips { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .chip { border-radius: 999px; padding: 3px 10px; font-size: 12px; border: 1px solid #3a444c; color: var(--text); }
+  .chip.next { border-color: var(--yellow); color: var(--yellow); box-shadow: 0 0 10px rgba(255, 214, 102, .25); }
+  .chip.used { border-color: #8b7a45; color: #e8d39a; }
+  #reticle { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; transform: translate(-50%, -50%); pointer-events: none; }
+  #reticle::before, #reticle::after { content: ""; position: absolute; background: rgba(255,255,255,.85); box-shadow: 0 0 2px #000; }
+  #reticle::before { left: 16px; top: 0; width: 2px; height: 34px; }
+  #reticle::after { top: 16px; left: 0; height: 2px; width: 34px; }
+  #aimRead { position: absolute; left: 50%; top: calc(50% + 24px); transform: translateX(-50%); font-weight: 700; font-size: 13px; text-shadow: 0 0 3px #000, 0 0 6px #000; pointer-events: none; }
+  #compass { position: absolute; left: 0; right: 0; bottom: 0; height: 38px; width: 100%; pointer-events: none; }
+  #eyeVeil { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; background: rgba(10, 13, 16, .72); pointer-events: none; padding: 24px; }
+  #eyeVeil .title { font-size: 18px; }
+  #loading { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 9px 16px; border-radius: 18px; font-size: 13px; color: var(--muted); background: rgba(10, 13, 16, .85); border: 1px solid #2a3239; pointer-events: none; text-align: center; max-width: calc(100% - 32px); }
+  /* shown by CSS alone after 8 s, so it also helps when the script cannot run (a file opened directly) */
+  #loading .hint { max-height: 0; overflow: hidden; opacity: 0; font-size: 12px; color: #e8d39a; animation: showHint .4s 8s forwards; }
+  @keyframes showHint { to { max-height: 60px; opacity: 1; margin-top: 6px; } }
+  #sensors { padding: 12px 14px 10px; overflow: auto; background: var(--panel-solid); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td { padding: 4px 0; border-bottom: 1px solid #1e252b; vertical-align: middle; }
+  td:nth-child(2) { color: #c9d4da; }
+  td:last-child { text-align: right; }
+  .tag { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; padding: 2px 7px; border-radius: 4px; display: inline-block; }
+  .tag.use { background: rgba(76, 210, 122, .16); color: var(--green); }
+  .tag.drop { background: rgba(235, 64, 52, .18); color: #ff8a80; }
+  .tag.stby { background: #20282e; color: var(--muted); }
+  .tag.cross { background: rgba(40, 225, 255, .12); color: var(--cyan); }
+  .pace { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+  .pace div { border: 1px solid #2a3239; border-radius: 8px; padding: 6px 7px; font-size: 11.5px; color: var(--muted); line-height: 1.25; min-height: 50px; transition: all .3s; }
+  .pace b { display: block; font-size: 15px; color: #6d7a83; }
+  .pace div.on { border-color: var(--cyan); color: var(--text); background: rgba(40, 225, 255, .08); }
+  .pace div.on b { color: var(--cyan); }
+  .pace div.on.e { border-color: var(--red); background: rgba(235, 64, 52, .12); }
+  .pace div.on.e b { color: #ff8a80; }
+  #trust { margin-top: 9px; font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+  footer { display: flex; align-items: center; gap: 10px; padding: 0 14px; border-top: 1px solid var(--line); background: var(--panel-solid); overflow-x: auto; }
+  button { font: inherit; color: var(--text); background: #1b2228; border: 1px solid #323c44; border-radius: 8px; padding: 7px 12px; cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: #4a5862; }
+  button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+  button.primary { background: #0f3a45; border-color: #1f7f94; }
+  button.on { border-color: var(--cyan); color: var(--cyan); background: rgba(40, 225, 255, .1); }
+  button.warn.on { border-color: var(--red); color: #ff9a90; background: rgba(235, 64, 52, .12); }
+  button:disabled { opacity: .4; cursor: default; }
+  .seg { display: inline-flex; border-radius: 8px; overflow: hidden; border: 1px solid #323c44; }
+  .seg button { border: 0; border-radius: 0; }
+  .sep { width: 1px; align-self: stretch; margin: 12px 2px; background: var(--line); flex: none; }
+  .lbl { font-size: 11px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+  .keys { margin-left: auto; color: #6f7c85; font-size: 12px; white-space: nowrap; }
+  kbd { font: 11px Consolas, monospace; border: 1px solid #3a444c; border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; color: #b8c4cb; }
+  #fatal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: var(--bg); color: var(--text); padding: 24px; text-align: center; z-index: 9; }
+  @media (max-width: 900px) {
+    body { grid-template-rows: auto 1fr auto; overflow: auto; height: auto; min-height: 100%; }
+    header { flex-wrap: wrap; padding: 8px 16px; gap: 6px 12px; }
+    main { grid-template-columns: minmax(0, 1fr); }
+    #bird { height: 62vh; min-height: 360px; border-right: 0; border-bottom: 1px solid var(--line); }
+    #right { grid-template-rows: auto auto; }
+    #eye { height: 46vh; min-height: 300px; }
+    footer { flex-wrap: wrap; padding: 10px 16px; height: auto; }
+    .keys { display: none; }
+    #routeCard { left: 10px; right: 10px; bottom: 26px; max-width: none; padding: 8px 12px; }
+    #routeCard .sub { font-size: 12px; }
+    #legend { display: none; }
+    #stageCard { left: 10px; top: 10px; max-width: calc(100% - 74px); padding: 9px 12px; }
+    #stageCard .title { font-size: 16px; }
+    #stageCard .sub { font-size: 13px; }
+    .metric b { font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">TERRAIN FIX</div>
+  <div class="tagline">GPS-denied land navigation · Mount Moran area, Grand Teton NP · simulated demo, Team-8</div>
+  <div class="dots" id="dots" aria-label="step"></div>
+</header>
+
+<main>
+  <section class="panel" id="bird" aria-label="3D map">
+    <div id="birdDeck"></div>
+    <div id="loading">Building the 3D terrain from the 10 m map…<div class="hint">Still here? Open http://127.0.0.1:8780/ through the local server, not the file itself.</div></div>
+    <div class="card" id="stageCard">
+      <div class="kicker" id="stKicker"></div>
+      <div class="title" id="stTitle"></div>
+      <div class="sub" id="stSub"></div>
+      <div class="metrics" id="stMetrics"></div>
+    </div>
+    <div id="north" title="North"><svg viewBox="0 0 44 44"><polygon points="22,6 28,26 22,22 16,26" fill="#e8edf0" stroke="#000" stroke-width="1"/><text x="22" y="38" text-anchor="middle" font-size="10" font-weight="700" fill="#e8edf0">N</text></svg></div>
+    <div class="card" id="legend"></div>
+    <div class="card" id="routeCard">
+      <div class="kicker" id="rtKicker">Route</div>
+      <div class="title" id="rtTitle" style="font-size:16px"></div>
+      <div class="sub" id="rtSub"></div>
+    </div>
+    <div class="card" id="banner">
+      <div class="big">Stay, signal, wait</div>
+      <div class="sub" id="bannerSub"></div>
+    </div>
+    <div id="credits"></div>
+  </section>
+
+  <div id="right">
+    <section class="panel" id="eye" aria-label="first-person view">
+      <div id="eyeDeck"></div>
+      <div id="reticle"></div>
+      <div id="aimRead"></div>
+      <canvas id="compass"></canvas>
+      <div class="card" id="eyeHead">
+        <div class="kicker" id="eyeKicker">What you should see</div>
+        <div class="title" id="eyeTitle"></div>
+        <div id="nextChips"></div>
+      </div>
+      <div id="eyeVeil"><div><div class="kicker">First-person view</div><div class="title" id="veilTitle"></div><div class="sub" id="veilSub"></div></div></div>
+    </section>
+    <section id="sensors" aria-label="sensors">
+      <div class="kicker" style="margin-bottom:4px">Sensors</div>
+      <table id="sensorTable"></table>
+      <div class="kicker" style="margin-top:10px">Auto-PACE</div>
+      <div class="pace" id="pace">
+        <div data-k="p"><b>P</b>GPS</div>
+        <div data-k="a"><b>A</b>Terrain fix</div>
+        <div data-k="c"><b>C</b>Climb for 3 peaks</div>
+        <div data-k="e" class="e"><b>E</b>Stay, signal, wait</div>
+      </div>
+      <div id="trust"></div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <button id="btnBack" aria-label="previous step">◀ Back</button>
+  <button id="btnNext" class="primary" aria-label="next step">Next ▶</button>
+  <div class="sep"></div>
+  <span class="lbl">Injury</span>
+  <div class="seg" role="group" aria-label="injury">
+    <button id="btnHealthy" class="on">Healthy 30°</button>
+    <button id="btnInjured" class="warn">Ankle hurt 18°</button>
+  </div>
+  <div class="sep"></div>
+  <button id="btnGps" class="warn">Jam GPS</button>
+  <button id="btnCover">Where it works</button>
+  <button id="btnView">Reset view</button>
+  <div class="keys"><kbd>←</kbd> <kbd>→</kbd> step &nbsp; <kbd>I</kbd> injury &nbsp; <kbd>G</kbd> GPS &nbsp; <kbd>W</kbd> where it works &nbsp; <kbd>R</kbd> view</div>
+</footer>
+
+<div id="fatal"><div><div class="title" id="fatalTitle">Could not start</div><div class="sub" id="fatalSub"></div></div></div>
+
+<script src="lib/deck.gl@9.3.11/dist.min.js"></script>
+<script>
+'use strict';
+// opened as a file, lib/ does not load and window.deck is missing, so fall back to {} and let main() say what to do
+const D = window.deck || {};
+const {Deck, MapView, FirstPersonView, TerrainLayer, BitmapLayer, PathLayer, ScatterplotLayer, TextLayer, IconLayer,
+  LineLayer, LinearInterpolator, WebMercatorViewport} = D;
+const TerrainExtension = D._TerrainExtension || D.TerrainExtension;
+
+const C = { cyan: [40, 225, 255], red: [235, 64, 52], yellow: [255, 214, 102], white: [255, 255, 255],
+  dark: [8, 10, 12], gps: [80, 160, 255] };
+const EXT = [new TerrainExtension()];
+// deck.gl's bundle only carries the terrain worker stub, so the worker (same version, 4.4.3) is served from lib/, never the CDN
+const LOAD_OPTS = { terrain: { workerUrl: 'lib/loaders.gl-terrain@4.4.3/terrain-worker.js' } };
+const ON_TOP = { depthCompare: 'always', depthWriteEnabled: false };
+const FOVY = 50;
+// FirstPersonView sizes pixel-unit markers for objects 1 m away by default (focalDistance 1), so a 20 px icon on a
+// peak 5 km off shrinks below one pixel (checked in the browser). The eye view sets focalDistance in meters and
+// every pixel size in it is multiplied by distance / EYE_FOCAL, which keeps icons and text the same size at any range.
+const EYE_FOCAL = 5000;
+
+const app = { S: null, stage: 0, gps: true, injured: false, coverage: false, heights: null,
+  probOp: [0, 0, 0, 0], fade: null, lineT0: {}, eyeVS: null, birdVS: null, started: performance.now() };
+
+function $(id) { return document.getElementById(id); }
+function fatal(title, sub) { $('fatalTitle').textContent = title; $('fatalSub').textContent = sub; $('fatal').style.display = 'flex'; }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function circMean(degs) {
+  let x = 0, y = 0;
+  for (const d of degs) { x += Math.cos(d * Math.PI / 180); y += Math.sin(d * Math.PI / 180); }
+  return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+}
+function ease(t) { t = clamp(t, 0, 1); return t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+
+// ------------------------------------------------------------------ heights (decode the same terrain-RGB the mesh uses)
+function loadHeights(S) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const cv = document.createElement('canvas');
+        cv.width = img.width; cv.height = img.height;
+        const g = cv.getContext('2d', { willReadFrequently: true });
+        g.drawImage(img, 0, 0);
+        const d = g.getImageData(0, 0, cv.width, cv.height).data;
+        const n = cv.width * cv.height, H = new Float32Array(n);
+        const k = S.terrain.decoder;
+        for (let i = 0; i < n; i++) H[i] = d[4 * i] * k.rScaler + d[4 * i + 1] * k.gScaler + d[4 * i + 2] * k.bScaler + k.offset;
+        resolve({ w: cv.width, h: cv.height, H });
+      } catch (e) { resolve(null); }   // a blocked canvas read must not stop the page
+    };
+    img.onerror = () => resolve(null);
+    img.src = S.terrain.image;
+  });
+}
+function heightAt(lon, lat) {
+  const hm = app.heights, b = app.S.bounds;
+  if (!hm) return 2500;
+  const x = clamp((lon - b[0]) / (b[2] - b[0]) * hm.w - 0.5, 0, hm.w - 1.001);
+  const y = clamp((b[3] - lat) / (b[3] - b[1]) * hm.h - 0.5, 0, hm.h - 1.001);
+  const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0, i = y0 * hm.w + x0;
+  const H = hm.H;
+  return (H[i] * (1 - fx) + H[i + 1] * fx) * (1 - fy) + (H[i + hm.w] * (1 - fx) + H[i + hm.w + 1] * fx) * fy;
+}
+
+// ------------------------------------------------------------------ icons drawn once on a canvas (no files, no network)
+function iconURL(draw) {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const g = cv.getContext('2d'); draw(g); return cv.toDataURL('image/png');
+}
+const ICONS = {};
+function makeIcons() {
+  const mk = (id, draw) => { ICONS[id] = { id, url: iconURL(draw), width: 64, height: 64, anchorX: 32, anchorY: 32 }; };
+  mk('star', g => {
+    g.beginPath();
+    for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 11 : 26;
+      g.lineTo(32 + r * Math.cos(a), 32 - r * Math.sin(a)); }
+    g.closePath(); g.fillStyle = '#fff'; g.fill(); g.lineWidth = 3.5; g.strokeStyle = '#000'; g.stroke();
+  });
+  mk('cross', g => {
+    g.lineCap = 'square';
+    for (const [col, w] of [['#000', 13], ['rgb(40,225,255)', 7]]) {
+      g.strokeStyle = col; g.lineWidth = w; g.beginPath();
+      g.moveTo(10, 32); g.lineTo(54, 32); g.moveTo(32, 10); g.lineTo(32, 54); g.stroke();
+    }
+  });
+  mk('ring', g => { g.beginPath(); g.arc(32, 32, 20, 0, 7); g.fillStyle = '#fff'; g.fill(); g.lineWidth = 6; g.strokeStyle = '#000'; g.stroke();
+    g.beginPath(); g.arc(32, 32, 8, 0, 7); g.fillStyle = '#000'; g.fill(); });
+  mk('guess', g => { g.beginPath(); g.arc(32, 32, 19, 0, 7); g.lineWidth = 9; g.strokeStyle = '#000'; g.stroke();
+    g.lineWidth = 5; g.strokeStyle = 'rgb(40,225,255)'; g.stroke(); });
+  mk('tri', g => { g.beginPath(); g.moveTo(32, 12); g.lineTo(54, 50); g.lineTo(10, 50); g.closePath();
+    g.fillStyle = '#fafafa'; g.fill(); g.lineWidth = 4; g.strokeStyle = '#000'; g.stroke(); });
+  mk('triY', g => { g.beginPath(); g.moveTo(32, 12); g.lineTo(54, 50); g.lineTo(10, 50); g.closePath();
+    g.fillStyle = 'rgb(255,214,102)'; g.fill(); g.lineWidth = 4; g.strokeStyle = '#000'; g.stroke(); });
+}
+
+// ------------------------------------------------------------------ static data derived once (stable references keep deck from reloading)
+const DATA = {};
+function prepData() {
+  const S = app.S;
+  DATA.peaks = S.peaks.map(p => ({ ...p, pos: [p.lon, p.lat, p.mesh_z + 6] }));
+  DATA.rdv = [{ pos: [S.rendezvous.lon, S.rendezvous.lat, S.rendezvous.z + 6], label: 'Rendezvous' }];
+  DATA.truth = [{ pos: [S.truth.lon, S.truth.lat, S.truth.z + 6] }];
+  DATA.gps = [{ pos: [S.truth.lon, S.truth.lat] }];
+  DATA.routes = {};
+  DATA.routeLook = {};
+  const e3 = S.stages[3].eye, kx = 111320 * Math.cos(e3.lat * Math.PI / 180), ky = 110540;
+  const fromEye = p => [(p[0] - e3.lon) * kx, (p[1] - e3.lat) * ky];
+  for (const k of Object.keys(S.routes)) {
+    const r = S.routes[k];
+    if (!r) { DATA.routes[k] = null; DATA.routeLook[k] = null; continue; }
+    // for the eye view the route is cut every 8 m and laid 1 m above the same terrain the mesh is built from,
+    // so it neither floats above the eye nor sinks under the mesh between the 30 m model cells
+    const dense = [];
+    for (let i = 0; i < r.path.length - 1; i++) {
+      const a = r.path[i], b = r.path[i + 1];
+      const [ax, ay] = fromEye(a), [bx, by] = fromEye(b);
+      const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 8));
+      for (let j = 0; j < n; j++) dense.push([a[0] + (b[0] - a[0]) * j / n, a[1] + (b[1] - a[1]) * j / n]);
+    }
+    dense.push(r.path[r.path.length - 1]);
+    // the first 35 m are left out, closer than that a ground line fills the bottom of the view
+    const eyePath = dense.filter(p => Math.hypot(...fromEye(p)) > 35).map(p => [p[0], p[1], heightAt(p[0], p[1]) + 1.0]);
+    DATA.routes[k] = { path2: [{ path: r.path.map(p => [p[0], p[1]]) }], path3: [{ path: eyePath }] };
+    // at the fix the eye turns halfway between the start of the route (60 to 600 m out) and the peaks it was
+    // fixed on, so the white line going down the slope and the three yellow peaks are in the same view
+    const brg = r.path.map(fromEye).filter(([x, y]) => Math.hypot(x, y) > 60 && Math.hypot(x, y) < 600)
+      .map(([x, y]) => Math.atan2(x, y) * 180 / Math.PI);
+    const peaksBrg = circMean(S.observations.map(o => o.obs_deg));
+    DATA.routeLook[k] = { bearing: brg.length ? circMean([circMean(brg), peaksBrg]) : e3.bearing, pitch: 1 };
+  }
+  DATA.outline = S.stages.map(st => st.outline.map(r => ({ path: r })));
+  DATA.est = S.stages.map(st => st.estimate ? [{ pos: [st.estimate.lon, st.estimate.lat, st.estimate.z + 6] }] : []);
+  DATA.obsPeaks = S.observations.map(o => o.peak);
+  // the GPS eye: same place as the hidden truth (GPS knows it), looking at the peaks the demo uses
+  DATA.gpsEye = { lon: S.truth.lon, lat: S.truth.lat, z: Math.max(S.truth.z, heightAt(S.truth.lon, S.truth.lat)) + 3.5,
+    bearing: circMean(S.observations.map(o => o.obs_deg)), pitch: 7, peaks: S.stages[3].eye.peaks };
+}
+
+// ------------------------------------------------------------------ cameras
+// Fit lon/lat points into the screen of a map turned to `bearing`, leaving room for the cards (pad in pixels).
+// The box is taken in the turned frame, so a rotated camera still frames every point.
+function fitRotated(pts, bearing, w, h, pad) {
+  const lat0 = pts[0][1], lon0 = pts[0][0], kx = 111320 * Math.cos(lat0 * Math.PI / 180), ky = 110540;
+  const b = bearing * Math.PI / 180, cb = Math.cos(b), sb = Math.sin(b);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const [lon, lat] of pts) {
+    const E = (lon - lon0) * kx, N = (lat - lat0) * ky;
+    const sx = E * cb - N * sb, sy = E * sb + N * cb;          // screen right, screen up (meters)
+    x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy);
+  }
+  const mpp = Math.max((x1 - x0) / Math.max(80, w - pad.left - pad.right), (y1 - y0) / Math.max(80, h - pad.top - pad.bottom), 0.5);
+  const cx = (x0 + x1) / 2 + (pad.right - pad.left) / 2 * mpp, cy = (y0 + y1) / 2 + (pad.top - pad.bottom) / 2 * mpp;
+  const E = cx * cb + cy * sb, N = -cx * sb + cy * cb;
+  const lat = lat0 + N / ky, lon = lon0 + E / kx;
+  const zoom = Math.log2(40075016.686 * Math.cos(lat * Math.PI / 180) / (512 * mpp));
+  return { longitude: lon, latitude: lat, zoom };
+}
+function birdView(s) {
+  const S = app.S, el = $('bird');
+  const w = Math.max(320, el.clientWidth), h = Math.max(300, el.clientHeight);
+  let pts, bearing, pitch, dz = 0;
+  const pad = { top: Math.round(h * 0.2), bottom: Math.round(h * 0.2), left: Math.round(w * 0.06), right: Math.round(w * 0.06) };
+  const st = S.stages[s];
+  if (app.coverage || s <= 1 || app.gps) {
+    const b = S.bounds;
+    pts = [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]];
+    bearing = s === 1 && !app.gps && !app.coverage ? 172 : 160; pitch = s === 1 && !app.gps ? 50 : 46;
+    pad.top = Math.round(h * 0.08); pad.bottom = Math.round(h * 0.1); dz = 0.32;
+  } else if (s === 2) {
+    // face the peak the assistant asks for, so it stands at the top middle with the search band below it
+    const nx = S.peaks[st.next[0]];
+    pts = [];
+    for (const ring of st.outline) for (const p of ring) pts.push(p);
+    pts.push([nx.lon, nx.lat], [st.estimate.lon, st.estimate.lat]);
+    const q = st.eye && st.eye.peaks.find(r => r.peak === st.next[0]);
+    bearing = q ? q.bearing : 150; pitch = 52;
+    pad.top = Math.round(h * 0.3); pad.bottom = Math.round(h * 0.24); dz = 0.05;
+  } else {
+    // the fix, the three peaks behind the crossing lines, and the rendezvous at the end of the route, all in frame
+    const rv = [S.rendezvous.lon, S.rendezvous.lat];
+    pts = [[st.estimate.lon, st.estimate.lat], ...DATA.obsPeaks.map(k => [S.peaks[k].lon, S.peaks[k].lat]), rv];
+    const rvBrg = Math.atan2((rv[0] - st.estimate.lon) * Math.cos(st.estimate.lat * Math.PI / 180), rv[1] - st.estimate.lat) * 180 / Math.PI;
+    bearing = circMean([circMean(S.observations.map(o => o.obs_deg)), rvBrg]); pitch = 54;
+    pad.top = Math.round(h * 0.24); pad.bottom = Math.round(h * 0.26); dz = 0.05;
+  }
+  const fit = fitRotated(pts, bearing, w, h, pad);
+  const z = heightAt(fit.longitude, fit.latitude);
+  return { longitude: fit.longitude, latitude: fit.latitude, zoom: fit.zoom + dz, pitch, bearing,
+    position: [0, 0, z], maxPitch: 78, minZoom: 10, maxZoom: 17 };
+}
+function eyeFor(s) {
+  if (app.gps) return DATA.gpsEye;
+  const e = app.S.stages[s].eye;
+  // with a fix and a safe route, the view faces down the route so the white line on the ground is what you follow
+  const look = s === 3 && DATA.routeLook[app.injured ? '18' : '30'];
+  return look ? { ...e, bearing: look.bearing, pitch: look.pitch } : e;
+}
+function eyeView(e) {
+  // FirstPersonView pitch is positive when looking down, so "look up 8 degrees" is pitch -8
+  return { longitude: e.lon, latitude: e.lat, position: [0, 0, e.z], bearing: e.bearing, pitch: -e.pitch, maxPitch: 60, minPitch: -60 };
+}
+
+// ------------------------------------------------------------------ layers
+const terrainProps = () => ({ bounds: app.S.bounds, elevationData: app.S.terrain.image, texture: app.S.base.image,
+  elevationDecoder: app.S.terrain.decoder, loadOptions: LOAD_OPTS, material: false });
+
+function cutPath(path, f) {
+  if (f >= 1) return path;
+  const n = path.length, x = f * (n - 1), i = Math.floor(x), t = x - i;
+  const out = path.slice(0, i + 1);
+  if (i + 1 < n) out.push([path[i][0] + (path[i + 1][0] - path[i][0]) * t, path[i][1] + (path[i + 1][1] - path[i][1]) * t]);
+  return out.length >= 2 ? out : [path[0], path[0]];
+}
+
+function pulse(now, period = 1400) { return 0.5 + 0.5 * Math.sin((now - app.started) / period * Math.PI * 2); }
+
+// keep data arrays stable between frames so draped layers are not redrawn into the terrain every frame
+const MEMO = new Map();
+const EMPTY = [];
+function memo(key, fn) { if (!MEMO.has(key)) MEMO.set(key, fn()); return MEMO.get(key); }
+
+function birdLayers(now) {
+  const S = app.S, st = S.stages[app.stage];
+  const fix = !app.gps && !app.coverage;
+  const lim = app.injured ? '18' : '30';
+  const route = DATA.routes[lim];
+  const L = [];
+  L.push(new TerrainLayer({ id: 'terrain', ...terrainProps(), meshMaxError: 3, operation: 'terrain+draw' }));
+  // In deck.gl 9.3.11 the draped layers that arrive together with the first TerrainExtension layer never show up
+  // (checked in the browser). An empty primer layer starts the terrain effect early, and the real draped layers
+  // are created only after the terrain mesh has loaded.
+  L.push(new ScatterplotLayer({ id: 'drape-primer', data: EMPTY, getPosition: d => d, extensions: EXT, terrainDrawMode: 'drape' }));
+  if (app.terrainReady) L.push(...drapedLayers(now));
+  L.push(...markerLayers(now));
+  return L;
+}
+
+function drapedLayers(now) {
+  const S = app.S, st = S.stages[app.stage];
+  const fix = !app.gps && !app.coverage;
+  const lim = app.injured ? '18' : '30';
+  const route = DATA.routes[lim];
+  const L = [];
+  L.push(new BitmapLayer({ id: 'coverage', image: S.overlays.coverage, bounds: S.bounds, visible: app.coverage,
+    extensions: EXT, terrainDrawMode: 'drape' }));
+  for (const k of ['30', '18']) {
+    L.push(new BitmapLayer({ id: 'nogo-' + k, image: S.overlays.nogo[k], bounds: S.bounds, visible: !app.coverage && lim === k,
+      extensions: EXT, terrainDrawMode: 'drape' }));
+  }
+  for (let s = 0; s < 4; s++) {
+    const op = app.probOp[s];
+    L.push(new BitmapLayer({ id: 'prob-' + s, image: S.stages[s].prob, bounds: S.bounds, opacity: op,
+      visible: fix && op > 0.002, extensions: EXT, terrainDrawMode: 'drape' }));
+  }
+  L.push(new PathLayer({ id: 'outline95', data: DATA.outline[app.stage], getPath: d => d.path, getColor: [255, 255, 255, 235],
+    getWidth: 9, widthUnits: 'meters', widthMinPixels: 1.6, visible: fix && app.stage >= 1, extensions: EXT, terrainDrawMode: 'drape' }));
+  // bearing lines grow out of the summit
+  const growing = fix && st.lines.some(i => app.lineT0[i] != null && now - app.lineT0[i] < 1300);
+  const lines = !fix ? memo('lines-none', () => []) : (growing ? st.lines.map(i => {
+    const ln = S.bearing_lines[i], t0 = app.lineT0[i];
+    const f = t0 == null ? 1 : ease((now - t0) / 1300);
+    return { path: cutPath(ln.path, f), i };
+  }) : memo('lines-' + app.stage, () => st.lines.map(i => ({ path: S.bearing_lines[i].path, i }))));
+  L.push(new PathLayer({ id: 'lines-case', data: lines, getPath: d => d.path, getColor: [0, 0, 0, 200], getWidth: 46,
+    widthUnits: 'meters', widthMinPixels: 4.5, capRounded: true, extensions: EXT, terrainDrawMode: 'drape' }));
+  L.push(new PathLayer({ id: 'lines', data: lines, getPath: d => d.path, getColor: [...C.yellow, 255], getWidth: 24,
+    widthUnits: 'meters', widthMinPixels: 2.5, capRounded: true, extensions: EXT, terrainDrawMode: 'drape' }));
+  const showRoute = fix && app.stage === 3 && route;
+  L.push(new PathLayer({ id: 'route-case', data: route ? route.path2 : [], getPath: d => d.path, getColor: [0, 0, 0, 220],
+    getWidth: 52, widthUnits: 'meters', widthMinPixels: 5.5, jointRounded: true, capRounded: true, visible: !!showRoute,
+    extensions: EXT, terrainDrawMode: 'drape' }));
+  L.push(new PathLayer({ id: 'route', data: route ? route.path2 : [], getPath: d => d.path, getColor: [255, 255, 255, 255],
+    getWidth: 28, widthUnits: 'meters', widthMinPixels: 3, jointRounded: true, capRounded: true, visible: !!showRoute,
+    extensions: EXT, terrainDrawMode: 'drape' }));
+  return L;
+}
+
+function markerLayers(now) {
+  const S = app.S, st = S.stages[app.stage];
+  const fix = !app.gps && !app.coverage;
+  const L = [];
+  const pz = pulse(now, 1100);
+  // GPS marker faces the camera (not draped) so its pulse does not redraw the terrain cover
+  L.push(new ScatterplotLayer({ id: 'gps-acc', data: DATA.truth, getPosition: d => d.pos, getRadius: 15 + 7 * pz,
+    radiusUnits: 'pixels', filled: true, stroked: true, getFillColor: [...C.gps, 60], getLineColor: [...C.gps, 230],
+    lineWidthUnits: 'pixels', getLineWidth: 2, billboard: true, visible: app.gps && !app.coverage, parameters: ON_TOP,
+    updateTriggers: { getRadius: pz } }));
+  L.push(new ScatterplotLayer({ id: 'gps-dot', data: DATA.truth, getPosition: d => d.pos, getRadius: 6, radiusUnits: 'pixels',
+    filled: true, stroked: true, getFillColor: [...C.gps, 255], getLineColor: [255, 255, 255, 255], lineWidthUnits: 'pixels',
+    getLineWidth: 2, billboard: true, visible: app.gps && !app.coverage, parameters: ON_TOP }));
+
+  // markers stand on the terrain with their own height and stay on top
+  const peakMarks = memo(`pm-${app.stage}-${fix}`, () => DATA.peaks.map(p => ({ ...p, icon: (app.stage === 3 && fix && DATA.obsPeaks.includes(p.id)) ? 'triY' : 'tri' })));
+  L.push(new IconLayer({ id: 'peaks', data: peakMarks, getPosition: d => d.pos, getIcon: d => ICONS[d.icon], getSize: 20,
+    sizeUnits: 'pixels', billboard: true, parameters: ON_TOP, updateTriggers: { getIcon: [app.stage, fix] } }));
+  const nextIds = fix ? st.next.slice(0, 1) : [];
+  L.push(new ScatterplotLayer({ id: 'next-ring', data: nextIds.map(k => DATA.peaks[k]), getPosition: d => d.pos,
+    getRadius: 14 + 12 * pz, radiusUnits: 'pixels', filled: false, stroked: true, getLineColor: [...C.yellow, Math.round(110 + 140 * (1 - pz))],
+    lineWidthUnits: 'pixels', getLineWidth: 3, billboard: true, parameters: ON_TOP, updateTriggers: { getRadius: pz, getLineColor: pz } }));
+  L.push(new IconLayer({ id: 'rdv', data: DATA.rdv, getPosition: d => d.pos, getIcon: () => ICONS.ring, getSize: 24,
+    sizeUnits: 'pixels', billboard: true, parameters: ON_TOP, visible: !app.coverage }));
+  L.push(new IconLayer({ id: 'guess', data: (fix && (app.stage === 1 || app.stage === 2)) ? DATA.est[app.stage] : [],
+    getPosition: d => d.pos, getIcon: () => ICONS.guess, getSize: 24, sizeUnits: 'pixels', billboard: true, parameters: ON_TOP }));
+  L.push(new IconLayer({ id: 'est', data: (fix && app.stage === 3) ? DATA.est[3] : [], getPosition: d => d.pos,
+    getIcon: () => ICONS.cross, getSize: 30, sizeUnits: 'pixels', billboard: true, parameters: ON_TOP }));
+  L.push(new IconLayer({ id: 'truth', data: (fix && app.stage === 3) ? DATA.truth : [], getPosition: d => d.pos,
+    getIcon: () => ICONS.star, getSize: 30, sizeUnits: 'pixels', billboard: true, parameters: ON_TOP }));
+
+  const labels = memo(`lb-${app.stage}-${fix}-${app.gps}-${app.coverage}`, () => {
+    const out = DATA.peaks.map(p => ({ pos: p.pos, text: p.name === 'Mt Moran' ? `Mt Moran ${Math.round(p.z)} m` : `${Math.round(p.z)}`,
+      size: p.name === 'Mt Moran' ? 15 : 12.5, color: (fix && app.stage === 3 && DATA.obsPeaks.includes(p.id)) || nextIds.includes(p.id) ? C.yellow : [236, 240, 242] }));
+    if (!app.coverage) out.push({ pos: DATA.rdv[0].pos, text: 'Rendezvous', size: 13, color: [255, 255, 255] });
+    if (fix && app.stage >= 1) out.push({ pos: DATA.est[app.stage][0].pos, text: app.stage === 3 ? 'Fix' : 'Best guess', size: 13, color: C.cyan });
+    if (fix && app.stage === 3) out.push({ pos: DATA.truth[0].pos, text: 'True spot', size: 12, color: [255, 255, 255], below: true });
+    if (app.gps && !app.coverage) out.push({ pos: DATA.truth[0].pos, text: 'GPS', size: 13, color: [150, 195, 255], below: true });
+    return out;
+  });
+  L.push(new TextLayer({ id: 'labels', data: labels, getPosition: d => d.pos, getText: d => d.text, getSize: d => d.size,
+    getColor: d => d.color, getPixelOffset: d => d.below ? [0, 22] : [0, -18], getTextAnchor: 'middle', getAlignmentBaseline: d => d.below ? 'top' : 'bottom',
+    fontFamily: '"Segoe UI", system-ui, Arial, sans-serif', fontWeight: 600, characterSet: 'auto',
+    fontSettings: { sdf: true, fontSize: 64, buffer: 6 }, outlineWidth: 3, outlineColor: [8, 10, 12, 255],
+    billboard: true, parameters: ON_TOP, updateTriggers: { getColor: [app.stage, fix] } }));
+  return L;
+}
+
+function eyeLayers(now) {
+  const S = app.S, st = S.stages[app.stage];
+  const e = eyeFor(app.stage);
+  const fix = !app.gps;
+  const L = [new TerrainLayer({ id: 'terrain-eye', ...terrainProps(), meshMaxError: 1.5 })];
+  if (!e) return L;
+  const lim = app.injured ? '18' : '30';
+  const route = DATA.routes[lim];
+  // a path that lies on the ground is sized in meters (4 m wide), so it narrows with distance like a real trail
+  L.push(new PathLayer({ id: 'route-eye', data: (fix && app.stage === 3 && route) ? route.path3 : [], getPath: d => d.path,
+    getColor: [255, 255, 255, 240], getWidth: 2, widthUnits: 'meters', jointRounded: true, capRounded: true }));
+  const vis = e.peaks.filter(q => q.visible);
+  const nextIds = fix ? st.next : [];
+  const used = fix && app.stage === 3 ? DATA.obsPeaks : [];
+  const pz = pulse(now, 1200);
+  const key = `eye-${app.stage}-${app.gps}-${app.injured}`;
+  // facing down the route the peaks sit near the top edge, so their labels go under the marker there
+  const under = fix && app.stage === 3 && !!DATA.routeLook[lim];
+  // k = distance / EYE_FOCAL, the factor that turns a wanted on-screen pixel size into the size to hand to deck.gl
+  const kOf = (lon, lat, z) => {
+    const dx = (lon - e.lon) * 111320 * Math.cos(e.lat * Math.PI / 180), dy = (lat - e.lat) * 110540, dz = z - e.z;
+    return clamp(Math.hypot(dx, dy, dz) / EYE_FOCAL, 0.02, 6);
+  };
+  const BEAM = 700;   // the pillar of light stands 700 m above the summit
+  const beams = memo(key + '-b', () => nextIds.slice(0, 1).map(id => { const p = DATA.peaks[id];
+    return { ...p, k: kOf(p.lon, p.lat, p.mesh_z + BEAM / 2) }; }));
+  L.push(new LineLayer({ id: 'beam-glow', data: beams, getSourcePosition: d => [d.lon, d.lat, d.mesh_z + 25],
+    getTargetPosition: d => [d.lon, d.lat, d.mesh_z + BEAM], getColor: [...C.yellow, Math.round(45 + 55 * pz)], getWidth: d => 15 * d.k,
+    widthUnits: 'pixels', updateTriggers: { getColor: pz } }));
+  L.push(new LineLayer({ id: 'beam', data: beams, getSourcePosition: d => [d.lon, d.lat, d.mesh_z + 25],
+    getTargetPosition: d => [d.lon, d.lat, d.mesh_z + BEAM], getColor: [...C.yellow, 240], getWidth: d => 3.5 * d.k, widthUnits: 'pixels' }));
+  L.push(new ScatterplotLayer({ id: 'eye-ring', data: beams, getPosition: d => [d.lon, d.lat, d.mesh_z + 20],
+    getRadius: d => (13 + 13 * pz) * d.k, radiusUnits: 'pixels', filled: false, stroked: true,
+    getLineColor: [...C.yellow, Math.round(120 + 135 * (1 - pz))], lineWidthUnits: 'pixels', getLineWidth: d => 3 * d.k,
+    billboard: true, parameters: ON_TOP, updateTriggers: { getRadius: pz, getLineColor: pz } }));
+  const marks = memo(key + '-m', () => vis.map(q => { const p = DATA.peaks[q.peak];
+    return { pos: [p.lon, p.lat, p.mesh_z + 14], k: kOf(p.lon, p.lat, p.mesh_z + 14),
+      icon: (nextIds.includes(q.peak) || used.includes(q.peak)) ? 'triY' : 'tri', q, p }; }));
+  L.push(new IconLayer({ id: 'eye-peaks', data: marks, getPosition: d => d.pos, getIcon: d => ICONS[d.icon], getSize: d => 17 * d.k,
+    sizeUnits: 'pixels', billboard: true, parameters: ON_TOP }));
+  // the next peak's label sits beside its pillar, the others sit above their marker
+  const labels = memo(key + '-l', () => marks.map(m => {
+    const isNext = nextIds[0] === m.q.peak, isThen = nextIds[1] === m.q.peak;
+    const nm = m.p.name === 'Mt Moran' ? 'Mt Moran' : `${Math.round(m.p.z)} m`;
+    const line = `${nm}  ${Math.round(m.q.bearing)}°  ${m.q.dist_km.toFixed(1)} km`;
+    const base = { color: isNext || used.includes(m.q.peak) ? C.yellow : (isThen ? [255, 236, 170] : [230, 236, 240]) };
+    if (isNext) {
+      const pos = [m.p.lon, m.p.lat, m.p.mesh_z + BEAM * 0.45], k = kOf(...pos);
+      return { ...base, pos, text: `Point here next\n${line}`, size: 15 * k, off: [16 * k, 0], anchor: 'start', baseline: 'center' };
+    }
+    if (under) return { ...base, pos: m.pos, text: nm === 'Mt Moran' ? nm : nm.replace(' m', ''), size: 12 * m.k, off: [0, 13 * m.k], anchor: 'middle', baseline: 'top' };
+    return { ...base, pos: m.pos, text: isThen ? `Then\n${line}` : line, size: 12 * m.k, off: [0, -15 * m.k], anchor: 'middle', baseline: 'bottom' };
+  }));
+  L.push(new TextLayer({ id: 'eye-labels', data: labels, getPosition: d => d.pos, getText: d => d.text, getSize: d => d.size,
+    getColor: d => d.color, getPixelOffset: d => d.off, getTextAnchor: d => d.anchor, getAlignmentBaseline: d => d.baseline,
+    fontFamily: '"Segoe UI", system-ui, Arial, sans-serif', fontWeight: 600, characterSet: 'auto', lineHeight: 1.25,
+    fontSettings: { sdf: true, fontSize: 64, buffer: 6 }, outlineWidth: 3, outlineColor: [8, 10, 12, 255],
+    billboard: true, parameters: ON_TOP }));
+  return L;
+}
+
+// ------------------------------------------------------------------ decks
+let birdDeck, eyeDeck;
+function initDecks() {
+  app.birdVS = birdView(app.stage);
+  birdDeck = new Deck({
+    parent: $('birdDeck'),
+    views: new MapView({ id: 'bird', controller: { keyboard: false, inertia: 250 } }),
+    initialViewState: app.birdVS,
+    layers: [],
+    onViewStateChange: ({ viewState }) => { $('north').firstChild.style.transform = `rotate(${-viewState.bearing}deg)`; },
+    onError: err => console.error('bird deck', err)
+  });
+  const e = eyeFor(app.stage) || DATA.gpsEye;
+  app.eyeVS = eyeView(e);
+  eyeDeck = new Deck({
+    parent: $('eyeDeck'),
+    views: new FirstPersonView({ id: 'eye', fovy: FOVY, near: 1, far: 40000, focalDistance: EYE_FOCAL,
+      controller: { keyboard: false, scrollZoom: false, inertia: 200 } }),
+    initialViewState: app.eyeVS,
+    layers: [],
+    onViewStateChange: ({ viewState }) => { app.eyeLive = viewState; },
+    onError: err => console.error('eye deck', err)
+  });
+  app.eyeLive = app.eyeVS;
+}
+
+function flyBird(instant) {
+  app.birdVS = birdView(app.stage);
+  birdDeck.setProps({ initialViewState: instant ? app.birdVS : { ...app.birdVS, transitionDuration: 1700,
+    transitionInterpolator: new LinearInterpolator({ transitionProps: ['longitude', 'latitude', 'zoom', 'bearing', 'pitch', 'position'] }),
+    transitionEasing: ease } });
+}
+function moveEye(instant) {
+  const e = eyeFor(app.stage);
+  if (!e) return;
+  const vs = eyeView(e);
+  const same = app.eyeVS && Math.abs(app.eyeVS.longitude - vs.longitude) < 1e-7 && Math.abs(app.eyeVS.latitude - vs.latitude) < 1e-7;
+  app.eyeVS = vs;
+  if (instant || same) {
+    eyeDeck.setProps({ initialViewState: same && !instant ? { ...vs, transitionDuration: 900,
+      transitionInterpolator: new LinearInterpolator({ transitionProps: ['bearing', 'pitch'] }) } : vs });
+    app.eyeLive = vs;
+    return;
+  }
+  // a different spot: fade out, jump, fade in (flying at eye height would pass through ridges)
+  const el = $('eyeDeck');
+  el.style.opacity = 0;
+  setTimeout(() => { eyeDeck.setProps({ initialViewState: vs }); app.eyeLive = vs; el.style.opacity = 1; }, 360);
+}
+
+// ------------------------------------------------------------------ compass ribbon under the first-person view
+function drawCompass() {
+  const cv = $('compass'), dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = 'rgba(10,13,16,0.78)'; g.fillRect(0, 0, w, h);
+  const vs = app.eyeLive || app.eyeVS;
+  if (!vs) return;
+  const eh = $('eye').clientHeight || 1;
+  const hfov = 2 * Math.atan(Math.tan(FOVY * Math.PI / 360) * (w / eh)) * 180 / Math.PI;
+  const c = vs.bearing, ppd = w / hfov;
+  g.font = '600 11px "Segoe UI", Arial'; g.textAlign = 'center';
+  for (let a = Math.floor((c - hfov / 2) / 5) * 5; a <= c + hfov / 2; a += 5) {
+    const x = w / 2 + (a - c) * ppd, aa = ((a % 360) + 360) % 360;
+    const major = aa % 30 === 0;
+    g.strokeStyle = major ? '#c9d4da' : '#56636c'; g.lineWidth = major ? 2 : 1;
+    g.beginPath(); g.moveTo(x, 0); g.lineTo(x, major ? 10 : 6); g.stroke();
+    if (major) {
+      const lab = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' }[aa] || `${aa}°`;
+      g.fillStyle = lab.length === 1 ? '#ffffff' : '#9aa7b0'; g.fillText(lab, x, 24);
+    }
+  }
+  const e = eyeFor(app.stage);
+  if (e) {
+    const st = app.S.stages[app.stage];
+    const nextIds = app.gps ? [] : st.next;
+    for (const q of e.peaks) {
+      if (!q.visible) continue;
+      let d = ((q.bearing - c + 540) % 360) - 180;
+      if (Math.abs(d) > hfov / 2) continue;
+      const x = w / 2 + d * ppd, isNext = nextIds[0] === q.peak;
+      g.fillStyle = isNext ? '#ffd666' : 'rgba(255,255,255,.75)';
+      g.beginPath(); g.moveTo(x, h - 4); g.lineTo(x - 5, h - 12); g.lineTo(x + 5, h - 12); g.closePath(); g.fill();
+    }
+  }
+  g.strokeStyle = '#28e1ff'; g.lineWidth = 2; g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, h); g.stroke();
+  $('aimRead').textContent = `${Math.round(((c % 360) + 360) % 360)}°`;
+}
+
+// ------------------------------------------------------------------ text panels
+function fmtKm2(v) { return v >= 1 ? v.toFixed(1) : v.toFixed(2); }
+function updatePanels() {
+  const S = app.S, st = S.stages[app.stage];
+  const fix = !app.gps && !app.coverage;
+  const lim = app.injured ? 18 : 30;
+  const route = S.routes[String(lim)];
+  const dots = $('dots'); dots.innerHTML = '';
+  for (let i = 0; i < 4; i++) { const d = document.createElement('div'); d.className = 'dot' + (!app.gps && i <= app.stage ? ' on' : ''); dots.appendChild(d); }
+
+  // stage card
+  let kicker, title, sub, metrics = [];
+  if (app.coverage) {
+    kicker = 'Where it works'; title = 'Where a 3-peak fix works (inside this data)';
+    sub = `Teal means 3 or more of the ${S.coverage.peaks} peaks are in view (${Math.round(S.coverage.share_3plus * 100)}% of land). Light teal means 2 (${Math.round(S.coverage.share_2 * 100)}%). Dark means 0 or 1, so climb first.`;
+  } else if (app.gps) {
+    kicker = 'GPS fix'; title = 'GPS works. Position ±8 m.';
+    sub = 'Press Jam GPS, or the right arrow, to cut GPS and run the terrain fix.';
+  } else {
+    kicker = `Step ${app.stage + 1} of 4`; title = st.title; sub = st.subtitle;
+    metrics.push(['95% region', st.area95_km2 == null ? `whole ${Math.round(S.span_m[0] * S.span_m[1] / 1e6)} km²` : `${fmtKm2(st.area95_km2)} km²`]);
+    if (app.stage >= 1) metrics.push(['Barometer', `${S.sensors.baro_obs_m} m`]);
+    if (app.stage >= 2) metrics.push(['Bearings', `${app.stage === 2 ? 1 : S.observations.length}`]);
+    if (app.stage === 3) metrics.push(['Error vs truth', `${st.err_m} m`]);
+  }
+  $('stKicker').textContent = kicker; $('stTitle').textContent = title; $('stSub').textContent = sub;
+  $('stMetrics').innerHTML = metrics.map(([k, v]) => `<div class="metric"><b>${v}</b><span>${k}</span></div>`).join('');
+
+  // legend
+  if (app.coverage) {
+    $('legend').innerHTML = `<div><span class="sw" style="background:rgba(60,220,200,.75)"></span>3 or more peaks in view</div>
+      <div><span class="sw" style="background:rgba(120,200,190,.55)"></span>2 peaks</div>
+      <div><span class="sw" style="background:rgba(10,10,12,.85);border:1px solid #444"></span>0 or 1, climb first</div>
+      <div><span class="sym">▲</span>Peaks the model knows</div>`;
+  } else {
+    $('legend').innerHTML = `${fix ? '<div><span class="sw" style="background:rgba(40,225,255,.8)"></span>Where you can be</div><div><span class="swl" style="border-color:#fff"></span>95% region</div>' : '<div><span class="sw" style="background:rgba(80,160,255,.8)"></span>GPS position and accuracy</div>'}
+      <div><span class="sw" style="background:rgba(235,64,52,.75)"></span>Too steep (over ${lim}°) or a cliff</div>
+      ${fix ? '<div><span class="swl" style="border-color:#ffd666"></span>Line from a peak you pointed at</div><div><span class="swl" style="border-color:#fff;border-top-width:4px"></span>Safe route</div><div><span class="sym">★</span>Hidden true spot (shown at step 4)</div><div><span class="sym" style="color:#28e1ff">+</span>Fix</div>' : ''}
+      <div><span class="sym">◉</span>Rendezvous</div>`;
+  }
+
+  // route card and banner
+  let rk = 'Route', rt = '', rs = '';
+  const showBanner = fix && app.stage === 3 && !route;
+  if (app.coverage) { rk = 'Climb first'; rt = 'Dark areas see 0 or 1 peaks'; rs = 'The assistant asks you to climb before it asks for bearings.'; }
+  else if (app.gps) { rk = 'Route'; rt = 'Ready when the fix is'; rs = 'Same slope rule with or without GPS.'; }
+  else if (app.stage < 3) { rt = 'Needs a fix first'; rs = `Slope limit ${lim}°${app.injured ? ', injured' : ''}. Red shows where you cannot walk.`; }
+  else if (route) {
+    const t = app.injured ? route.time_min * 2 : route.time_min;
+    rk = `Safe route, slopes up to ${lim}°`; rt = `${route.length_km.toFixed(1)} km, about ${t >= 60 ? `${Math.floor(t / 60)} h ${String(t % 60).padStart(2, '0')} min` : `${t} min`}`;
+    rs = `Climb ${route.climb_m} m. Walking speed from Tobler's hiking function, off trail.`;
+  } else { rk = 'No route'; rt = `Nothing stays under ${lim}°`; rs = 'The handheld says so instead of guessing.'; }
+  $('rtKicker').textContent = rk; $('rtTitle').textContent = rt; $('rtSub').textContent = rs;
+  $('banner').style.display = showBanner ? 'block' : 'none';
+  $('bannerSub').textContent = `No route stays under ${lim}° from this fix. Keep the beacon on, stay visible, and send the fix (CoT, MGRS) as soon as any link comes back.`;
+
+  // first-person head
+  const e = eyeFor(app.stage);
+  const veil = !app.gps && app.stage === 0;
+  $('eyeVeil').style.display = veil ? 'flex' : 'none';
+  $('veilTitle').textContent = 'No fix yet'; $('veilSub').textContent = 'The view appears after the barometer narrows the area.';
+  let eyeK = 'What you should see', eyeT = '';
+  if (app.gps) { eyeK = 'View from the GPS fix'; eyeT = 'GPS works. Nothing to point at.'; }
+  else if (app.stage === 1) { eyeK = 'Best guess so far, low confidence'; eyeT = st.instruction; }
+  else if (app.stage === 2) { eyeK = 'What you should see from the best guess'; eyeT = st.instruction; }
+  else if (app.stage === 3) { eyeK = 'What you should see from the fix'; eyeT = showBanner ? 'Stay here. Signal and wait.' : st.instruction; }
+  else { eyeT = st.instruction; }
+  $('eyeKicker').textContent = eyeK; $('eyeTitle').textContent = eyeT;
+  let chips = '';
+  if (!app.gps && e) {
+    const byId = Object.fromEntries(e.peaks.map(q => [q.peak, q]));
+    st.next.forEach((k, j) => { const q = byId[k], p = S.peaks[k];
+      chips += `<span class="chip ${j === 0 ? 'next' : ''}">${j === 0 ? 'Next' : 'Then'} · ${p.name} · ${Math.round(q.bearing)}° · ${q.dist_km.toFixed(1)} km</span>`; });
+    if (app.stage === 3) S.observations.forEach(o => { chips += `<span class="chip used">${S.peaks[o.peak].name} ${Math.round(o.obs_deg)}°</span>`; });
+  }
+  $('nextChips').innerHTML = chips;
+
+  // sensors and PACE
+  const rows = [
+    ['GPS', app.gps ? '±8 m' : 'Jammed', app.gps ? ['use', 'In use'] : ['drop', 'Dropped']],
+    ['Barometer', app.gps || app.stage >= 1 ? `${S.sensors.baro_obs_m} m, ±${S.sensors.baro_sigma_m} m` : 'Reading', app.gps ? ['cross', 'Cross-check'] : (app.stage >= 1 ? ['use', 'In use'] : ['stby', 'Standby'])],
+    ['Compass', `±${S.sensors.compass_sigma_deg}°, declination set`, app.gps ? ['cross', 'Cross-check'] : (app.stage >= 2 ? ['use', 'In use'] : ['stby', 'Standby'])],
+    ['Terrain map', '10 m DEM, offline', app.gps ? ['cross', 'Cross-check'] : ['use', 'In use']],
+  ];
+  $('sensorTable').innerHTML = rows.map(([a, b, [c, d]]) => `<tr><td>${a}</td><td>${b}</td><td><span class="tag ${c}">${d.toUpperCase()}</span></td></tr>`).join('');
+  const level = app.gps ? 'p' : (showBanner ? 'e' : 'a');
+  for (const div of $('pace').children) div.classList.toggle('on', div.dataset.k === level);
+  const mc = (S.monte_carlo || []).find(m => m.condition.startsWith('typical'));
+  $('trust').textContent = mc ? `Checked on ${mc.n} simulated spots with a typical phone (compass 6°, barometer 15 m). Median error ${mc.median_err_m} m. The truth fell inside the 95% region ${(mc.truth_inside_95pct_region * 100).toFixed(1)}% of the time.` : '';
+
+  // buttons
+  $('btnBack').disabled = app.gps || app.stage === 0;
+  $('btnNext').disabled = !app.gps && app.stage === 3;
+  $('btnNext').textContent = app.gps ? 'Jam GPS ▶' : 'Next ▶';
+  $('btnHealthy').classList.toggle('on', !app.injured); $('btnInjured').classList.toggle('on', app.injured);
+  $('btnGps').textContent = app.gps ? 'Jam GPS' : 'Restore GPS';
+  $('btnGps').classList.toggle('on', !app.gps);
+  $('btnCover').classList.toggle('on', app.coverage);
+}
+
+// ------------------------------------------------------------------ state changes
+function setStage(s) {
+  s = clamp(s, 0, 3);
+  if (s === app.stage) return;
+  const prev = app.stage, now = performance.now();
+  app.fade = { from: prev, to: s, t0: now };
+  for (const i of app.S.stages[s].lines) if (!app.S.stages[prev].lines.includes(i)) app.lineT0[i] = now;
+  app.stage = s;
+  refresh(true);
+}
+// restoring GPS ends the terrain fix, so jamming it again starts over from step 1
+function setGps(on) {
+  app.gps = on;
+  if (on) { app.stage = 0; app.fade = null; app.lineT0 = {}; }
+  else app.probOp = app.probOp.map((_, i) => i === app.stage ? 1 : 0);
+  refresh(true);
+}
+function refresh(moveCamera) {
+  updatePanels();
+  if (moveCamera) { flyBird(false); moveEye(false); }
+}
+// at step 4 the eye faces the route when there is one, so the injury switch also turns the eye
+function setInjured(v) { app.injured = v; refresh(false); if (!app.gps && app.stage === 3) moveEye(false); }
+function next() { if (app.gps) setGps(false); else setStage(app.stage + 1); }
+function back() { if (!app.gps) setStage(app.stage - 1); }
+
+function bindUI() {
+  $('btnNext').onclick = next; $('btnBack').onclick = back;
+  $('btnHealthy').onclick = () => setInjured(false);
+  $('btnInjured').onclick = () => setInjured(true);
+  $('btnGps').onclick = () => setGps(!app.gps);
+  $('btnCover').onclick = () => { app.coverage = !app.coverage; refresh(true); };
+  $('btnView').onclick = () => { flyBird(false); moveEye(true); };
+  window.addEventListener('keydown', ev => {
+    if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+    const k = ev.key;
+    if (k === 'ArrowRight' || k === 'PageDown' || k === ' ') { ev.preventDefault(); next(); }
+    else if (k === 'ArrowLeft' || k === 'PageUp') { ev.preventDefault(); back(); }
+    else if (k === 'i' || k === 'I') setInjured(!app.injured);
+    else if (k === 'g' || k === 'G') setGps(!app.gps);
+    else if (k === 'w' || k === 'W') { app.coverage = !app.coverage; refresh(true); }
+    else if (k === 'r' || k === 'R') { flyBird(false); moveEye(true); }
+  });
+  let rz;
+  window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => flyBird(true), 200); });
+}
+
+// ------------------------------------------------------------------ frame loop
+function tick(now) {
+  if (!app.terrainReady) {
+    const t = birdDeck.layerManager && birdDeck.layerManager.getLayers().find(l => l.id === 'terrain-mesh');
+    if (t && t.isLoaded && t.props.mesh && !(typeof t.props.mesh.then === 'function')) {
+      app.terrainSeen = app.terrainSeen || now;
+      if (now - app.terrainSeen > 250) { app.terrainReady = true; $('loading').style.display = 'none'; }   // let the terrain effect build its cover first
+    }
+  }
+  if (app.fade) {
+    const t = ease((now - app.fade.t0) / 750);
+    app.probOp = app.probOp.map((_, i) => i === app.fade.to ? t : (i === app.fade.from ? 1 - t : 0));
+    if (t >= 1) app.fade = null;
+  } else {
+    app.probOp = app.probOp.map((_, i) => i === app.stage ? 1 : 0);
+  }
+  birdDeck.setProps({ layers: birdLayers(now) });
+  eyeDeck.setProps({ layers: eyeLayers(now) });
+  drawCompass();
+  requestAnimationFrame(tick);
+}
+
+async function main() {
+  if (!/^https?:$/.test(location.protocol)) {
+    fatal('Open this page through the local server', 'Opened as a file, the browser blocks the map data and the terrain worker. In this folder run   python -I -m http.server 8780 --bind 127.0.0.1   and open http://127.0.0.1:8780/');
+    return;
+  }
+  if (!D.Deck || !TerrainLayer || !TerrainExtension) { fatal('deck.gl did not load', 'lib/deck.gl@9.3.11/dist.min.js is missing or blocked.'); return; }
+  let S;
+  try { S = await (await fetch('state.json', { cache: 'no-store' })).json(); }
+  catch (e) { fatal('state.json could not be read', 'Open this page through the local web server (python -m http.server), not as a file.'); return; }
+  app.S = S;
+  performance.mark('tf-state');
+  app.heights = await loadHeights(S);
+  performance.mark('tf-heights');
+  makeIcons();
+  prepData();
+  performance.mark('tf-prep');
+  $('credits').textContent = 'Elevation USGS 3DEP 1 m (public domain) via OpenTopography, shown at about 10 m · deck.gl 9.3.11 and loaders.gl 4.4.3, MIT License · Simulation on the same DEM, not field-tested';
+  initDecks();
+  bindUI();
+  updatePanels();
+  performance.mark('tf-decks');
+  requestAnimationFrame(tick);
+}
+main();
+</script>
+</body>
+</html>

@@ -1,0 +1,474 @@
+{
+  "checked_at": "2026-11-08T00:59:57.586Z",
+  "browser": "Codex in-app browser",
+  "console_errors": [],
+  "console_warnings": [],
+  "layouts": [
+    {
+      "name": "01-sensors-landscape",
+      "buttons": [
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 342.359375,
+            "height": 56,
+            "left": 429.515625,
+            "right": 780,
+            "top": 286.359375,
+            "width": 350.484375,
+            "x": 429.515625,
+            "y": 286.359375
+          },
+          "text": "Restore GPS"
+        },
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 408.359375,
+            "height": 56,
+            "left": 429.515625,
+            "right": 780,
+            "top": 352.359375,
+            "width": 350.484375,
+            "x": 429.515625,
+            "y": 352.359375
+          },
+          "text": "Find my position →"
+        }
+      ],
+      "document": [
+        800,
+        480
+      ],
+      "viewport": [
+        800,
+        480
+      ]
+    },
+    {
+      "name": "02-aim-landscape",
+      "buttons": [
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 345.34375,
+            "height": 56,
+            "left": 429.515625,
+            "right": 780,
+            "top": 289.34375,
+            "width": 350.484375,
+            "x": 429.515625,
+            "y": 289.34375
+          },
+          "text": "Lock peak"
+        },
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 411.34375,
+            "height": 56,
+            "left": 429.515625,
+            "right": 780,
+            "top": 355.34375,
+            "width": 350.484375,
+            "x": 429.515625,
+            "y": 355.34375
+          },
+          "text": "I can't see it"
+        }
+      ],
+      "document": [
+        800,
+        480
+      ],
+      "viewport": [
+        800,
+        480
+      ]
+    },
+    {
+      "name": "03-guidance-landscape",
+      "buttons": [
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 372.15625,
+            "height": 56,
+            "left": 429.515625,
+            "right": 600.75,
+            "top": 316.15625,
+            "width": 171.234375,
+            "x": 429.515625,
+            "y": 316.15625
+          },
+          "text": "Able · 30°"
+        },
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 372.15625,
+            "height": 56,
+            "left": 608.75,
+            "right": 780,
+            "top": 316.15625,
+            "width": 171.25,
+            "x": 608.75,
+            "y": 316.15625
+          },
+          "text": "Injured · 18°"
+        },
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 438.15625,
+            "height": 56,
+            "left": 429.515625,
+            "right": 780,
+            "top": 382.15625,
+            "width": 350.484375,
+            "x": 429.515625,
+            "y": 382.15625
+          },
+          "text": "Restore radio →"
+        }
+      ],
+      "document": [
+        800,
+        480
+      ],
+      "viewport": [
+        800,
+        480
+      ]
+    },
+    {
+      "name": "04-stay-landscape",
+      "buttons": [
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 351.359375,
+            "height": 56,
+            "left": 429.515625,
+            "right": 600.75,
+            "top": 295.359375,
+            "width": 171.234375,
+            "x": 429.515625,
+            "y": 295.359375
+          },
+          "text": "Able · 30°"
+        },
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 351.359375,
+            "height": 56,
+            "left": 608.75,
+            "right": 780,
+            "top": 295.359375,
+            "width": 171.25,
+            "x": 608.75,
+            "y": 295.359375
+          },
+          "text": "Injured · 18°"
+        },
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 417.359375,
+            "height": 56,
+            "left": 429.515625,
+            "right": 780,
+            "top": 361.359375,
+            "width": 350.484375,
+            "x": 429.515625,
+            "y": 361.359375
+          },
+          "text": "Restore radio →"
+        }
+      ],
+      "document": [
+        800,
+        480
+      ],
+      "viewport": [
+        800,
+        480
+      ]
+    },
+    {
+      "name": "05-report-landscape",
+      "buttons": [
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 313.359375,
+            "height": 56,
+            "left": 429.515625,
+            "right": 780,
+            "top": 257.359375,
+            "width": 350.484375,
+            "x": 429.515625,
+            "y": 257.359375
+          },
+          "text": "Copy demo report"
+        },
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 379.359375,
+            "height": 56,
+            "left": 429.515625,
+            "right": 780,
+            "top": 323.359375,
+            "width": 350.484375,
+            "x": 429.515625,
+            "y": 323.359375
+          },
+          "text": "Back to guidance"
+        }
+      ],
+      "document": [
+        800,
+        480
+      ],
+      "viewport": [
+        800,
+        480
+      ]
+    },
+    {
+      "name": "01-sensors-portrait",
+      "buttons": [
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 660.828125,
+            "height": 56,
+            "left": 20,
+            "right": 355,
+            "top": 604.828125,
+            "width": 335,
+            "x": 20,
+            "y": 604.828125
+          },
+          "text": "Restore GPS"
+        },
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 726.828125,
+            "height": 56,
+            "left": 20,
+            "right": 355,
+            "top": 670.828125,
+            "width": 335,
+            "x": 20,
+            "y": 670.828125
+          },
+          "text": "Find my position →"
+        }
+      ],
+      "document": [
+        375,
+        812
+      ],
+      "viewport": [
+        375,
+        812
+      ]
+    },
+    {
+      "name": "02-aim-portrait",
+      "buttons": [
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 674.34375,
+            "height": 56,
+            "left": 20,
+            "right": 355,
+            "top": 618.34375,
+            "width": 335,
+            "x": 20,
+            "y": 618.34375
+          },
+          "text": "Lock peak"
+        },
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 740.34375,
+            "height": 56,
+            "left": 20,
+            "right": 355,
+            "top": 684.34375,
+            "width": 335,
+            "x": 20,
+            "y": 684.34375
+          },
+          "text": "I can't see it"
+        }
+      ],
+      "document": [
+        375,
+        812
+      ],
+      "viewport": [
+        375,
+        812
+      ]
+    },
+    {
+      "name": "03-guidance-portrait",
+      "buttons": [
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 685.75,
+            "height": 56,
+            "left": 20,
+            "right": 183.5,
+            "top": 629.75,
+            "width": 163.5,
+            "x": 20,
+            "y": 629.75
+          },
+          "text": "Able · 30°"
+        },
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 685.75,
+            "height": 56,
+            "left": 191.5,
+            "right": 355,
+            "top": 629.75,
+            "width": 163.5,
+            "x": 191.5,
+            "y": 629.75
+          },
+          "text": "Injured · 18°"
+        },
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 751.75,
+            "height": 56,
+            "left": 20,
+            "right": 355,
+            "top": 695.75,
+            "width": 335,
+            "x": 20,
+            "y": 695.75
+          },
+          "text": "Restore radio →"
+        }
+      ],
+      "document": [
+        375,
+        812
+      ],
+      "viewport": [
+        375,
+        812
+      ]
+    },
+    {
+      "name": "04-stay-portrait",
+      "buttons": [
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 619.625,
+            "height": 56,
+            "left": 20,
+            "right": 183.5,
+            "top": 563.625,
+            "width": 163.5,
+            "x": 20,
+            "y": 563.625
+          },
+          "text": "Able · 30°"
+        },
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 619.625,
+            "height": 56,
+            "left": 191.5,
+            "right": 355,
+            "top": 563.625,
+            "width": 163.5,
+            "x": 191.5,
+            "y": 563.625
+          },
+          "text": "Injured · 18°"
+        },
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 685.625,
+            "height": 56,
+            "left": 20,
+            "right": 355,
+            "top": 629.625,
+            "width": 335,
+            "x": 20,
+            "y": 629.625
+          },
+          "text": "Restore radio →"
+        }
+      ],
+      "document": [
+        375,
+        812
+      ],
+      "viewport": [
+        375,
+        812
+      ]
+    },
+    {
+      "name": "05-report-portrait",
+      "buttons": [
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 658.609375,
+            "height": 56,
+            "left": 20,
+            "right": 355,
+            "top": 602.609375,
+            "width": 335,
+            "x": 20,
+            "y": 602.609375
+          },
+          "text": "Copy demo report"
+        },
+        {
+          "font": "20px",
+          "rect": {
+            "bottom": 724.609375,
+            "height": 56,
+            "left": 20,
+            "right": 355,
+            "top": 668.609375,
+            "width": 335,
+            "x": 20,
+            "y": 668.609375
+          },
+          "text": "Back to guidance"
+        }
+      ],
+      "document": [
+        375,
+        812
+      ],
+      "viewport": [
+        375,
+        812
+      ]
+    }
+  ]
+}

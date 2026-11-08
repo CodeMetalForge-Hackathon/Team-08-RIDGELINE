@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "demo": true,
+  "source": "phone_state.json",
+  "source_stage": "lock_3",
+  "source_notice": "Fixed final estimated viewpoint, not the original synthetic observation sequence.",
+  "viewpoint": {
+    "lat": 43.8614746,
+    "lon": -110.8264264,
+    "elevation_m": 2541.07
+  },
+  "reference_peak_id": "peak_0",
+  "target_order": [
+    "peak_1",
+    "peak_0",
+    "peak_2"
+  ],
+  "peaks": [
+    {
+      "id": "peak_1",
+      "name": "Pk 3666",
+      "bearing_true": 143.715,
+      "elev_deg": 14.8
+    },
+    {
+      "id": "peak_0",
+      "name": "Mt Moran",
+      "bearing_true": 126.166,
+      "elev_deg": 14.654
+    },
+    {
+      "id": "peak_2",
+      "name": "Pk 3388",
+      "bearing_true": 159.364,
+      "elev_deg": 10.624
+    }
+  ],
+  "sources": [
+    {
+      "name": "USGS 3DEP",
+      "url": "https://www.usgs.gov/3d-elevation-program"
+    },
+    {
+      "name": "OpenTopography",
+      "url": "https://opentopography.org/"
+    }
+  ]
+}
