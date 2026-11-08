@@ -48,6 +48,42 @@ TBD. Add a simple diagram (sensor, edge device, radio link, responder screen).
 2. TBD
 3. TBD
 
+## Live demo
+
+RIDGELINE on the phone and the judge's topo map show the same live solve. You need Python 3 and a browser. Nothing to install, no network, no API keys.
+
+```bash
+python tools/live_server.py              # serves the repo on http://localhost:8768
+```
+
+1. Judge screen: open http://localhost:8768/terrain_viewer/?area=moran
+2. Phone screen: open http://localhost:8768/mockups/phone_screen/ (desktop Chrome with the keyboard works). Press **J** to turn GPS off and **Enter** on Find my position.
+3. Aim with the arrow keys (Shift for fine steps) until the hint says *On the summit*, then press **Enter** to Lock. Each Lock shows up on the judge screen within a second: a pencil line from the peak, the triangle of error once three lines cross, and the 95% bubble.
+4. After three peaks the phone says **Enough** and *You are here ± N m (95%)*. Click **Reveal** on the judge screen to see the error against the hidden demo spot. **Enter** on the phone uses the fix.
+5. Wrong aim: lock while aiming at a different peak. The phone names the lock that does not fit and its line turns red on the judge screen. Aim again and Lock (it replaces that lock), or press Re-aim. **Backspace** removes the last lock.
+
+Phone on the same Wi-Fi: run `python tools/live_server.py --lan` and open `http://<laptop IP>:8768/mockups/phone_screen/`. Phone motion sensors need a secure page, so add `--cert cert.pem --key key.pem` (any self-signed certificate) and open `https://` instead. This path has not been tested on a real phone.
+
+How it works. The phone sends headings in its own frame, so only the differences between peaks count and no compass, magnetic error or declination is involved. `shared/solver.js` (plain ES module, no dependencies, same file in the browser and in Node) scores every 30 m cell inside the barometer band that sees all locked peaks. It removes the unknown heading offset with the circular mean of the residuals and scores azimuth (σ 3°) and elevation angle (σ 1.5°) with a Gaussian. It returns the best cell, the 95% region (area and equivalent radius), Enough or One more (95% radius under 150 m, at least 3 locks, one patch), the best next peak, and which lock to re-aim when the fit is poor. `terrain_viewer/data/moran/solver_grid.json` holds the 30 m grid, 15 peaks (same rules as `find_true_peaks`) and a line-of-sight mask per peak (1.7 m eye height, earth curvature with refraction). `tools/live_server.py` (standard library only) keeps the latest phone state in memory: the phone POSTs `/lock` after every Lock, the viewer polls `GET /state` every 0.5 s (`terrain_viewer/team8_live.js`).
+
+```bash
+node --test tests/solver.test.mjs          # 200 noisy trials, wrong-aim test, speed; writes terrain_viewer/data/moran/solver_eval.json
+node tests/live_e2e.mjs                    # phone + server + viewer in headless Chrome, driven by key presses (CHROME=<path> if needed)
+node mockups/phone_screen/verify_ui.mjs    # phone UI logic checks
+cd terrain_viewer && python -I scripts/team8_solver_grid.py data/moran   # rebuild solver_grid.json (numpy, scipy, Pillow), about 20 s
+```
+
+Measured on the synthetic Mount Moran demo spot. The same 30 m DEM makes the locks and the model, so DEM error, lens and sensor bias, and people who misjudge a summit are not included. Not tested on a real phone.
+
+| Test | Condition | Result |
+| --- | --- | --- |
+| Position error, 3 locks | 200 trials, heading noise 3°, tilt 1.5°, barometer 10 m, unknown heading frame | median 60 m, p90 95 m, truth inside the 95% region in 98% |
+| Position error, 1 and 2 locks | same | median 153 m and 67 m |
+| Wrong aim | one lock taken on another peak at least 15° away, 10 pairs × 20 trials | flagged 100%, right lock named 96%, false alarm without a swap 1.5% |
+| Solve time | Node 22, one thread, 600 solves | median 0.6 ms, max 55 ms |
+| Solve time in the phone page | headless Chrome 156 on the build laptop | 1.5 to 41 ms per Lock |
+| Lock to judge screen | `tests/live_e2e.mjs`, phone and viewer on the same laptop, 6 locks | 194 to 791 ms |
+
 ## What we measured
 
 | Test | Condition | Result |
