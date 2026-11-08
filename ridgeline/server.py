@@ -152,8 +152,11 @@ class Atak:
                                  timeout=max(0.05, last_full + self.RESEND_S - time.monotonic()))
                 changed = STATE['version'] != seen
                 seen = STATE['version']
-                snap = cot.snapshot(STATE) if changed else cot.KEEP
+                # POST replaces these values and never edits them in place, so the references stay valid
+                # after the lock is released, and the request threads wait for nothing here
+                state = {k: STATE[k] for k in ('source', 'obs', 'phone', 'route')}
             try:
+                snap = cot.snapshot(state) if changed else cot.KEEP
                 if self._tick(snap, time.monotonic() - last_full >= self.RESEND_S):
                     last_full = time.monotonic()
             except Exception as error:   # the ATAK feed must never take the server down
