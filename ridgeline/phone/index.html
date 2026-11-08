@@ -839,7 +839,7 @@ function render() {
   if (screen === 'check') {
     const live = performance.now() - sensorSeen < 1500;
     m.innerHTML = `<div class="eyebrow"><span>System check</span><span>${new Date().toISOString().slice(11, 16).replace(':', '')}Z</span></div>
-      <div class="boot-hero"><h1>A terrain fix.<br>Without GPS.</h1><svg class="boot-mark" viewBox="0 0 200 180" aria-hidden="true"><path d="M8 164 80 20 127 100 154 49 198 164ZM33 164 80 71 126 164M80 20V164M8 164 154 49M80 71 198 164M33 164 154 49"/><circle cx="80" cy="71" r="37"/><circle cx="80" cy="71" r="3"/></svg></div>
+      <div class="boot-hero"><h1>A terrain fix<br>Without GPS</h1><svg class="boot-mark" viewBox="0 0 200 180" aria-hidden="true"><path d="M8 164 80 20 127 100 154 49 198 164ZM33 164 80 71 126 164M80 20V164M8 164 154 49M80 71 198 164M33 164 154 49"/><circle cx="80" cy="71" r="37"/><circle cx="80" cy="71" r="3"/></svg></div>
       <div class="rows">
         <div class="row"><b>GPS</b><span class="v">Not used</span></div>
         <div class="row"><b>Network</b><span class="v">Not required for a fix</span></div>
@@ -847,7 +847,7 @@ function render() {
         <div class="row"><b>Motion sensor</b><span class="v ${live ? 'ok' : source === 'keyboard' ? 'warn' : 'off'}" id="motion-v">${live ? 'Streaming' : source === 'keyboard' ? 'Keyboard' : 'Waiting'}</span></div>
         <div class="row"><b>Heading offset</b><span class="v">Fitted from peak angles</span></div>
       </div>
-      <div class="card pace"><i></i><div><b>Terrain mode ready.</b><p class="lead" style="margin-top:4px">Aim at ${wall.length} peaks you can name. RIDGELINE combines the angles between peaks with a height band. In this demo the height is simulated.</p></div></div>
+      <div class="card pace"><i></i><div><b>Terrain mode ready</b><p class="lead" style="margin-top:4px">Aim at ${wall.length} peaks you can name. RIDGELINE combines the angles between peaks with a height band. In this demo the height is simulated.</p></div></div>
       <div class="stack"><button class="btn primary" id="start">Start terrain fix</button></div>`;
     $('start').onclick = start;
   } else if (screen === 'aim') {
@@ -896,7 +896,7 @@ function render() {
     const ns = `${Math.abs(e.lat).toFixed(5)}° ${e.lat >= 0 ? 'N' : 'S'}`, ew = `${Math.abs(e.lon).toFixed(5)}° ${e.lon >= 0 ? 'E' : 'W'}`;
     const dir = o ? ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(W360(deg(Math.atan2(o.lon - e.lon, o.lat - e.lat))) / 45) % 8] : '';
     m.innerHTML = `<div class="eyebrow"><span>Position</span><span>SOLVED ON DEVICE</span></div>
-      <section class="fix-panel" aria-label="Terrain position"><h1>You are here.</h1>
+      <section class="fix-panel" aria-label="Terrain position"><h1>You are here</h1>
       <div class="coords" id="coords"></div>
       <div class="mgrs" id="mgrs">${fixMgrs()}<small>MGRS · ${mgrsDigits() === 4 ? '10' : '100'} m squares</small></div>
       <div class="fix-radius"><span class="big-pm" id="pm">±${fmtM(result.r95_m)}</span><small class="foot" style="margin-left:8px">95% · ${locks.length} peaks</small></div></section>
