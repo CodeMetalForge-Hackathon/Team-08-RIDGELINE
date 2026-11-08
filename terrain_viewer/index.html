@@ -388,7 +388,8 @@ const SNOW_PATHS = SNOW && (() => {
     ends: [{p: up(d[0]), label: 'Demo fix'}, {p: up(d[d.length - 1]), label: 'Rendezvous'}]};
 })();
 let SNOW_IMG = null;
-if (SNOW) { const im = new Image(); im.onload = () => { SNOW_IMG = im; if (state.snow) render(); }; im.src = SNOW.depth.png; }
+// redraw when the image arrives only if the scene is already up; before that, the first render picks it up
+if (SNOW) { const im = new Image(); im.onload = () => { SNOW_IMG = im; if (state.snow && state.scen) render(); }; im.src = SNOW.depth.png; }
 const DECL = (M.declination && M.declination.deg) || 0;
 const DECL_TXT = `${Math.abs(DECL).toFixed(1)}° ${DECL >= 0 ? 'E' : 'W'}`;
 const CAP = {healthy: 30, injured: 18}, SPEED = {healthy: 1, injured: 0.5};
