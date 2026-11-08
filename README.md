@@ -5,7 +5,7 @@ Search and rescue in dangerous environments, built Nov 7 to Nov 8, 2026 at BASE-
 
 **GPS is the first thing jammed or spoofed. RIDGELINE gives an isolated person a position from what they can see, says how sure it is, and sends the answer out as Cursor on Target for ATAK.**
 
-The demonstration entry point is [the RIDGELINE technical README](ridgeline/README.md), with the method, trial record and detailed commands. [Judging evidence](docs/JUDGING_EVIDENCE.md) separates recorded phone trials, simulated results and work still to verify. [Plan.md](Plan.md) contains earlier ideas, including approaches that are not part of this demo.
+The demonstration entry point is [the RIDGELINE technical README](ridgeline/README.md), with the method, trial record and detailed commands. [Judging evidence](docs/JUDGING_EVIDENCE.md) separates recorded phone trials, simulated results and work still to verify. [The demo script](docs/DEMO_SCRIPT.md) has the 90-second and 10-minute runs, the setup check before judging and answers to likely questions. [Plan.md](Plan.md) contains earlier ideas, including approaches that are not part of this demo.
 
 ## What it does
 
