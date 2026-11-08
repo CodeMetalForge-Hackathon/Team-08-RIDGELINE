@@ -58,16 +58,21 @@ async function take(st) {
   try { await loadGrid(); } catch (err) { c.toast('Live phone: cannot read ' + GRID_URL); return; }
   const prev = L.st, wasOn = L.on;
   L.st = {session: st.session || null, event: st.event || 'lock', locks: Array.isArray(st.locks) ? st.locks : [], result: st.result || null,
-    baro: st.baro || null, opts: st.opts || null, source: st.source || null, sent_at: st.sent_at || null};
+    baro: st.baro || null, opts: st.opts || null, source: st.source || null, sent_at: st.sent_at || null,
+    route: st.route && st.route.dest ? st.route : null};
   L.lagMs = st.sent_at ? Math.max(0, Date.now() - Date.parse(st.sent_at)) : null;
   if (!prev || prev.session !== L.st.session) L.reveal = false;
   L.on = true;
   build();
   window.TEAM8_LIVE_LAST = {seq: st.seq, event: L.st.event, locks: L.st.locks.length, lag_ms: L.lagMs,
-    r95_m: L.G.r95, err_m: L.G.err, shown_at: new Date().toISOString()};
-  const reframe = !wasOn || !prev || prev.locks.length !== L.st.locks.length || prev.session !== L.st.session;
+    r95_m: L.G.r95, err_m: L.G.err, route: L.G.routeKey, shown_at: new Date().toISOString()};
+  const reframe = !wasOn || !prev || prev.locks.length !== L.st.locks.length || prev.session !== L.st.session || (L.G.routeKey !== (L.prevRouteKey || ''));
+  L.prevRouteKey = L.G.routeKey;
   if (reframe) c.frame();
   c.render();
+  // the frame after this one has the update on screen: record when that happened (wall clock, for tests/live_e2e.mjs)
+  const seq = st.seq;
+  requestAnimationFrame(() => requestAnimationFrame(() => { if (window.TEAM8_LIVE_LAST && TEAM8_LIVE_LAST.seq === seq) TEAM8_LIVE_LAST.painted_at_ms = Date.now(); }));
 }
 
 // ---------------------------------------------------------------- geometry, in the viewer's metres (east, north)
@@ -120,6 +125,13 @@ function build() {
   G.inside = G.err !== null && G.r95 !== null && G.err <= G.r95;
   const sn = r && r.suggested_next ? g.peaks.get(r.suggested_next.peak_id) : null;
   G.next = sn && !s.locks.some(l => l.peak_id === sn.id) ? sn : null;
+  // the destination and safe route the person picked on the phone (shared/route.js), coloured like the judge's route
+  const R = s.route;
+  G.route = R;
+  G.routeKey = R ? [R.dest.name, R.ok, R.length_m || 0, R.cap_deg].join('|') : '';
+  G.routeSegs = R && R.ok && Array.isArray(R.segments) ? R.segments.map(q => ({cls: q.cls | 0, path: q.path.map(p => ground(p[0], p[1], 6))})) : [];
+  G.dest = R ? {pos: ground(R.dest.lon, R.dest.lat, 10), name: R.dest.name, ok: R.ok} : null;
+  if (G.routeSegs.length) G.next = null;   // past the peaks: the route is the next thing
   L.G = G;
 }
 
@@ -138,6 +150,12 @@ function layers() {
   const pk = G.locks.filter(l => l.peak).map(l => ({pos: [l.peak.lon, l.peak.lat, l.peak.elev_m + 8], letter: l.letter, name: l.peak.name,
     named: labelled(l.peak), wrong: !!(G.wrong && G.wrong.index === l.i)}));
   const nx = G.next ? [{pos: [G.next.lon, G.next.lat, G.next.elev_m + 8], name: `aim next: ${G.next.name}`}] : [];
+  const RC = [[227, 171, 6], [234, 122, 28], [212, 56, 108]];   // easy, moderate, steep, as the judge route key
+  const dst = G.dest ? [G.dest] : [];
+  out.push(new D.PathLayer({id: 'live-route-casing', data: G.routeSegs, getPath: q => q.path, getColor: [251, 250, 246, 235], getWidth: 8, widthUnits: 'pixels',
+    jointRounded: true, capRounded: true, parameters: top}));
+  out.push(new D.PathLayer({id: 'live-route', data: G.routeSegs, getPath: q => q.path, getColor: q => RC[q.cls] || RC[0], getWidth: 4.5, widthUnits: 'pixels',
+    jointRounded: true, capRounded: true, parameters: top}));
   out.push(new D.ScatterplotLayer({id: 'live-bubble', data: fix.filter(q => q.r), getPosition: q => q.pos, getRadius: q => q.r, radiusUnits: 'meters', filled: true,
     getFillColor: [217, 72, 28, 52], stroked: true, getLineColor: [168, 51, 12, 235], lineWidthMinPixels: 1.8, parameters: top}));
   out.push(new D.PathLayer({id: 'live-pencil-casing', data: G.lines, getPath: q => q.path, getColor: [251, 250, 246, 210], getWidth: 5.5, widthUnits: 'pixels',
@@ -166,6 +184,10 @@ function layers() {
     getLineColor: [255, 255, 255], lineWidthMinPixels: 2, parameters: top}));
   out.push(new D.TextLayer({id: 'live-truth-label', data: rev, ...c.TXT, getPosition: q => q.pos, getPixelOffset: [0, -12], getAlignmentBaseline: 'bottom',
     getText: () => `Hidden demo spot, ${G.err} m from the fix`, getSize: 14, getColor: [150, 25, 25], fontWeight: 700, updateTriggers: {getText: G.err}, parameters: top}));
+  out.push(new D.ScatterplotLayer({id: 'live-dest', data: dst, getPosition: q => q.pos, getRadius: 7, radiusUnits: 'pixels', getFillColor: q => q.ok ? [255, 218, 115] : c.RED,
+    stroked: true, getLineColor: c.INK, lineWidthMinPixels: 2.2, updateTriggers: {getFillColor: G.routeKey}, parameters: top}));
+  out.push(new D.TextLayer({id: 'live-dest-label', data: dst, ...c.TXT, getPosition: q => q.pos, getText: q => q.ok ? q.name : `${q.name}: no safe route`, getSize: 14,
+    fontWeight: 700, getColor: c.INK, getPixelOffset: [0, -12], getAlignmentBaseline: 'bottom', updateTriggers: {getText: G.routeKey}, parameters: top}));
   return out;
 }
 
@@ -180,17 +202,28 @@ function framePts() {
   seen.forEach(p => pts.push([p.lon, p.lat, p.elev_m, 1]));
   c.ring(pts, G.fix, Math.max(350, (G.r95 || 0) * 1.3));
   if (L.reveal && G.truth) pts.push([G.truth[0], G.truth[1], G.truth[2]]);
+  if (G.dest) {   // the route is the story now: frame the fix, the route and the destination
+    pts.length = 0; c.ring(pts, G.fix, Math.max(350, (G.r95 || 0) * 1.3));
+    G.routeSegs.forEach(q => q.path.forEach((p, i) => { if (i % 4 === 0) pts.push([p[0], p[1], p[2]]); }));
+    pts.push(G.dest.pos.slice(0, 3));
+    return {pts, pad: 250, look: c.brg(G.fix, G.dest.pos), key: G.fix, pitch: 45};
+  }
   const cx = seen.length ? seen.reduce((a, p) => a + p.lon, 0) / seen.length : G.fix[0], cy = seen.length ? seen.reduce((a, p) => a + p.lat, 0) / seen.length : G.fix[1];
   return {pts, pad: 250, look: seen.length ? c.brg(G.fix, [cx, cy]) : -62, key: G.fix, pitch: 42};
 }
 
 const sgn = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '°';
+const fmtT = s => { const m = Math.max(1, Math.round(s / 60)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`; };
 const angd = (a, b) => ((a - b + 540) % 360) - 180;
 function copy() {
   const s = L.st, r = s.result, G = L.G, n = s.locks.length, nx = G.next ? G.next.name : null;
   const enough = r && r.enough_or_one_more === 'enough';
   // keep each text under about 150 characters, the card has room for four lines
   if (n && G.wrong) return ['Re-aim', `${G.wrong.message}${Number.isInteger(G.wrong.index) ? ' Its line is red.' : ''}`];
+  const R = G.route;
+  if (R && R.ok && R.here) return ['At the destination', `The phone is already at ${R.dest.name}.`];
+  if (R && R.ok) return ['Route', `${R.dest.name}: ${R.length_m >= 1000 ? (R.length_m / 1000).toFixed(1) + ' km' : R.length_m + ' m'}, about ${fmtT(R.time_s)}${R.injured ? ' at injured pace' : ''}. ${R.say}`];
+  if (R && !R.ok && R.reason === 'no_safe_route') return ['Stay. Signal. Wait.', `No safe way to ${R.dest.name} without water or ground steeper than ${R.cap_deg}°. The phone tells the person to stay put and signal.`];
   if (L.reveal && G.err !== null) return ['Reveal', `The hidden demo spot is ${G.err} m from the fix, ${G.inside ? 'inside' : 'outside'} the 95% bubble (±${G.r95} m). The phone never had it.`];
   if (!n) return ['Phone ready', 'The phone has the map tile, a barometer and its own aim. No GPS, no compass. Each Lock on the phone lands here.'];
   if (enough) return ['Fix ready', `Lines from ${n} peaks cross in a ${G.triSide ? G.triSide + ' m' : 'small'} triangle. No compass: the solver removes the phone's heading offset. Press Reveal.`];
@@ -251,6 +284,18 @@ function phone() {
   $('phBig').textContent = c.NB(r && r.hdr95 ? `±${r.hdr95.radius_m} m` : n ? 'Check aim' : 'Ready');
   $('phSay').textContent = c.NB(G.wrong ? G.wrong.message : enough ? 'Enough. You are here.' : n ? `${last.peak_name || last.peak_id} locked.${G.next ? ` Next: ${G.next.name}.` : ''}` : 'Aim at the first peak and press Lock.');
   $('phBtn').textContent = 'Leave live view';
+  const R = G.route;
+  if (R && R.ok && !R.here && !G.wrong) {   // the phone is guiding: its first leg, as the phone says it
+    $('arrow').style.opacity = 1;
+    const to = (G.routeSegs[0] && G.routeSegs[0].path[Math.min(3, G.routeSegs[0].path.length - 1)]) || G.dest.pos;
+    $('arrow').style.transform = `rotate(${Math.round(angd(c.brg(G.fix, to), (c.state && c.state.heading) || 0))}deg)`;   // as index.html: relative to the camera
+    $('phBig').textContent = c.NB(R.length_m >= 1000 ? `${(R.length_m / 1000).toFixed(1)} km` : `${R.length_m} m`);
+    $('phSay').textContent = c.NB(`${R.next || 'Follow the route'}. To ${R.dest.name}.`);
+  } else if (R && !R.ok && R.reason === 'no_safe_route' && !G.wrong) {
+    $('arrow').style.display = 'none'; $('phStop').style.display = '';
+    $('phBig').textContent = c.NB(`No route at ${R.cap_deg}°`);
+    $('phSay').textContent = c.NB(`${R.dest.name} is out of reach. Stay put and signal.`);
+  }
   $('phFix').className = 'tag' + (enough ? ' ok' : ''); $('phFix').textContent = c.NB(r && r.hdr95 ? `Fix ±${r.hdr95.radius_m} m` : 'No fix');
   $('phCoords').innerHTML = G.fix ? `<span>LAT</span> ${G.fix[1].toFixed(5)}  <span>LON</span> ${G.fix[0].toFixed(5)}<br><span>MGRS</span> ${c.mgrs(G.fix[0], G.fix[1])}<br><span>LOCKS</span> ${n}  <span>HDG</span> phone frame, no compass`
     : '<span>LAT</span> ?  <span>LON</span> ?<br><span>MGRS</span> ?<br><span>HDG</span> phone frame, no compass';
