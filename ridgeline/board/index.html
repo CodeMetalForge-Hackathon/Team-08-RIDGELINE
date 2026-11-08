@@ -64,12 +64,31 @@ td.r{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
 .atak i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#8a8f93;margin-right:6px;vertical-align:1px}
 .atak.on i{background:var(--green)}
 .atak .err{color:var(--red)}.atak .nw{white-space:nowrap}
+/* Auto-PACE: what the position rests on now. Ink and red only, the amber stays for what to aim at */
+.pace{display:flex;flex-direction:column;gap:2px;border-top:2px solid var(--ink);padding-top:10px}
+.pace .ph{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;font-size:12px;font-weight:800;letter-spacing:.1em;color:var(--ink2)}
+.pace .ph>*{white-space:nowrap}
+.pace .ph b{margin-left:auto;font-size:14px;letter-spacing:.06em;color:var(--ink)}
+.pace .ph b.low{color:var(--red)}
+.pace .pr{display:grid;grid-template-columns:18px 88px 1fr;gap:6px;align-items:baseline;font-size:13px;line-height:1.4;padding:3px 0 3px 6px;border-left:3px solid transparent;color:var(--ink2)}
+.pace .pr i{font:800 13px var(--mono);font-style:normal;color:var(--ink)}
+.pace .pr b{color:var(--ink)}
+.pace .pr.on{border-left-color:var(--ink);background:var(--paper2)}
+.pace .pr.bad,.pace .pr.bad b,.pace .pr.bad i{color:var(--red)}
+.pace .pr.on.bad{border-left-color:var(--red)}
+.pace .pa{border:2px solid var(--red);padding:8px 10px;margin-top:6px;font-size:13px;line-height:1.45}
+.pace .pa b{display:block;color:var(--red);font-size:15px}
+.pace .pn{font-size:12px;color:var(--ink2);margin:4px 0 0}
+.pace .tag{display:inline-block;border:1.5px dashed var(--ink2);padding:0 6px;font:800 11px var(--mono);letter-spacing:.1em;color:var(--ink2)}
+.legend i.p{width:14px;height:14px;border:3px solid var(--blue);border-radius:50%;background:rgba(20,95,122,.1);justify-self:center}
+.legend i.w{border-top:3px dotted var(--ink)}
+.legend:not(.has-pace) .lg-p{display:none}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="mapbox" id="mapbox"><canvas id="cv"></canvas>
-    <div class="legend" id="legend"><i></i><span>Pencil line from a locked peak</span><i class="t"></i><span>Error triangle</span><i class="b"></i><span>95% bubble</span><i class="x"></i><span>Best estimate</span><span class="lg-m" id="lg-h"></span><span class="lg-m">HIDE, seen by the fewest summits</span><span class="lg-m" id="lg-s"></span><span class="lg-m">SIGNAL, open ground seen by the most summits</span><span class="lg-g" id="lg-g"></span><span class="lg-g">Test GPS reading</span><span class="wide lg-m">Terrain only. Trees and buildings are not in the model.</span></div>
+    <div class="legend" id="legend"><i></i><span>Pencil line from a locked peak</span><i class="t"></i><span>Error triangle</span><i class="b"></i><span>95% bubble</span><i class="x"></i><span>Best estimate</span><span class="lg-m" id="lg-h"></span><span class="lg-m">HIDE, seen by the fewest summits</span><span class="lg-m" id="lg-s"></span><span class="lg-m">SIGNAL, open ground seen by the most summits</span><span class="lg-g" id="lg-g"></span><span class="lg-g">Test GPS reading</span><i class="p lg-p"></i><span class="lg-p">Auto-PACE, 95% now</span><i class="w lg-p"></i><span class="lg-p">Walked trail</span><span class="wide lg-m">Terrain only. Trees and buildings are not in the model.</span></div>
   </div>
   <aside class="side">
     <div class="brand"><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><path d="M2 26 13 6 19 17 23 10 30 26M9 26l7-12 7 12" fill="none" stroke="#1f2326" stroke-width="2.4" stroke-linejoin="round"/></svg>RIDGELINE <small>live fix</small><span class="live" id="live" style="margin-left:auto"><i></i><span>WAITING</span></span></div>
@@ -77,6 +96,7 @@ td.r{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
     <div><div class="big" id="pm">—</div><div class="sub" id="pm-sub">no Lock yet</div></div>
     <div class="meter"><span id="meter"></span></div>
     <div class="state" id="state">Aim the phone at the first card.</div>
+    <div id="pace" class="pace" hidden></div>
     <table id="locks"></table>
     <div id="others" class="sub"></div>
     <div id="route" class="route" hidden></div>
@@ -120,6 +140,38 @@ const gpsLook = g => {
   const v = String(g.verdict || '').toUpperCase();
   return v === 'REJECTED' ? { col: '#b3261e', say: d => `GPS disagrees, ${d} off` } : v === 'AGREE' ? { col: '#2b7a3d', say: d => `GPS consistent, ${d}` } : { col: '#1f2326', say: d => `GPS reading, ${d} off` };
 };
+// Auto-PACE from the phone (summary.pace): the fix kept alive while the person walks. moved = the circle is no longer
+// the fix itself (walked, GPS in use or a new fix folded in), so it is drawn apart from the fix.
+const PACE_BASIS = { gps: 'GPS', fix: 'Terrain fix', refix: 'New fix', steps: 'Steps', drift: 'Steps, no heading' };
+function paceNow() {
+  const p = state && state.phone && state.phone.pace;
+  if (!p || typeof p !== 'object' || !Number.isFinite(+p.lat) || !Number.isFinite(+p.lon) || !(+p.r95_m > 0)) return null;
+  const en = a => Array.isArray(a) && Number.isFinite(+a[0]) && Number.isFinite(+a[1]) ? S.toEN(model, +a[0], +a[1]) : null;
+  const c = S.toEN(model, +p.lon, +p.lat), sg = p.signal;
+  return { p, e: c.e, n: c.n, r: +p.r95_m, low: p.level === 'low', refix: p.refix === true,
+    moved: +p.walked_fix_m >= 1 || p.basis === 'gps' || p.basis === 'refix',
+    trail: Array.isArray(p.trail) ? p.trail.slice(0, 200).map(en).filter(Boolean) : [],
+    walker: en(p.truth),   // the simulated walker, only during a simulated walk
+    signal: sg && Number.isFinite(+sg.lat) && Number.isFinite(+sg.lon) ? Object.assign({ sg }, S.toEN(model, +sg.lon, +sg.lat)) : null };
+}
+function paceBox(pc) {
+  const p = pc.p, num = v => Number.isFinite(+v) ? +v : 0, g = String(p.gps || 'OFF').toUpperCase();
+  const mins = num(p.minutes) < 1 ? 'under 1 min ago' : `${Math.round(num(p.minutes))} min ago`;
+  const head = p.heading === 'sim' ? 'heading simulated' : p.heading === 'unknown' ? 'heading unknown, spread every way' : 'heading from the peaks';
+  const baroT = p.baro === 'off' ? 'no barometer' : `barometer band${p.sim ? ' (sim)' : ''}${num(p.baro_used) ? ' ×' + num(p.baro_used) : ''}`;
+  const rows = [
+    { k: 'P', n: 'GPS', on: p.basis === 'gps', bad: g === 'REJECTED', t: g === 'OFF' ? 'Off' : g === 'AGREE' ? `Agrees, ${fmtM(num(p.gps_dist_m))} off${p.gps_used ? ', in use' : ''}` : `Disagrees, ${fmtM(num(p.gps_dist_m))} off, not used` },
+    { k: 'A', n: 'Terrain fix', on: p.basis === 'fix' || p.basis === 'refix', t: `${mins} · ${fmtM(num(p.walked_fix_m))} walked${num(p.assumed_m) ? `, ${fmtM(num(p.assumed_m))} of it assumed` : ''}` },
+    { k: 'C', n: 'Steps', on: p.basis === 'steps' || p.basis === 'drift', t: `${num(p.steps).toLocaleString('en-US')} steps · ${head} · ${baroT}` },
+    { k: 'E', n: 'Re-aim', on: pc.refix, bad: pc.refix, t: pc.refix ? 'Needed now' : 'Not needed yet' },
+  ];
+  const sg = pc.signal && pc.signal.sg;
+  const alert = pc.refix ? `<div class="pa"><b>Confidence low. Aim at 3 peaks again.</b>±${fmtM(pc.r)} now, ±${fmtM(num(p.r95_fix_m))} at the fix.${sg ? ` Re-aim at the nearest Signal spot, seen by ${num(sg.seen_by)} of ${num(sg.of)} summits, ${num(sg.walk_min) < 1 ? 'under 1' : num(sg.walk_min)} min walk.` : ''}</div>` : '';
+  const lr = p.last_refix, note = p.basis === 'refix' && lr ? `<p class="pn">${lr.took_new ? `<b>Steps were off.</b> The new fix barely overlaps the walked map (${(num(lr.overlap) * 100).toFixed(1)}%), so it is used alone.` : `<b>New fix agrees with the steps</b>, overlap ${Math.round(num(lr.overlap) * 100)}%. Both were multiplied.`}</p>` : '';
+  const lvl = { good: 'GOOD', caution: 'CAUTION', low: 'LOW' }[p.level] || '';
+  return `<div class="ph"><span>AUTO-PACE</span>${p.sim ? '<span class="tag">SIMULATED</span>' : ''}<b class="${pc.low ? 'low' : ''}">${esc(PACE_BASIS[p.basis] || p.basis)} · ${lvl}</b></div>`
+    + rows.map(r => `<div class="pr${r.on ? ' on' : ''}${r.bad ? ' bad' : ''}"><i>${r.k}</i><b>${r.n}</b><span>${esc(r.t)}</span></div>`).join('') + alert + note;
+}
 // map symbols, the same shapes on the canvas and in the legend
 function symSvg(kind, col) {
   if (kind === 'HIDE') return '<svg width="22" height="20" viewBox="0 0 22 20" aria-hidden="true"><circle cx="11" cy="10" r="7" fill="#f3efe4"/><path d="M4 10A7 7 0 0 0 18 10Z" fill="#5b2f86"/><circle cx="11" cy="10" r="7" fill="none" stroke="#5b2f86" stroke-width="2"/></svg>';
@@ -170,25 +222,30 @@ function haloLabel(ctx, txt, tries, col, boxes, s) {
   ctx.strokeText(txt, at[0], at[1]); ctx.fillStyle = col; ctx.fillText(txt, at[0], at[1]);
 }
 
+let solvedKey = null;
 function solveFrom(obs) {
-  const cands = state && state.source === 'board-sim' ? undefined : model.demo.wall.map(w => w.peak_id);
-  res = obs.locks.length ? S.solve(model, obs, cands ? { candidates: cands } : {}) : null;
-  overlay = null;
-  if (res) {
-    const c = document.createElement('canvas'); c.width = model.nx; c.height = model.ny;
-    const ctx = c.getContext('2d'), img = ctx.createImageData(model.nx, model.ny);
-    const bad = res.status === 'mismatch';
-    for (let i = 0; i < model.n; i++) {
-      const a = res.hpd50[i] ? 120 : res.hpd95[i] ? 66 : 0;
-      if (!a) continue;
-      img.data[i * 4] = bad ? 179 : 20; img.data[i * 4 + 1] = bad ? 38 : 95; img.data[i * 4 + 2] = bad ? 30 : 122; img.data[i * 4 + 3] = a;
+  const key = JSON.stringify([state && state.source, obs]);
+  if (key !== solvedKey) {   // a walk only moves the Auto-PACE circle, the fix is solved again only when the Locks change
+    solvedKey = key;
+    const cands = state && state.source === 'board-sim' ? undefined : model.demo.wall.map(w => w.peak_id);
+    res = obs.locks.length ? S.solve(model, obs, cands ? { candidates: cands } : {}) : null;
+    overlay = null;
+    if (res) {
+      const c = document.createElement('canvas'); c.width = model.nx; c.height = model.ny;
+      const ctx = c.getContext('2d'), img = ctx.createImageData(model.nx, model.ny);
+      const bad = res.status === 'mismatch';
+      for (let i = 0; i < model.n; i++) {
+        const a = res.hpd50[i] ? 120 : res.hpd95[i] ? 66 : 0;
+        if (!a) continue;
+        img.data[i * 4] = bad ? 179 : 20; img.data[i * 4 + 1] = bad ? 38 : 95; img.data[i * 4 + 2] = bad ? 30 : 122; img.data[i * 4 + 3] = a;
+      }
+      ctx.putImageData(img, 0, 0); overlay = c;
     }
-    ctx.putImageData(img, 0, 0); overlay = c;
-  }
-  // a test pilot gets the board's own HIDE and SIGNAL (healthy, 30 min), a phone sends its own
-  simMarks = null; simStay = false;
-  if (HD && res && res.n_locks >= 3 && state && state.source === 'board-sim') {
-    try { const out = HD.candidates(model, res, { minutes: 30 }); simMarks = HD.marks(out); simStay = out.note === 'STAY'; } catch (e) { simMarks = null; }
+    // a test pilot gets the board's own HIDE and SIGNAL (healthy, 30 min), a phone sends its own
+    simMarks = null; simStay = false;
+    if (HD && res && res.n_locks >= 3 && state && state.source === 'board-sim') {
+      try { const out = HD.candidates(model, res, { minutes: 30 }); simMarks = HD.marks(out); simStay = out.note === 'STAY'; } catch (e) { simMarks = null; }
+    }
   }
   // camera: the locked peaks and the bubble, or the whole sheet
   const fullE = model.nx * model.dx, fullN = model.ny * model.dy;
@@ -205,6 +262,13 @@ function solveFrom(obs) {
       if (rt.dest) { const q = S.toEN(model, rt.dest.lon, rt.dest.lat); add(q.e, q.n, 400); }
     }
     for (const k of marksNow()) { const q = S.toEN(model, +k.lon, +k.lat); add(q.e, q.n, 250); }
+    const pc = paceNow();
+    if (pc && pc.moved) {   // the live circle, the walked trail, the simulated walker and the re-aim spot
+      add(pc.e, pc.n, Math.max(600, pc.r * 1.4));
+      for (const q of pc.trail) add(q.e, q.n, 250);
+      if (pc.walker) add(pc.walker.e, pc.walker.n, 300);
+      if (pc.refix && pc.signal) add(pc.signal.e, pc.signal.n, 400);
+    }
     const g = gpsNow(), f = fixEN();
     if (g && f) {   // a GPS reading on the sheet and within 4 km joins the frame, a farther one gets an edge arrow
       const q = S.toEN(model, +g.lon, +g.lat);
@@ -242,7 +306,11 @@ function draw(now) {
   ctx.fillStyle = '#d9d2bf'; ctx.fillRect(0, 0, W, H);
   const iw = topo.naturalWidth, ih = topo.naturalHeight;
   ctx.drawImage(topo, 0, 0, iw, ih, X(0), Y(fullN), X(fullE) - X(0), Y(0) - Y(fullN));
-  if (overlay) { ctx.imageSmoothingEnabled = true; ctx.drawImage(overlay, 0, 0, model.nx, model.ny, X(0), Y(fullN), X(fullE) - X(0), Y(0) - Y(fullN)); }
+  const pc = paceNow(), moved = !!(pc && pc.moved);
+  if (overlay) {   // the fix map fades once Auto-PACE has moved on from it
+    ctx.save(); ctx.globalAlpha = moved ? 0.35 : 1; ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(overlay, 0, 0, model.nx, model.ny, X(0), Y(fullN), X(fullE) - X(0), Y(0) - Y(fullN)); ctx.restore();
+  }
   const obs = state ? state.obs : { locks: [] };
   // peaks
   for (const p of model.peaks) {
@@ -337,11 +405,17 @@ function draw(now) {
   }
   if (res && res.n_locks >= 2) {
     const x = X(res.estimate.e_m), y = Y(res.estimate.n_m), r = res.r95_m / (v.e1 - v.e0) * W;
-    ctx.save(); ctx.setLineDash([7 * dpr, 5 * dpr]); ctx.strokeStyle = res.status === 'mismatch' ? '#b3261e' : '#145f7a'; ctx.lineWidth = 2.2 * dpr;
+    ctx.save(); ctx.setLineDash([7 * dpr, 5 * dpr]); ctx.strokeStyle = moved ? 'rgba(31,35,38,.5)' : res.status === 'mismatch' ? '#b3261e' : '#145f7a'; ctx.lineWidth = (moved ? 1.6 : 2.2) * dpr;
     ctx.beginPath(); ctx.arc(x, y, Math.max(8 * dpr, r), 0, Math.PI * 2); ctx.stroke(); ctx.restore();
-    ctx.strokeStyle = '#b3261e'; ctx.lineWidth = 3 * dpr;
+    ctx.strokeStyle = moved ? 'rgba(31,35,38,.6)' : '#b3261e'; ctx.lineWidth = (moved ? 2 : 3) * dpr;
     ctx.beginPath(); ctx.moveTo(x - 12 * dpr, y); ctx.lineTo(x + 12 * dpr, y); ctx.moveTo(x, y - 12 * dpr); ctx.lineTo(x, y + 12 * dpr); ctx.stroke();
+    if (moved) {
+      ctx.save(); ctx.font = `800 ${12 * dpr}px "Noto Sans JP",sans-serif`; ctx.lineWidth = 3 * dpr; ctx.strokeStyle = 'rgba(243,239,228,.95)';
+      haloLabel(ctx, 'Fix', [[x + 9 * dpr, y - 9 * dpr], [x - 9 * dpr - ctx.measureText('Fix').width, y - 9 * dpr]], 'rgba(31,35,38,.8)', boxes, dpr);
+      ctx.restore();
+    }
   }
+  if (moved) drawPace(ctx, pc, X, Y, W, v.e1 - v.e0, dpr, boxes);
   const mk = marksNow();
   if (mk.length || gpsLabel) {   // HIDE hollows and SIGNAL flags, then all labels on top
     ctx.save();
@@ -372,8 +446,49 @@ function draw(now) {
     ctx.fillStyle = '#1f2326'; ctx.beginPath(); ctx.arc(x, y, 6 * dpr, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = '#f3efe4'; ctx.lineWidth = 2 * dpr; ctx.stroke();
     ctx.font = `800 ${13 * dpr}px "Noto Sans JP",sans-serif`; ctx.lineWidth = 3 * dpr; ctx.strokeStyle = 'rgba(243,239,228,.95)';
-    ctx.strokeText('True position', x + 10 * dpr, y - 8 * dpr); ctx.fillStyle = '#1f2326'; ctx.fillText('True position', x + 10 * dpr, y - 8 * dpr);
+    const tl = moved ? 'True position at the fix' : 'True position';
+    ctx.strokeText(tl, x + 10 * dpr, y - 8 * dpr); ctx.fillStyle = '#1f2326'; ctx.fillText(tl, x + 10 * dpr, y - 8 * dpr);
   }
+}
+// Auto-PACE on the board: the walked trail (dotted), the live 95% circle (red when a re-aim is needed),
+// the re-aim Signal spot, and during a simulated walk the walker the circle should contain
+function drawPace(ctx, pc, X, Y, W, span, dpr, boxes) {
+  const s = dpr, col = pc.low ? '#b3261e' : '#145f7a';
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (pc.trail.length > 1) {
+    const line = () => { ctx.beginPath(); pc.trail.forEach((q, i) => i ? ctx.lineTo(X(q.e), Y(q.n)) : ctx.moveTo(X(q.e), Y(q.n))); ctx.stroke(); };
+    ctx.strokeStyle = 'rgba(243,239,228,.9)'; ctx.lineWidth = 6 * s; line();
+    ctx.strokeStyle = '#1f2326'; ctx.lineWidth = 3 * s; ctx.setLineDash([0.1, 6 * s]); line(); ctx.setLineDash([]);
+  }
+  const x = X(pc.e), y = Y(pc.n), r = Math.max(9 * s, pc.r / span * W);
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = pc.low ? 'rgba(179,38,30,.10)' : 'rgba(20,95,122,.10)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(243,239,228,.85)'; ctx.lineWidth = 6 * s; ctx.stroke();
+  ctx.strokeStyle = col; ctx.lineWidth = 3 * s; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x - 12 * s, y); ctx.lineTo(x + 12 * s, y); ctx.moveTo(x, y - 12 * s); ctx.lineTo(x, y + 12 * s); ctx.stroke();
+  if (pc.walker) {
+    const wx = X(pc.walker.e), wy = Y(pc.walker.n);
+    ctx.beginPath(); ctx.moveTo(wx, wy - 8 * s); ctx.lineTo(wx + 8 * s, wy); ctx.lineTo(wx, wy + 8 * s); ctx.lineTo(wx - 8 * s, wy); ctx.closePath();
+    ctx.fillStyle = '#f3efe4'; ctx.fill(); ctx.strokeStyle = '#1f2326'; ctx.lineWidth = 2.4 * s; ctx.stroke();
+  }
+  if (pc.refix && pc.signal) {
+    const gx = X(pc.signal.e), gy = Y(pc.signal.n);
+    ctx.beginPath(); ctx.arc(gx, gy, 13 * s, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(243,239,228,.95)'; ctx.lineWidth = 7 * s; ctx.stroke();
+    ctx.strokeStyle = '#b3261e'; ctx.lineWidth = 3.4 * s; ctx.stroke();
+    ctx.beginPath(); ctx.arc(gx, gy, 4 * s, 0, Math.PI * 2); ctx.fillStyle = '#b3261e'; ctx.fill();
+  }
+  ctx.font = `800 ${13 * dpr}px "Noto Sans JP",sans-serif`; ctx.lineWidth = 3.5 * s; ctx.strokeStyle = 'rgba(243,239,228,.95)';
+  const lab = `Now ±${fmtM(pc.r)}`, w = ctx.measureText(lab).width, top = Math.max(18 * s, y - r - 8 * s);
+  haloLabel(ctx, lab, [[Math.min(Math.max(x - w / 2, 6 * s), W - w - 6 * s), top], [x + 14 * s, y - 10 * s], [x + 14 * s, y + 22 * s]], col, boxes, s);
+  if (pc.walker) {
+    const wx = X(pc.walker.e), wy = Y(pc.walker.n), t = 'Simulated walker', tw = ctx.measureText(t).width;
+    haloLabel(ctx, t, [[wx + 12 * s, wy + 5 * s], [wx - 12 * s - tw, wy + 5 * s], [wx - tw / 2, wy + 26 * s]], '#1f2326', boxes, s);
+  }
+  if (pc.refix && pc.signal) {
+    const gx = X(pc.signal.e), gy = Y(pc.signal.n), t = 'Re-aim here', tw = ctx.measureText(t).width;
+    haloLabel(ctx, t, [[gx + 18 * s, gy + 5 * s], [gx - 18 * s - tw, gy + 5 * s], [gx - tw / 2, gy - 20 * s]], '#b3261e', boxes, s);
+  }
+  ctx.restore();
 }
 function inter(a, b) {
   const d = (a.x1 - a.x0) * (b.y1 - b.y0) - (a.y1 - a.y0) * (b.x1 - b.x0);
@@ -391,6 +506,10 @@ function panel() {
   $('legend').classList.toggle('has-marks', mk.length > 0);
   $('legend').classList.toggle('has-gps', !!g);
   if (g) $('lg-g').innerHTML = symSvg('GPS', gpsLook(g).col);
+  const pc = res && res.n_locks >= 2 ? paceNow() : null, moved = !!(pc && pc.moved), pbox = $('pace');
+  $('legend').classList.toggle('has-pace', moved);
+  const ph = pc ? paceBox(pc) : '';
+  if (pbox.dataset.html !== ph) { pbox.dataset.html = ph; pbox.innerHTML = ph; pbox.hidden = !pc; }
   const stay = !mk.length && simStay && state && state.source === 'board-sim';
   const mkKey = JSON.stringify(mk) + stay;
   if (mbox.dataset.key !== mkKey) {   // rebuild only when the marks change
@@ -403,13 +522,20 @@ function panel() {
     $('state').className = 'state'; $('state').textContent = 'Aim the phone at the first card.';
     $('locks').innerHTML = ''; $('others').textContent = ''; $('reveal').hidden = true; $('route').hidden = true; shown = null; return;
   }
-  countTo(res.r95_m);
-  $('pm-sub').textContent = `95% radius · ${L} lock${L > 1 ? 's' : ''} · solved in ${Math.round(res.ms)} ms`;
-  $('meter').style.width = Math.round(100 * Math.max(0.04, res.confidence)) + '%';
+  if (moved) {   // the number follows the walk: Auto-PACE now, the fix underneath
+    countTo(pc.r);
+    $('pm-sub').textContent = `95% now · ±${fmtM(+pc.p.r95_fix_m || res.r95_m)} at the fix · rests on ${PACE_BASIS[pc.p.basis] || 'the fix'}`;
+    $('meter').style.width = Math.round(100 * Math.max(0.04, Number.isFinite(+pc.p.conf) ? +pc.p.conf : res.confidence)) + '%';
+  } else {
+    countTo(res.r95_m);
+    $('pm-sub').textContent = `95% radius · ${L} lock${L > 1 ? 's' : ''} · solved in ${Math.round(res.ms)} ms`;
+    $('meter').style.width = Math.round(100 * Math.max(0.04, res.confidence)) + '%';
+  }
   const sus = res.suspect, nm = id => (model.byId[id] || {}).name || id;
   const msg = { start: 'Aim at the first card.', more: L === 1 ? 'One peak: you are on a band. Next card.' : L === 2 ? 'Two peaks: still two places fit.' : 'Close. One more peak would settle it.', enough: 'Enough. The peaks agree.', mismatch: sus ? (sus.repeat ? `Lock ${sus.lock_index + 1} looks like ${nm(sus.peak_id)} again.` : `Lock ${sus.lock_index + 1} does not fit. Re-aim ${nm(sus.was_peak_id)}.`) : 'The Locks disagree.' }[res.status];
-  $('state').className = 'state ' + (res.status === 'mismatch' ? 'bad' : res.status === 'enough' ? 'ok' : '');
-  $('state').textContent = msg;
+  const low = !!(pc && pc.refix);
+  $('state').className = 'state ' + (res.status === 'mismatch' || low ? 'bad' : res.status === 'enough' ? 'ok' : '');
+  $('state').textContent = low ? 'Confidence low. Aim at 3 peaks again.' : msg;
   $('locks').innerHTML = obs.locks.map((l, i) => `<tr><td class="n">${i + 1}</td><td>${nm(l.peak_id)}${res.lines[i] ? `<div class="muted">bearing ${res.lines[i].bearing_true_deg.toFixed(1)}° true</div>` : ''}</td><td class="r">${res.lines[i] ? (res.lines[i].residual_deg >= 0 ? '+' : '') + res.lines[i].residual_deg.toFixed(1) + '°' : '—'}</td></tr>`).join('');
   const o = res.others && res.others[0];
   $('others').innerHTML = res.n_locks >= 2 ? (o && o.mass >= 0.02 ? `<b>Second place ${Math.round(o.mass * 100)}%</b>, ${fmtM(o.distance_m)} away.` : 'No second place above 2%.') : 'A single angle only says which slopes can see that peak.';
@@ -424,7 +550,11 @@ function panel() {
          <div class="rbar">${rt.runs.map(q => { let L = 0; for (let k = 1; k < q.path.length; k++) L += Math.hypot((q.path[k][0] - q.path[k - 1][0]) * 80300, (q.path[k][1] - q.path[k - 1][1]) * 111200); return `<i style="flex:${L.toFixed(0)} 0 0;background:${['#e3ab06', '#ea7a1c', '#d4386c'][q.cls]}"></i>`; }).join('')}</div>
          <div class="sub">${rt.say || ''}</div>`;
   } else rbox.hidden = true;
-  if (truth && showTruth && res.n_locks >= 2) {
+  if (showTruth && moved && pc.walker) {   // a simulated walk: the live circle against the simulated walker
+    const err = Math.hypot(pc.e - pc.walker.e, pc.n - pc.walker.n);
+    $('reveal').hidden = false;
+    $('reveal').innerHTML = `<div class="muted">Answer check, simulated walk</div><b>${fmtM(err)} from the simulated walker</b><div>${err <= pc.r ? 'Inside' : 'Outside'} the 95% circle now.</div>`;
+  } else if (truth && showTruth && res.n_locks >= 2) {
     const err = Math.hypot(res.estimate.e_m - truth.e_m, res.estimate.n_m - truth.n_m);
     const inside = res.hpd95[S.cellAt(model, truth.e_m, truth.n_m)] === 1;
     $('reveal').hidden = false;

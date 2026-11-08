@@ -35,6 +35,7 @@
     mismatch_chi2: 14,
     absolute_bearings: false,   // true: compass bearings, no offset is fitted (used only to compare against)
     diagnose: true,             // false skips the relabel search on a mismatch (fast batch statistics)
+    keep_p: false,              // true adds p, the normalized probability per cell (Auto-PACE starts from it)
   });
 
   function bytesFromB64(s) {
@@ -329,13 +330,18 @@
       distance_m: Math.hypot(m.E[c.peak_index] - m.E[bi], m.N[c.peak_index] - m.N[bi]),
     }, lonLat(m, m.E[c.peak_index], m.N[c.peak_index])));
     const t1 = (typeof performance !== 'undefined' ? performance : Date).now();
-    return {
+    const out = {
       n_locks: L, status, estimate, mean, r95_m: r95, r50_m: r50,
       area95_km2: (c95 * m.dx * m.dy) / 1e6, elsewhere, others, confidence: conf,
       offset_deg: L >= 2 ? fit.offset : null, residuals_deg: Array.from(fit.res), chi2,
       lines, suspect, next_peak_id: nextPeak(m, obs, bi, o.candidates),
       hpd95, hpd50, ms: t1 - t0,
     };
+    if (o.keep_p) {   // the same weights, summing to 1. Nothing above reads p again
+      for (let i = 0; i < m.n; i++) p[i] /= total;
+      out.p = p;
+    }
+    return out;
   }
 
   // Which Lock is wrong. First try reading one Lock as a different peak, then fall back

@@ -3,17 +3,17 @@
    Network first with a 2.5 s timeout. The code changes often, so a fresh file from the PC always wins
    when the PC answers. Every same-origin GET that comes back 200 is copied into the cache, so anything
    opened once (the phone page, solver.js, the terrain grid, the topo map, the route planner, hide.js,
-   skyline.js) opens again later with no cable and no network.
+   skyline.js, pace.js) opens again later with no cable and no network.
    /api/* is never touched: the Lock relay must reach the PC or fail, and the page keeps the newest
    state and sends it again when the link is back. */
 'use strict';
-const VERSION = 'ridgeline-integrate-20261108-lock';
+const VERSION = 'ridgeline-pace-20261108';
 const PREFIX = 'ridgeline-';
 const TIMEOUT_MS = 2500;
 const CORE = [
   '/', '/solver.js', '/data/moran.json', '/topo/moran.jpg',
   '/tv/team8_nav.js', '/tv/data/moran/bundle.js',
-  '/hide.js', '/skyline.js',
+  '/hide.js', '/skyline.js', '/pace.js',
   '/manifest.webmanifest', '/phone/icon-192.png', '/phone/icon-512.png',
 ];
 

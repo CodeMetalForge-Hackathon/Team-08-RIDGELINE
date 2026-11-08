@@ -181,7 +181,20 @@ def snapshot(state: dict):
         'lat': round(lat, 7), 'lon': round(lon, 7), 'r95': r95, 'n': int(n), 'status': s['status'],
         'mgrs': text(mgrs, 40) if isinstance(mgrs, str) and mgrs.strip() else None,
         'gps': _gps(s.get('gps')), 'marks': _marks(s.get('marks')), 'route': _route(state.get('route')),
+        'pace': _pace(s.get('pace')),
     }
+
+
+def _pace(p):
+    """Auto-PACE (phone summary.pace): how far the person walked since the fix and whether a GPS reading was used.
+    lat, lon and r95_m above are already the live position, this only words the remarks."""
+    if not isinstance(p, dict):
+        return None
+    def num(v):
+        v = finite(v)
+        return v if v is not None and v >= 0 else 0
+    return {'walked_m': num(p.get('walked_fix_m')), 'gps_used': num(p.get('gps_used')), 'refixes': num(p.get('refixes')),
+            'sim': p.get('sim') is True, 'refix': p.get('refix') is True}
 
 
 def _gps(g):
@@ -265,7 +278,14 @@ def xml(ev: ET.Element) -> str:
 
 
 def survivor_remarks(fix: dict) -> str:
-    parts = [f"Terrain fix from {fix['n']} peaks, no GPS, 95% radius {round(fix['r95'])} m."]
+    pace = fix.get('pace')
+    if pace and (pace['walked_m'] >= 1 or pace['gps_used'] or pace['refixes']):   # the live Auto-PACE position
+        walked = f", {fmt_m(pace['walked_m'])} walked since{' (simulated)' if pace['sim'] else ''}" if pace['walked_m'] >= 1 else ''
+        parts = [f"Terrain fix from {fix['n']} peaks{walked}, kept live by Auto-PACE, {'a GPS reading inside the circle used' if pace['gps_used'] else 'no GPS'}, 95% radius now {round(fix['r95'])} m."]
+        if pace['refix']:
+            parts.append('Confidence low, aim at 3 peaks again.')
+    else:
+        parts = [f"Terrain fix from {fix['n']} peaks, no GPS, 95% radius {round(fix['r95'])} m."]
     gps = fix.get('gps')
     if gps and gps['verdict'] == 'REJECTED':
         parts.append('Simulated GPS disagrees with the terrain estimate' + (f", {fmt_m(gps['dist_m'])} from this fix." if gps['dist_m'] is not None else '.') + ' Cause unknown. Either estimate may be wrong.')
