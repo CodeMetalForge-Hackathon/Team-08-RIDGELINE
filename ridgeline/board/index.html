@@ -89,10 +89,10 @@ const HD = window.RidgelineHide;   // HIDE and SIGNAL (terrain only), used here 
 const $ = id => document.getElementById(id);
 const rad = d => d * Math.PI / 180;
 const fmtM = m => m >= 1000 ? (m / 1000).toFixed(2) + ' km' : Math.round(m) + ' m';
-const fmtKm = m => m >= 1000 ? (m / 1000).toFixed(1) + ' km' : Math.round(m) + ' m';
+const fmtKm = m => m >= 9950 ? Math.round(m / 1000) + ' km' : m >= 1000 ? (m / 1000).toFixed(1) + ' km' : Math.round(m) + ' m';
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-let model, topo, state = null, version = -1, res = null, overlay = null, truth = null, showTruth = false, view = null, viewTarget = null, drawT0 = 0, lastLockCount = 0, shown = null, simMarks = null;
+let model, topo, state = null, version = -1, res = null, overlay = null, truth = null, showTruth = false, view = null, viewTarget = null, drawT0 = 0, lastLockCount = 0, shown = null, simMarks = null, simStay = false;
 
 // HIDE and SIGNAL marks: the phone's summary.marks, or the board's own for a test pilot.
 function marksNow() {
@@ -116,23 +116,17 @@ const gpsLook = g => {
 };
 // map symbols, the same shapes on the canvas and in the legend
 function symSvg(kind, col) {
-  if (kind === 'HIDE') {
-    let t = '';
-    for (let a = 0; a < 8; a++) { const c = Math.cos(a * Math.PI / 4), s = Math.sin(a * Math.PI / 4); t += `M${(11 + c * 7).toFixed(2)} ${(10 + s * 7).toFixed(2)}L${(11 + c * 3.9).toFixed(2)} ${(10 + s * 3.9).toFixed(2)}`; }
-    return `<svg width="22" height="20" viewBox="0 0 22 20" aria-hidden="true"><circle cx="11" cy="10" r="7" fill="rgba(91,47,134,.16)" stroke="#5b2f86" stroke-width="2.2"/><path d="${t}" stroke="#5b2f86" stroke-width="1.5"/></svg>`;
-  }
+  if (kind === 'HIDE') return '<svg width="22" height="20" viewBox="0 0 22 20" aria-hidden="true"><circle cx="11" cy="10" r="7" fill="#f3efe4"/><path d="M4 10A7 7 0 0 0 18 10Z" fill="#5b2f86"/><circle cx="11" cy="10" r="7" fill="none" stroke="#5b2f86" stroke-width="2"/></svg>';
   if (kind === 'SIGNAL') return '<svg width="22" height="20" viewBox="0 0 22 20" aria-hidden="true"><path d="M7 18V2" stroke="#1f2326" stroke-width="2" stroke-linecap="round"/><path d="M7 2l12 4-12 4z" fill="#e0580f" stroke="#1f2326" stroke-width="1.2" stroke-linejoin="round"/><circle cx="7" cy="17.5" r="2.3" fill="#1f2326"/></svg>';
   return `<svg width="22" height="20" viewBox="0 0 22 20" aria-hidden="true"><path d="M5 4l12 12M17 4L5 16" stroke="${col || '#1f2326'}" stroke-width="2.6" stroke-linecap="round"/></svg>`;
 }
-function hideSym(ctx, x, y, s) {
-  const r = 9 * s;
+function hideSym(ctx, x, y, s) {   // a disc with its lower half filled, below the skyline
+  const r = 8.5 * s;
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.lineWidth = 6 * s; ctx.strokeStyle = 'rgba(243,239,228,.92)'; ctx.stroke();
-  ctx.fillStyle = 'rgba(91,47,134,.18)'; ctx.fill();
-  ctx.lineWidth = 2.6 * s; ctx.strokeStyle = '#5b2f86'; ctx.stroke();
-  ctx.beginPath();   // inward ticks, the way a topo map marks a hollow
-  for (let a = 0; a < 8; a++) { const c = Math.cos(a * Math.PI / 4), d = Math.sin(a * Math.PI / 4); ctx.moveTo(x + c * r, y + d * r); ctx.lineTo(x + c * r * .56, y + d * r * .56); }
-  ctx.lineWidth = 1.7 * s; ctx.stroke();
+  ctx.fillStyle = '#f3efe4'; ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI); ctx.closePath(); ctx.fillStyle = '#5b2f86'; ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.lineWidth = 2.4 * s; ctx.strokeStyle = '#5b2f86'; ctx.stroke();
 }
 function signalSym(ctx, x, y, s) {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -173,9 +167,9 @@ function solveFrom(obs) {
     ctx.putImageData(img, 0, 0); overlay = c;
   }
   // a test pilot gets the board's own HIDE and SIGNAL (healthy, 30 min), a phone sends its own
-  simMarks = null;
+  simMarks = null; simStay = false;
   if (HD && res && res.n_locks >= 3 && state && state.source === 'board-sim') {
-    try { simMarks = HD.marks(HD.candidates(model, res, { minutes: 30 })); } catch (e) { simMarks = null; }
+    try { const out = HD.candidates(model, res, { minutes: 30 }); simMarks = HD.marks(out); simStay = out.note === 'STAY'; } catch (e) { simMarks = null; }
   }
   // camera: the locked peaks and the bubble, or the whole sheet
   const fullE = model.nx * model.dx, fullN = model.ny * model.dy;
@@ -378,10 +372,12 @@ function panel() {
   $('legend').classList.toggle('has-marks', mk.length > 0);
   $('legend').classList.toggle('has-gps', !!g);
   if (g) $('lg-g').innerHTML = symSvg('GPS', gpsLook(g).col);
-  const mkKey = JSON.stringify(mk);
+  const stay = !mk.length && simStay && state && state.source === 'board-sim';
+  const mkKey = JSON.stringify(mk) + stay;
   if (mbox.dataset.key !== mkKey) {   // rebuild only when the marks change
-    mbox.dataset.key = mkKey; mbox.hidden = !mk.length;
-    mbox.innerHTML = mk.length ? `<div class="muted">HIDE and SIGNAL, terrain only</div>` + mk.map(k => `<div class="mr">${symSvg(k.kind)}<b class="${k.kind === 'HIDE' ? 'h' : 's'}">${k.kind[0]}${Math.round(+k.rank) || ''}</b><span>${esc(String(k.why || '').slice(0, 160))}</span></div>`).join('') : '';
+    mbox.dataset.key = mkKey; mbox.hidden = !mk.length && !stay;
+    mbox.innerHTML = mk.length ? `<div class="muted">HIDE and SIGNAL, terrain only</div>` + mk.map(k => `<div class="mr">${symSvg(k.kind)}<b class="${k.kind === 'HIDE' ? 'h' : 's'}">${k.kind[0]}${Math.round(+k.rank) || ''}</b><span>${esc(String(k.why || '').slice(0, 160))}</span></div>`).join('')
+      : stay ? '<div class="muted">HIDE and SIGNAL, terrain only</div><div class="sub">No ground under 30° within a 30 min walk. Stay and signal from here.</div>' : '';
   }
   if (!res) {
     $('pm').textContent = '—'; $('pm-sub').textContent = 'no Lock yet'; $('meter').style.width = '0';
