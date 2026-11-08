@@ -96,6 +96,31 @@ h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em;font-weight:75
 .sheet select,.sheet input{font:inherit;color:var(--text);background:var(--raise);border:1px solid var(--line2);border-radius:var(--r);padding:10px}
 .sheet pre{font:12px/1.45 var(--mono);color:var(--muted);white-space:pre-wrap;word-break:break-all;margin:0;max-height:30svh;overflow:auto}
 .err{padding:24px;color:var(--red)}
+:root{--easy:#e3ab06;--mod:#ea7a1c;--steep:#d4386c}
+.go{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--line);padding-top:16px}
+.go-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.go-head h2{margin:0;font-size:20px;font-weight:750}
+.seg{display:flex;border:1px solid var(--line2);border-radius:var(--r);overflow:hidden}
+.seg button{border:0;background:transparent;color:var(--muted);font-size:14px;font-weight:650;padding:8px 12px;min-height:40px}
+.seg button[aria-pressed=true]{background:var(--raise);color:var(--text)}
+.seg button[data-h=injured][aria-pressed=true]{color:var(--red)}
+.dests{display:flex;flex-wrap:wrap;gap:8px}
+.dest{min-height:44px;border-radius:999px;border:1px solid var(--line2);background:transparent;font-size:15px;padding:6px 14px}
+.dest[aria-pressed=true]{background:var(--cyan);border-color:var(--cyan);color:#06171b;font-weight:650}
+.dest.pick[aria-pressed=true]{background:var(--amber);border-color:var(--amber);color:#1f1705}
+.rt{display:flex;flex-direction:column;gap:8px}
+.rt-top{font:700 24px var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.rt-top small{font:600 14px var(--font);color:var(--muted);letter-spacing:.02em;margin-left:8px}
+.rbar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--line2)}
+.rbar i{display:block;height:100%}
+.say{font-size:16px;line-height:1.45;margin:0}
+.leg{font-size:14px;line-height:1.45;color:var(--muted);margin:0}
+.leg b{color:var(--text);font-weight:600}
+.stay{border:2px solid var(--red);border-radius:var(--r);padding:16px;text-align:center;background:rgba(255,140,137,.06)}
+.stay b{display:block;font:850 30px/1.15 var(--font);letter-spacing:.16em;color:var(--red)}
+.stay p{margin:8px 0 0;color:var(--muted);font-size:14px;line-height:1.45}
+.key{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.key i{display:inline-block;width:14px;height:4px;border-radius:2px;margin-right:4px;vertical-align:middle}
 @media (prefers-reduced-motion:reduce){.lock[data-state=ready]{animation:none;box-shadow:0 0 0 3px rgba(255,207,92,.6)}.ripple,.sweep{display:none}.meter .arc,.dots span{transition:none}}
 @media (min-height:860px){.scope{max-height:46svh}}
 </style>
@@ -186,6 +211,7 @@ function solveNow() {
   else if (result.status === 'enough') target = null;
   else target = result.next_peak_id || wallIds.find(id => !locks.some(l => l.peak_id === id)) || null;
   overlay = buildOverlay(result);
+  if (locks.length >= 2 && !NAV) setTimeout(loadNav, 1500);   // the route planner loads while the last card is aimed
 }
 function predictedHeading(id) {
   if (!result || !locks.length || !id) return null;
@@ -206,8 +232,79 @@ function predictedHeading(id) {
 function post() {
   // the board solves on its own, so a Lock is sent before this phone finishes solving
   const fresh = result && result.n_locks === locks.length;
-  const body = { source: 'phone', obs: { baro_m: baro, locks }, summary: fresh ? { status: result.status, r95_m: Math.round(result.r95_m), lat: result.estimate.lat, lon: result.estimate.lon, n: locks.length } : null };
+  const body = { source: 'phone', obs: { baro_m: baro, locks }, summary: fresh ? { status: result.status, r95_m: Math.round(result.r95_m), lat: result.estimate.lat, lon: result.estimate.lon, n: locks.length } : null, route: fresh && screen === 'fix' ? routeForBoard() : null };
   lastPost = fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+}
+
+// ---------- route: the viewer's planner (terrain_viewer/team8_nav.js), loaded on demand ----------
+// Dijkstra with Tobler walking time, water and cliffs blocked, slope limit by walking ability.
+let NAV = null, lastView = null;
+const nav = { loading: false, err: null, health: 'healthy', dest: null, rt: null, rtKey: '', route: null, stay: false, picking: false, unpin: false };
+const CAP = { healthy: 30, injured: 18 }, SPEED = { healthy: 1, injured: 0.5 };
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('ridgeline.' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { if (v == null) localStorage.removeItem('ridgeline.' + k); else localStorage.setItem('ridgeline.' + k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
+};
+let marks = store.get('marks', []), home = store.get('home', null), pin = store.get('pin', null);
+function loadNav() {
+  if (NAV || nav.loading || nav.err) return;
+  nav.loading = true;
+  const add = src => new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error('Cannot load ' + src)); document.head.appendChild(s); });
+  add('/tv/team8_nav.js').then(() => add('/tv/data/moran/bundle.js')).then(() => window.TEAM8_NAV.init(window.TEAM8))
+    .then(n => {
+      NAV = n; nav.loading = false;
+      if (!nav.dest) nav.dest = destList().find(d => d.id === 'rv') || null;
+      computeRoute();
+      if (screen === 'fix') { render(); post(); }
+    })
+    .catch(e => { nav.err = e.message || String(e); nav.loading = false; if (screen === 'fix') render(); });
+}
+function fixLL() { return result && result.n_locks ? [result.estimate.lon, result.estimate.lat] : null; }
+function destList() {
+  const out = [], here = fixLL();
+  const rv = window.TEAM8 && window.TEAM8.sim && window.TEAM8.sim.rendezvous;
+  if (rv) out.push({ id: 'rv', lon: rv.lon, lat: rv.lat, label: 'Rendezvous', note: 'flat lakeshore' });
+  const far = p => !here || Math.hypot((p.lon - here[0]) * 80300, (p.lat - here[1]) * 111200) > 60;
+  if (home && far(home)) out.push({ id: 'home', lon: home.lon, lat: home.lat, label: 'Back to start' });
+  marks.forEach((m, i) => { if (far(m)) out.push({ id: 'mark' + i, lon: m.lon, lat: m.lat, label: m.label }); });
+  if (pin) out.push({ id: 'pin', lon: pin.lon, lat: pin.lat, label: 'Pin' });
+  return out;
+}
+function computeRoute() {
+  nav.route = null; nav.stay = false;
+  const here = fixLL();
+  if (!NAV || !nav.dest || !here) return;
+  const key = `${here[0].toFixed(6)},${here[1].toFixed(6)}|${nav.health}`;
+  if (nav.rtKey !== key) { nav.rt = NAV.reach(here[0], here[1], CAP[nav.health], SPEED[nav.health], 9 * 3600); nav.rtKey = key; }
+  const pp = NAV.pathTo(nav.rt, nav.dest.lon, nav.dest.lat);
+  const r = pp && NAV.buildRoute(pp, nav.rt);
+  if (r && !(r.length_m < 25 && !r.reached)) { r.say = NAV.describe(r); nav.route = r; } else nav.stay = true;
+}
+function setDest(id) {
+  nav.dest = destList().find(d => d.id === id) || null;
+  nav.picking = false; nav.unpin = false;
+  computeRoute(); render(); post();
+}
+const fmtT = s => s >= 3600 ? `${Math.floor(s / 3600)} h ${String(Math.round((s % 3600) / 60)).padStart(2, '0')} min` : `${Math.max(1, Math.round(s / 60))} min`;
+function routeHtml() {
+  if (nav.err) return `<p class="leg">The route planner did not load (${nav.err}). The fix above still stands.</p>`;
+  if (!NAV) return `<p class="leg">Loading the terrain for routes…</p>`;
+  if (!nav.dest) return `<p class="leg">Choose where to go. Water and cliffs are avoided, and the slope limit follows how well you can walk.</p>`;
+  if (nav.stay) return `<div class="stay"><b>STAY<br>SIGNAL<br>WAIT</b><p>No way to ${nav.dest.label} stays under ${CAP[nav.health]}° from here. Stay where the team will look first, make yourself easy to see, and wait.</p></div>`;
+  const r = nav.route, tot = r.length_m || 1;
+  return `<div class="rt-top">${fmtM(r.length_m)}<small>${fmtT(r.time_s)} · up ${r.climb_m} m · down ${r.descent_m} m</small></div>
+    <div class="rbar" aria-hidden="true">${r.runs.map(q => `<i style="width:${(q.len / tot * 100).toFixed(2)}%;background:var(--${['easy', 'mod', 'steep'][q.cls]})"></i>`).join('')}</div>
+    <p class="say">${r.say}${r.reached ? '' : ` It ends ${r.gap_m} m short, the rest is steeper than ${CAP[nav.health]}°.`}</p>
+    ${r.legs[0] ? `<p class="leg"><b>First leg.</b> ${r.legs[0].say}.</p>` : ''}
+    <div class="key"><span><i style="background:var(--easy)"></i>Easy, up to 10°</span><span><i style="background:var(--mod)"></i>Moderate</span><span><i style="background:var(--steep)"></i>Steep, over 20°</span></div>`;
+}
+function routeForBoard() {
+  if (!nav.dest) return null;
+  const r = nav.route;
+  const thin = path => path.filter((p, i) => i % 2 === 0 || i === path.length - 1).map(p => [+p[0].toFixed(6), +p[1].toFixed(6)]);
+  return { dest: { lon: nav.dest.lon, lat: nav.dest.lat, label: nav.dest.label }, health: nav.health, cap_deg: CAP[nav.health], stay: nav.stay,
+    say: r ? r.say : null, length_m: r ? r.length_m : null, time_s: r ? r.time_s : null, reached: r ? r.reached : null,
+    runs: r ? r.runs.map(q => ({ cls: q.cls, path: thin(q.path) })) : [] };
 }
 
 // ---------- map ----------
@@ -234,22 +331,47 @@ function drawMap(canvas, zoom) {
   let e0 = 0, e1 = fullE, n0 = 0, n1 = fullN;
   const aspect = W / H;
   if (zoom && result && result.n_locks >= 2) {
-    const r = Math.max(900, result.r95_m * 3.4);
-    let we = r * 2, wn = r * 2;
+    const r = Math.max(900, result.r95_m * 3.4), ce = result.estimate.e_m, cn = result.estimate.n_m;
+    let a0 = ce - r, a1 = ce + r, b0 = cn - r, b1 = cn + r;
+    if (screen === 'fix') {   // the route and the destination stay in the frame
+      const pts = nav.route ? nav.route.path.map(p => S.toEN(model, p[0], p[1])) : [];
+      if (nav.dest) pts.push(S.toEN(model, nav.dest.lon, nav.dest.lat));
+      for (const q of pts) { a0 = Math.min(a0, q.e - 300); a1 = Math.max(a1, q.e + 300); b0 = Math.min(b0, q.n - 300); b1 = Math.max(b1, q.n + 300); }
+    }
+    let we = a1 - a0, wn = b1 - b0;
     if (we / wn < aspect) we = wn * aspect; else wn = we / aspect;
-    const ce = result.estimate.e_m, cn = result.estimate.n_m;
-    e0 = Math.max(0, Math.min(fullE - we, ce - we / 2)); e1 = e0 + we;
-    n0 = Math.max(0, Math.min(fullN - wn, cn - wn / 2)); n1 = n0 + wn;
+    const mx = (a0 + a1) / 2, my = (b0 + b1) / 2;
+    e0 = we >= fullE ? (fullE - we) / 2 : Math.max(0, Math.min(fullE - we, mx - we / 2)); e1 = e0 + we;
+    n0 = wn >= fullN ? (fullN - wn) / 2 : Math.max(0, Math.min(fullN - wn, my - wn / 2)); n1 = n0 + wn;
   } else {
     const wn = fullE / aspect;
     if (wn <= fullN) { n0 = (fullN - wn) / 2; n1 = n0 + wn; } else { const we = fullN * aspect; e0 = (fullE - we) / 2; e1 = e0 + we; }
   }
   const X = e => (e - e0) / (e1 - e0) * W, Y = n => (n1 - n) / (n1 - n0) * H;
-  const iw = topo.naturalWidth, ih = topo.naturalHeight;
-  ctx.drawImage(topo, e0 / fullE * iw, (1 - n1 / fullN) * ih, (e1 - e0) / fullE * iw, (n1 - n0) / fullN * ih, 0, 0, W, H);
+  lastView = { e0, e1, n0, n1 };
+  ctx.fillStyle = '#d9d2bf'; ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(topo, 0, 0, topo.naturalWidth, topo.naturalHeight, X(0), Y(fullN), X(fullE) - X(0), Y(0) - Y(fullN));
   if (overlay) {
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(overlay, e0 / model.dx, model.ny - n1 / model.dy, (e1 - e0) / model.dx, (n1 - n0) / model.dy, 0, 0, W, H);
+    ctx.drawImage(overlay, 0, 0, model.nx, model.ny, X(0), Y(fullN), X(fullE) - X(0), Y(0) - Y(fullN));
+  }
+  if (screen === 'fix' && nav.route) {   // route casing, then each run in its difficulty colour
+    const col = ['#e3ab06', '#ea7a1c', '#d4386c'];
+    const line = pts => { ctx.beginPath(); pts.forEach((p, i) => { const q = S.toEN(model, p[0], p[1]); if (i) ctx.lineTo(X(q.e), Y(q.n)); else ctx.moveTo(X(q.e), Y(q.n)); }); ctx.stroke(); };
+    ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(35,28,18,.9)'; ctx.lineWidth = 7.5 * dpr; line(nav.route.path);
+    for (const q of nav.route.runs) { ctx.strokeStyle = col[q.cls]; ctx.lineWidth = 4.5 * dpr; line(q.path); }
+    ctx.restore();
+  }
+  if (screen === 'fix' && nav.dest) {
+    const q = S.toEN(model, nav.dest.lon, nav.dest.lat), x = X(q.e), y = Y(q.n), s = dpr;
+    ctx.save(); ctx.fillStyle = nav.stay ? '#b42318' : '#0b5f7a'; ctx.strokeStyle = '#f5f1e6'; ctx.lineWidth = 2.5 * s;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.bezierCurveTo(x - 11 * s, y - 14 * s, x - 9 * s, y - 26 * s, x, y - 26 * s); ctx.bezierCurveTo(x + 9 * s, y - 26 * s, x + 11 * s, y - 14 * s, x, y); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#f5f1e6'; ctx.beginPath(); ctx.arc(x, y - 18 * s, 3.5 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.font = `700 ${12 * s}px "Noto Sans JP",sans-serif`; ctx.lineWidth = 3 * s; ctx.strokeStyle = 'rgba(245,241,230,.95)';
+    const tw = ctx.measureText(nav.dest.label).width, tx = x + 12 * s + tw > W - 6 * s ? x - 12 * s - tw : x + 12 * s;   // flip the label at the right edge
+    ctx.strokeText(nav.dest.label, tx, y - 14 * s); ctx.fillStyle = '#2b2418'; ctx.fillText(nav.dest.label, tx, y - 14 * s);
+    ctx.restore();
   }
   // pencil lines from the locked peaks back toward the observer
   if (result && result.lines.length) {
@@ -386,14 +508,57 @@ function render() {
       <div><span class="big-pm" id="pm">±${fmtM(result.r95_m)}</span><small class="foot" style="margin-left:8px">95% · ${locks.length} peaks</small></div>
       <div class="map big" id="map-wrap"><canvas id="map"></canvas><span class="maplab">${model.json.name} · USGS 3DEP</span></div>
       <p class="status">${o && o.mass >= 0.02 ? `<b>Second place: ${Math.round(o.mass * 100)}%</b>, ${fmtM(o.distance_m)} ${dir}. Lock one more peak to rule it out.` : '<b>One place fits.</b> No second candidate above 2%.'}</p>
+      ${goHtml()}
       <div class="stack"><div class="pair"><button class="btn" id="back">Back</button><button class="btn" id="again">New fix</button></div></div>
       <p class="foot">Solved on this phone in ${Math.round(result.ms)} ms from ${locks.length} angles and a barometer band. 30 m terrain grid, USGS 3DEP lidar. Demo barometer is simulated.</p>`;
     decrypt($('coords'), ns + '\n' + ew);
     $('coords').style.whiteSpace = 'pre-line';
     $('back').onclick = () => go('aim'); $('again').onclick = resetFix;
+    wireGo();
+    if (!home) { home = { lon: e.lon, lat: e.lat }; store.set('home', home); }
+    loadNav();
     requestAnimationFrame(() => { drawMap($('map'), true); sweep($('map-wrap')); });
   }
   $('locks-json').textContent = locks.length ? JSON.stringify(locks.map(l => ({ peak: nameOf(l.peak_id), heading_deg: +l.heading_deg.toFixed(2), tilt_deg: l.elevation_deg == null ? null : +l.elevation_deg.toFixed(1) })), null, 1) : 'No Locks yet.';
+}
+function goHtml() {
+  const dl = destList();
+  return `<section class="go" aria-label="Route out">
+    <div class="go-head"><h2>Where to?</h2><div class="seg" role="group" aria-label="How well can you walk"><button data-h="healthy" aria-pressed="${nav.health === 'healthy'}">Healthy · ${CAP.healthy}°</button><button data-h="injured" aria-pressed="${nav.health === 'injured'}">Injured · ${CAP.injured}°</button></div></div>
+    <div class="dests">${dl.map(d => `<button class="dest" data-d="${d.id}" aria-pressed="${!!(nav.dest && nav.dest.id === d.id)}">${d.label}</button>`).join('')}<button class="dest pick" id="pick" aria-pressed="${nav.picking}">${nav.picking ? 'Tap the map…' : pin ? 'Move pin' : 'Pick on map'}</button></div>
+    <div class="rt" aria-live="polite">${routeHtml()}</div>
+    <div class="pair"><button class="btn ghost" id="mark">Mark here</button>${pin ? `<button class="btn ghost" id="unpin">${nav.unpin ? 'Tap again to remove' : 'Remove pin'}</button>` : ''}</div>
+  </section>`;
+}
+function renderGo() {
+  const g = document.querySelector('.go');
+  if (!g) return;
+  g.outerHTML = goHtml(); wireGo(); drawMap($('map'), true);
+}
+function wireGo() {
+  document.querySelectorAll('[data-h]').forEach(b => { b.onclick = () => { nav.health = b.dataset.h; computeRoute(); renderGo(); post(); }; });
+  document.querySelectorAll('[data-d]').forEach(b => { b.onclick = () => { nav.dest = destList().find(d => d.id === b.dataset.d) || null; nav.picking = false; nav.unpin = false; computeRoute(); renderGo(); post(); }; });
+  $('pick').onclick = () => { nav.picking = !nav.picking; renderGo(); };
+  $('mark').onclick = () => {
+    const h = fixLL(); if (!h) return;
+    marks = marks.concat([{ lon: h[0], lat: h[1], label: 'Mark ' + (marks.length + 1), at: new Date().toISOString() }]).slice(-5);
+    store.set('marks', marks); $('mark').textContent = 'Marked';
+    if (navigator.vibrate) navigator.vibrate(30);
+  };
+  if ($('unpin')) $('unpin').onclick = () => {
+    if (!nav.unpin) { nav.unpin = true; renderGo(); return; }   // removing a pin takes two taps
+    pin = null; store.set('pin', null); nav.unpin = false;
+    if (nav.dest && nav.dest.id === 'pin') nav.dest = null;
+    computeRoute(); renderGo(); post();
+  };
+  $('map-wrap').onclick = ev => {
+    if (!nav.picking || !lastView) return;
+    const r = $('map').getBoundingClientRect(), v = lastView;
+    const ll = S.lonLat(model, v.e0 + (ev.clientX - r.left) / r.width * (v.e1 - v.e0), v.n1 - (ev.clientY - r.top) / r.height * (v.n1 - v.n0));
+    pin = { lon: ll.lon, lat: ll.lat }; store.set('pin', pin);
+    nav.dest = { id: 'pin', lon: pin.lon, lat: pin.lat, label: 'Pin' }; nav.picking = false; nav.unpin = false;
+    computeRoute(); renderGo(); post();
+  };
 }
 function go(next) { screen = next; render(); window.scrollTo(0, 0); }
 function start() {

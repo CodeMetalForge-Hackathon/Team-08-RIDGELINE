@@ -32,11 +32,12 @@ FILES = {
     '/data/moran.json': HERE / 'data' / 'moran.json',
     '/topo/moran.jpg': REPO / 'terrain_viewer' / 'data' / 'moran' / 'topo.jpg',
 }
-DIRS = {'/phone/': HERE / 'phone', '/board/': HERE / 'board', '/cards/': HERE / 'cards'}
+DIRS = {'/phone/': HERE / 'phone', '/board/': HERE / 'board', '/cards/': HERE / 'cards',
+        '/tv/': REPO / 'terrain_viewer'}   # read only: the viewer's route planner and terrain bundle
 TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json',
          '.jpg': 'image/jpeg', '.png': 'image/png', '.svg': 'image/svg+xml', '.css': 'text/css; charset=utf-8',
          '.webmanifest': 'application/manifest+json'}
-STATE = {'version': 0, 'updated': None, 'source': None, 'obs': {'baro_m': None, 'locks': []}, 'phone': None}
+STATE = {'version': 0, 'updated': None, 'source': None, 'obs': {'baro_m': None, 'locks': []}, 'phone': None, 'route': None}
 GUARD = threading.Lock()
 CHANGED = threading.Condition(GUARD)
 
@@ -56,6 +57,31 @@ def clean_obs(obs: dict) -> dict:
         })
     baro = obs.get('baro_m')
     return {'baro_m': float(baro) if isinstance(baro, (int, float)) and math.isfinite(baro) else None, 'locks': locks}
+
+
+def finite(v):
+    return float(v) if isinstance(v, (int, float)) and math.isfinite(v) else None
+
+
+def clean_route(route) -> dict | None:
+    """The route the phone planned (team8_nav.js), kept small and numeric for the board."""
+    if not isinstance(route, dict):
+        return None
+    dest = route.get('dest') if isinstance(route.get('dest'), dict) else {}
+    lon, lat = finite(dest.get('lon')), finite(dest.get('lat'))
+    runs = []
+    for run in (route.get('runs') or [])[:200]:
+        if not isinstance(run, dict):
+            continue
+        pts = [[float(p[0]), float(p[1])] for p in (run.get('path') or [])[:3000]
+               if isinstance(p, (list, tuple)) and len(p) >= 2 and finite(p[0]) is not None and finite(p[1]) is not None]
+        runs.append({'cls': int(finite(run.get('cls')) or 0) % 3, 'path': pts})
+    return {
+        'dest': {'lon': lon, 'lat': lat, 'label': str(dest.get('label', ''))[:40]} if lon is not None and lat is not None else None,
+        'health': str(route.get('health', ''))[:12], 'cap_deg': finite(route.get('cap_deg')), 'stay': bool(route.get('stay')),
+        'say': str(route.get('say') or '')[:400], 'length_m': finite(route.get('length_m')), 'time_s': finite(route.get('time_s')),
+        'reached': bool(route.get('reached')), 'runs': runs,
+    }
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -119,6 +145,7 @@ class Handler(SimpleHTTPRequestHandler):
                     STATE['source'] = str(body.get('source', 'phone'))[:16]
                     STATE['obs'] = obs
                     STATE['phone'] = body.get('summary') if isinstance(body.get('summary'), dict) else None
+                    STATE['route'] = clean_route(body.get('route'))
                     version = STATE['version']
                     CHANGED.notify_all()
                 self._json({'ok': True, 'version': version})
@@ -130,6 +157,7 @@ class Handler(SimpleHTTPRequestHandler):
                     STATE['source'] = 'reset'
                     STATE['obs'] = {'baro_m': None, 'locks': []}
                     STATE['phone'] = None
+                    STATE['route'] = None
                     version = STATE['version']
                     CHANGED.notify_all()
                 self._json({'ok': True, 'version': version})
