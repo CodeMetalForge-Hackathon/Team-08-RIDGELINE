@@ -32,9 +32,10 @@ Everything runs offline on one PC and one Android phone. No package install is n
 
 | Screen | Address | What it shows |
 | --- | --- | --- |
-| Phone | `/` | System check, then the aim scope (heading tape relative to the last Lock, steady brackets, Lock button with vibration), the ±m meter, the bubble on the topo map, then the final coordinates. |
+| Phone | `/` | System check, then the aim scope (rear camera behind the crosshair, heading tape relative to the last Lock, steady brackets, Lock button with vibration), the ±m meter, the bubble on the topo map, then the final coordinates and the way out. The route uses the viewer's planner (`terrain_viewer/team8_nav.js`, read only): Rendezvous, Back to start, marks or a pin on the map, healthy 30° or injured 18°, and STAY SIGNAL WAIT when no way stays under the limit. |
 | Board | `/board` | The same solve on the printed topo map, redrawn the moment a Lock arrives (long poll, about 0.1 s on the PC). Click anywhere on the map to drop a test pilot there. The board simulates three Locks with 3° aim error from that spot and solves again. R shows the true spot and the error in meters, C clears. |
 | Cards | `/cards` | Printable wall layout and one card per peak, with the horizon toward that peak drawn from the lidar. |
+| Trust | `/trust` (T on the board) | Simulated error and 95% coverage for 1 to 10° aim error, the same Locks solved the compass way, and a live run of solver.js against the viewer's team8_nav.js. |
 
 Phone keys for a laptop dry run. Arrows aim, Enter locks, A aims at the current card (demo assist, keyboard only), N skips a card, U undoes, S opens settings.
 
@@ -68,11 +69,13 @@ Last run on Nov 8, 2026, 6 of 6 passing.
 
 These are simulations with Gaussian aim error. They do not include a person holding a phone.
 
+`node ridgeline/scripts/trust.js` (about 2 minutes) adds the aim error sweep behind `/trust`. At the demo wall with 3° aim error the median error is 103 m with the truth inside the bubble 98% of the time. The same Locks read as compass bearings with a 7° compass bias give 204 m and 54%. At 10° aim error both methods are 400 to 450 m off and the bubble holds the truth only about half the time, because the app assumes 3°. On 30 random drops solved by both solvers, the two answers were a median 49 m apart and each sat inside the other's 95% area 93% of the time.
+
 ## Not tested yet
 
 * Hand-held aiming on the real phone (Galaxy S24 Ultra, Chrome 156). The page loads over `adb reverse` and the orientation stream arrives, but nobody has Locked the printed cards by hand yet. That is Gate B.
 * Which orientation stream a held phone uses. Chrome on this Galaxy sends `deviceorientation` (gyro) only while the phone moves and `deviceorientationabsolute` all the time. The page prefers the gyro stream, falls back to the absolute one, and never mixes them within one fix.
-* Vibration on Lock, airplane mode with the cable, and the red night screen.
+* Vibration on Lock, airplane mode with the cable, the rear camera behind the crosshair, and the route screen on the phone itself (tested only in a desktop browser at phone size).
 * Elevation angles are recorded but not used (wall cards do not reproduce real tilt).
 
 ## Files
@@ -88,6 +91,7 @@ These are simulations with Gaussian aim error. They do not include a person hold
 | `scripts/export_grid.py` | Builds `data/moran.json` from `terrain_viewer/data/moran/`. About 80 s. |
 | `scripts/pick_demo.js` | Picks the demo spot and the three wall peaks by running the real solver on noisy Locks. |
 | `test/solver.test.js` | Gate A tests. |
+| `trust/index.html`, `scripts/trust.js`, `data/trust.json` | Trust view and the simulation behind it. |
 
 ## Credits
 
