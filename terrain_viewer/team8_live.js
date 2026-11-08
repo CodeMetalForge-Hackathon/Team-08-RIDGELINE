@@ -15,7 +15,8 @@
 'use strict';
 const POLL_MS = 500, GRID_URL = 'data/moran/solver_grid.json', D2R = Math.PI / 180;
 const EVAL_URL = 'data/moran/solver_eval.json';   // written by tests/solver.test.mjs
-const L = {on: false, reveal: false, seq: 0, st: null, G: null, grid: null, ctx: null, fails: 0, lagMs: null, warned: false};
+const L = {on: false, reveal: false, seq: 0, st: null, G: null, grid: null, ctx: null, fails: 0, lagMs: null, warned: false, left: false};
+const BRINGS_BACK = new Set(['lock', 'undo', 'reaim', 're-aim', 'reset']);   // phone events that retake the screen after Leave
 const T = {ev: null, open: false, auto: false, el: null, key: '', why: '', retryAt: 0};   // the trust card
 let timer = 0;
 
@@ -64,6 +65,10 @@ async function take(st) {
     baro: st.baro || null, opts: st.opts || null, source: st.source || null, sent_at: st.sent_at || null,
     route: st.route && st.route.dest ? st.route : null};
   L.lagMs = st.sent_at ? Math.max(0, Date.now() - Date.parse(st.sent_at)) : null;
+  // the judge left the live view (button or a click on the map): a route or settings update from the phone is kept
+  // but does not take the screen back, only a lock, undo, re-aim or a new fix does, as the toast promises
+  if (L.left && !BRINGS_BACK.has(L.st.event)) return;
+  L.left = false;
   if (!prev || prev.session !== L.st.session) L.reveal = false;
   L.on = true;
   build();
@@ -419,7 +424,7 @@ function toggleReveal() {
 }
 function leave(quiet) {
   const c = L.ctx;
-  L.on = false; L.reveal = false;
+  L.on = false; L.reveal = false; L.left = true;
   if (T.el) T.el.hidden = true;
   if (quiet) return;
   c.toast('Left the live view. The next lock on the phone brings it back.');
