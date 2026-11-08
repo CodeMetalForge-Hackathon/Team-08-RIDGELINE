@@ -1,0 +1,491 @@
+{
+ "schema": "team8-terrain/v2",
+ "id": "washington",
+ "name": "Mount Washington",
+ "region": "White Mountains, New Hampshire",
+ "bounds": [
+  -71.3659247,
+  44.2346021,
+  -71.2406753,
+  44.3065979
+ ],
+ "grid": {
+  "width": 1002,
+  "height": 798,
+  "cell_m": [
+   9.98,
+   10.025
+  ],
+  "crs": "EPSG:4326",
+  "note": "pixel edges match bounds; row 0 is north"
+ },
+ "mesh": {
+  "width": 501,
+  "height": 399
+ },
+ "elevation_decoder": {
+  "rScaler": 6553.6,
+  "gScaler": 25.6,
+  "bScaler": 0.1,
+  "offset": -10000
+ },
+ "elev_range_m": [
+  499.6,
+  1914.7
+ ],
+ "contours": {
+  "interval_m": 50,
+  "index_m": 250,
+  "labels": [
+   {
+    "lon": -71.256487,
+    "lat": 44.294553,
+    "elev_m": 750,
+    "angle": 59.2
+   },
+   {
+    "lon": -71.252259,
+    "lat": 44.276058,
+    "elev_m": 750,
+    "angle": -69.8
+   },
+   {
+    "lon": -71.260242,
+    "lat": 44.259007,
+    "elev_m": 750,
+    "angle": 78.4
+   },
+   {
+    "lon": -71.261344,
+    "lat": 44.244842,
+    "elev_m": 750,
+    "angle": 70.4
+   },
+   {
+    "lon": -71.289738,
+    "lat": 44.299491,
+    "elev_m": 1000,
+    "angle": 1.0
+   },
+   {
+    "lon": -71.272457,
+    "lat": 44.295636,
+    "elev_m": 1000,
+    "angle": -60.5
+   },
+   {
+    "lon": -71.264013,
+    "lat": 44.283096,
+    "elev_m": 1000,
+    "angle": -85.8
+   },
+   {
+    "lon": -71.266238,
+    "lat": 44.269579,
+    "elev_m": 1000,
+    "angle": 13.1
+   },
+   {
+    "lon": -71.276862,
+    "lat": 44.248541,
+    "elev_m": 1000,
+    "angle": 46.2
+   },
+   {
+    "lon": -71.35133,
+    "lat": 44.253323,
+    "elev_m": 1000,
+    "angle": 73.7
+   },
+   {
+    "lon": -71.34155,
+    "lat": 44.261082,
+    "elev_m": 1000,
+    "angle": -84.9
+   },
+   {
+    "lon": -71.335737,
+    "lat": 44.279216,
+    "elev_m": 1000,
+    "angle": -14.7
+   },
+   {
+    "lon": -71.343862,
+    "lat": 44.29459,
+    "elev_m": 1000,
+    "angle": -14.0
+   },
+   {
+    "lon": -71.306127,
+    "lat": 44.290133,
+    "elev_m": 1250,
+    "angle": 84.4
+   },
+   {
+    "lon": -71.281223,
+    "lat": 44.272991,
+    "elev_m": 1250,
+    "angle": -33.1
+   },
+   {
+    "lon": -71.322679,
+    "lat": 44.265773,
+    "elev_m": 1250,
+    "angle": 68.8
+   },
+   {
+    "lon": -71.32872,
+    "lat": 44.295997,
+    "elev_m": 1250,
+    "angle": -73.1
+   },
+   {
+    "lon": -71.305699,
+    "lat": 44.23997,
+    "elev_m": 1250,
+    "angle": -84.0
+   },
+   {
+    "lon": -71.313948,
+    "lat": 44.248451,
+    "elev_m": 1250,
+    "angle": 69.8
+   },
+   {
+    "lon": -71.327195,
+    "lat": 44.244301,
+    "elev_m": 1250,
+    "angle": 84.6
+   },
+   {
+    "lon": -71.340237,
+    "lat": 44.239513,
+    "elev_m": 1250,
+    "angle": -50.9
+   },
+   {
+    "lon": -71.30745,
+    "lat": 44.302132,
+    "elev_m": 1500,
+    "angle": 83.2
+   },
+   {
+    "lon": -71.307737,
+    "lat": 44.278393,
+    "elev_m": 1500,
+    "angle": 9.3
+   },
+   {
+    "lon": -71.289738,
+    "lat": 44.285821,
+    "elev_m": 1500,
+    "angle": 31.6
+   }
+  ]
+ },
+ "utm_grid": {
+  "zone": 19,
+  "epsg": "EPSG:32619",
+  "south": [
+   {
+    "v": 312000,
+    "lon": -71.354183,
+    "lat": 44.234602
+   },
+   {
+    "v": 313000,
+    "lon": -71.341661,
+    "lat": 44.234602
+   },
+   {
+    "v": 314000,
+    "lon": -71.329139,
+    "lat": 44.234602
+   },
+   {
+    "v": 315000,
+    "lon": -71.316616,
+    "lat": 44.234602
+   },
+   {
+    "v": 316000,
+    "lon": -71.304094,
+    "lat": 44.234602
+   },
+   {
+    "v": 317000,
+    "lon": -71.291572,
+    "lat": 44.234602
+   },
+   {
+    "v": 318000,
+    "lon": -71.27905,
+    "lat": 44.234602
+   },
+   {
+    "v": 319000,
+    "lon": -71.266528,
+    "lat": 44.234602
+   },
+   {
+    "v": 320000,
+    "lon": -71.254006,
+    "lat": 44.234602
+   },
+   {
+    "v": 321000,
+    "lon": -71.241484,
+    "lat": 44.234602
+   }
+  ],
+  "north": [
+   {
+    "v": 312000,
+    "lon": -71.35705,
+    "lat": 44.306598
+   },
+   {
+    "v": 313000,
+    "lon": -71.344512,
+    "lat": 44.306598
+   },
+   {
+    "v": 314000,
+    "lon": -71.331975,
+    "lat": 44.306598
+   },
+   {
+    "v": 315000,
+    "lon": -71.319438,
+    "lat": 44.306598
+   },
+   {
+    "v": 316000,
+    "lon": -71.3069,
+    "lat": 44.306598
+   },
+   {
+    "v": 317000,
+    "lon": -71.294363,
+    "lat": 44.306598
+   },
+   {
+    "v": 318000,
+    "lon": -71.281826,
+    "lat": 44.306598
+   },
+   {
+    "v": 319000,
+    "lon": -71.269288,
+    "lat": 44.306598
+   },
+   {
+    "v": 320000,
+    "lon": -71.256751,
+    "lat": 44.306598
+   },
+   {
+    "v": 321000,
+    "lon": -71.244214,
+    "lat": 44.306598
+   }
+  ],
+  "west": [
+   {
+    "v": 4901000,
+    "lon": -71.365925,
+    "lat": 44.237735
+   },
+   {
+    "v": 4902000,
+    "lon": -71.365925,
+    "lat": 44.246738
+   },
+   {
+    "v": 4903000,
+    "lon": -71.365925,
+    "lat": 44.255741
+   },
+   {
+    "v": 4904000,
+    "lon": -71.365925,
+    "lat": 44.264743
+   },
+   {
+    "v": 4905000,
+    "lon": -71.365925,
+    "lat": 44.273746
+   },
+   {
+    "v": 4906000,
+    "lon": -71.365925,
+    "lat": 44.282749
+   },
+   {
+    "v": 4907000,
+    "lon": -71.365925,
+    "lat": 44.291752
+   },
+   {
+    "v": 4908000,
+    "lon": -71.365925,
+    "lat": 44.300755
+   }
+  ],
+  "east": [
+   {
+    "v": 4901000,
+    "lon": -71.240675,
+    "lat": 44.240257
+   },
+   {
+    "v": 4902000,
+    "lon": -71.240675,
+    "lat": 44.24926
+   },
+   {
+    "v": 4903000,
+    "lon": -71.240675,
+    "lat": 44.258263
+   },
+   {
+    "v": 4904000,
+    "lon": -71.240675,
+    "lat": 44.267266
+   },
+   {
+    "v": 4905000,
+    "lon": -71.240675,
+    "lat": 44.276268
+   },
+   {
+    "v": 4906000,
+    "lon": -71.240675,
+    "lat": 44.285271
+   },
+   {
+    "v": 4907000,
+    "lon": -71.240675,
+    "lat": 44.294274
+   },
+   {
+    "v": 4908000,
+    "lon": -71.240675,
+    "lat": 44.303277
+   }
+  ]
+ },
+ "declination": {
+  "deg": -14.21,
+  "year": 2026.85,
+  "model": "WMM2025"
+ },
+ "slope_share_land": {
+  "lt15": 0.361,
+  "s15_25": 0.343,
+  "s25_35": 0.221,
+  "ge35": 0.074
+ },
+ "landcover_share": {
+  "10": 0.873,
+  "30": 0.116,
+  "50": 0.002,
+  "60": 0.005,
+  "100": 0.004
+ },
+ "water_share": 0.0,
+ "area_km2": 80.0,
+ "files": {
+  "terrain_rgb": "terrain_rgb.png",
+  "terrain_rgb_mesh": "terrain_rgb_mesh.png",
+  "topo": "topo.jpg",
+  "slope": "slope.png",
+  "water_mask": "water_mask.png"
+ },
+ "dem": {
+  "source": "3dep10",
+  "native_res_m": 7.4,
+  "label": "USGS 3DEP 1/3 arc-second (about 10 m)"
+ },
+ "landmark": "Mount Washington",
+ "peaks": [
+  {
+   "name": "Mount Washington",
+   "lon": -71.303487,
+   "lat": 44.270465,
+   "elev_m": 1914.7,
+   "verified": true,
+   "source": "https://www.wikidata.org/wiki/Q572801"
+  },
+  {
+   "name": "Mount Jefferson",
+   "lon": -71.316862,
+   "lat": 44.304207,
+   "elev_m": 1738.8,
+   "verified": true,
+   "source": "https://www.wikidata.org/wiki/Q6921492"
+  },
+  {
+   "name": "Mount Clay",
+   "lon": -71.315737,
+   "lat": 44.285983,
+   "elev_m": 1683.6,
+   "verified": true,
+   "source": "https://www.wikidata.org/wiki/Q6920171"
+  },
+  {
+   "name": "Pk 1682",
+   "lon": -71.301238,
+   "lat": 44.257022,
+   "elev_m": 1681.6,
+   "verified": false
+  },
+  {
+   "name": "Boott Spur",
+   "lon": -71.293988,
+   "lat": 44.252691,
+   "elev_m": 1673.6,
+   "verified": true,
+   "source": "https://www.wikidata.org/wiki/Q4944096"
+  },
+  {
+   "name": "Mount Monroe",
+   "lon": -71.321487,
+   "lat": 44.254947,
+   "elev_m": 1633.8,
+   "verified": true,
+   "source": "https://www.wikidata.org/wiki/Q6922237"
+  },
+  {
+   "name": "Mount Franklin",
+   "lon": -71.330362,
+   "lat": 44.249443,
+   "elev_m": 1522.7,
+   "verified": true,
+   "source": "https://www.wikidata.org/wiki/Q6920801"
+  },
+  {
+   "name": "Mount Eisenhower",
+   "lon": -71.350362,
+   "lat": 44.240602,
+   "elev_m": 1450.3,
+   "verified": true,
+   "source": "https://www.wikidata.org/wiki/Q200690"
+  },
+  {
+   "name": "Lows Bald Spot",
+   "lon": -71.253613,
+   "lat": 44.283456,
+   "elev_m": 880.6,
+   "verified": true,
+   "source": "https://www.wikidata.org/wiki/Q34926188"
+  }
+ ],
+ "labels": [],
+ "credits": [
+  "USGS 3D Elevation Program 1/3 arc-second DEM, public domain",
+  "ESA WorldCover 10 m 2021 v200 (© ESA WorldCover project 2021, contains modified Copernicus Sentinel data processed by the ESA WorldCover consortium), CC BY 4.0",
+  "Place names and coordinates from Wikidata, CC0",
+  "Magnetic declination from the World Magnetic Model 2025 (NOAA NCEI and BGS), public domain"
+ ]
+}

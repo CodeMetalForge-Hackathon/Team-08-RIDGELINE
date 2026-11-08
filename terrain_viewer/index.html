@@ -3,137 +3,182 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#000000">
-<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#ece7dc">
+<meta name="color-scheme" content="light">
 <title>Team-8 Terrain Nav</title>
 <link rel="stylesheet" href="lib/fonts/fonts.css">
 <style>
-/* Design system, from three references.
-   awesome-design-md (SpaceX DESIGN.md): black canvas, 1px hairlines, no shadows, glows or blur, uppercase micro labels with wide tracking, 8px spacing.
-   taste-skill: the subject shown big, one button style, one panel style, one radius, no captions under visuals, credits in one footer line.
-   Vercel web interface guidelines: visible focus rings, aria labels and states, tabular numbers, no transition: all, reduced motion.
-   Cyan, gold and red are data colours only (where you can be, the peak you aim at, danger). Chrome stays black and white. */
+/* A printed topographic sheet that moves.
+   Map conventions follow USGS US Topo, swisstopo and CalTopo: green woods, grey rock, blue water with italic names,
+   brown contours with bold index lines, a 1 km UTM grid, and a collar with the scale bar, contour interval and declination.
+   Plotting follows the paper habit of land navigation: a pencil line to the landmark, the fix as a circle with a dot.
+   Three plotting colours only: red-orange for where you can be, magenta for the route, red for danger.
+   The phone stays a dark phone, because that is what the person in the field holds.
+   Vercel web interface guidelines still apply: focus rings, aria states, tabular numbers, reduced motion. */
 :root{
-  color-scheme:dark;
-  --bg:#000;--surface:rgba(10,10,10,.92);--well:#050505;--hair:#3a3a3f;--hair-2:#232328;
-  --ink:#fff;--ink-2:#d9d9e0;--mute:#9a9aa3;--faint:#85858e;
-  --cyan:#38e1ff;--gold:#ffc846;--red:#ff4d5e;
-  --r:8px;
+  color-scheme:light;
+  --paper:#ece7dc;--card:#fbfaf6;--well:#f3f0e8;--rule:#d5cebf;--rule-2:#e5dfd2;
+  --ink:#1f1d1a;--ink-2:#46423b;--mute:#6b665b;--faint:#7c776b;
+  --area:#d9481c;--route:#b0157f;--danger:#c62828;--water:#2f6fa3;
+  --r:8px;--shadow:0 1px 2px rgba(45,35,15,.10),0 6px 20px rgba(45,35,15,.08);
   --ui:'Noto Sans JP',system-ui,'Segoe UI',sans-serif;
   --num:'B612 Mono',ui-monospace,Consolas,monospace;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:400 14px/1.6 var(--ui);overflow:hidden;-webkit-font-smoothing:antialiased}
-#stage{position:fixed;inset:0;background:var(--bg)}
-#stage.eye{background:linear-gradient(#0c1724 0,#35546c 46%,#9fb2c0 62%,#1b2026 100%)}
-.panel{position:fixed;background:var(--surface);border:1px solid var(--hair);border-radius:var(--r)}
-.eyebrow{font:600 11px/16px var(--ui);letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font:400 14px/1.55 var(--ui);overflow:hidden;-webkit-font-smoothing:antialiased}
+#stage{position:fixed;inset:0;background:radial-gradient(120% 90% at 50% 45%,#f3efe6 0,#e6e0d3 100%)}
+#stage.eye{background:linear-gradient(#a9c4dc 0,#d4e1ea 48%,#ece7dc 62%,#ece7dc 100%)}
+.panel{position:fixed;background:var(--card);border:1px solid var(--rule);border-radius:var(--r);box-shadow:var(--shadow)}
+.eyebrow{font:600 11px/16px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
 .mono{font-family:var(--num);font-variant-numeric:tabular-nums}
 
 /* one button system */
-button{font:600 12px/1 var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:transparent;border:1px solid var(--hair);border-radius:var(--r);height:32px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background-color .15s,border-color .15s,color .15s,transform .1s}
-button:hover{border-color:#8a8a93;background:rgba(255,255,255,.07)}
+button{font:500 13px/1 var(--ui);color:var(--ink);background:#fff;border:1px solid var(--rule);border-radius:6px;height:32px;padding:0 11px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background-color .15s,border-color .15s,color .15s,transform .1s}
+button:hover{background:#f6f3ec;border-color:#bfb7a6}
 button:active{transform:translateY(1px)}
-button.act,button.act:hover{background:var(--ink);border-color:var(--ink);color:#000}
-button:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+button.act,button.act:hover{background:var(--ink);border-color:var(--ink);color:#fff}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--water);outline-offset:2px}
 button svg{display:block}
 .group{display:flex;gap:4px}
-.vr{width:1px;align-self:stretch;background:var(--hair);margin:0 4px}
+.vr{width:1px;align-self:stretch;background:var(--rule);margin:0 6px}
 
-/* left: what the judge reads */
-#info{left:24px;top:24px;width:352px;padding:24px}
-#info h1{margin:0;font:600 11px/16px var(--ui);letter-spacing:.12em;text-transform:uppercase;color:var(--ink)}
-#info .place{margin-top:2px;font-size:12px;line-height:16px;color:var(--mute)}
-#stepEyebrow{margin-top:24px;font-family:var(--num)}
-#stepTitle{margin:4px 0 8px;font:700 22px/1.2 var(--ui);letter-spacing:.03em;text-transform:uppercase;text-wrap:balance}
-#stepText{margin:0;color:var(--ink-2);min-height:68px;text-wrap:pretty}
-#sensors{margin:16px 0 0;padding:16px 0 0;border-top:1px solid var(--hair-2);display:grid;grid-template-columns:1fr auto;row-gap:8px;column-gap:16px;align-items:baseline}
-#sensors dt{font:600 11px/16px var(--ui);letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
-#sensors dd{margin:0;font:400 13px/16px var(--ui);font-variant-numeric:tabular-nums;color:var(--faint);text-align:right;white-space:nowrap}
+/* left sidebar: the sheet title, what is happening, the readings, and the map key at the bottom */
+#info{left:24px;top:24px;bottom:24px;width:360px;padding:18px 22px;display:flex;flex-direction:column;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+#team{margin:0;font:600 11px/16px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+#areaRow{display:flex;align-items:center;margin-top:2px}
+#areaSel{appearance:none;-webkit-appearance:none;max-width:100%;margin:0 0 0 -4px;padding:0 24px 0 4px;border:0;border-radius:4px;cursor:pointer;font:700 24px/1.2 var(--ui);color:var(--ink);background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2346423b' stroke-width='1.6'/%3E%3C/svg%3E") no-repeat right 4px center}
+#areaSel:hover{background-color:var(--well)}
+#region{margin-top:1px;font-size:13px;line-height:18px;color:var(--mute)}
+#stepEyebrow{margin-top:14px}
+#stepTitle{margin:2px 0 4px;font:700 19px/1.25 var(--ui);text-wrap:balance}
+#stepText{margin:0;color:var(--ink-2);min-height:65px;text-wrap:pretty}
+#sensors{margin:12px 0 0;padding:10px 0 0;border-top:1px solid var(--rule-2);display:grid;grid-template-columns:1fr auto;row-gap:1px;column-gap:16px;align-items:baseline}
+#sensors dt{font-size:13px;line-height:19px;color:var(--mute)}
+#sensors dd{margin:0;font:500 13px/19px var(--ui);font-variant-numeric:tabular-nums;color:var(--faint);text-align:right;white-space:nowrap}
 #sensors dd.on{color:var(--ink)}
-#sensors dd.alert{color:var(--red)}
-#area{margin-top:16px;padding-top:16px;border-top:1px solid var(--hair-2)}
-#areaVal{display:block;margin-top:4px;font:700 30px/1.1 var(--ui);font-variant-numeric:tabular-nums;color:var(--cyan)}
-#areaFrom{display:block;margin-top:4px;font-size:12px;line-height:16px;color:var(--mute)}
+#sensors dd.alert{color:var(--danger)}
+#area{margin-top:12px;padding-top:10px;border-top:1px solid var(--rule-2)}
+#areaVal{display:block;margin-top:2px;font:700 30px/1.1 var(--ui);font-variant-numeric:tabular-nums;color:var(--area)}
+#areaFrom{display:block;margin-top:2px;font-size:12px;line-height:16px;color:var(--mute)}
+#mc{margin:6px 0 0;font-size:12px;line-height:16px;color:var(--mute)}
+#mc:empty{display:none}
+#mc b{font-weight:600;color:var(--ink-2)}
 
-/* top and bottom bars */
-#views{left:50%;top:24px;transform:translateX(-50%);width:max-content;display:flex;padding:8px}
-#banner{left:50%;top:88px;transform:translateX(-50%);padding:8px 16px;display:none;border-color:var(--red);color:var(--ink-2);white-space:nowrap}
-#banner b{color:var(--red);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-right:12px}
-#steps{left:calc(50% - 60px);bottom:24px;transform:translateX(-50%);width:max-content;display:flex;gap:4px;padding:8px;align-items:center}
-#steps .n{font-family:var(--num);color:var(--faint);letter-spacing:0}
-#steps .act .n{color:#000}
-#walkbar{left:calc(50% - 60px);bottom:88px;transform:translateX(-50%);width:max-content;display:none;gap:8px;padding:8px;align-items:center}
-#walkbar input{width:220px;accent-color:var(--cyan)}
-#clock{font:400 12px/1 var(--num);font-variant-numeric:tabular-nums;color:var(--mute);min-width:136px;text-align:center}
-#legend{left:24px;bottom:24px;padding:16px;font-size:12px;line-height:20px;color:var(--ink-2)}
-#legend .k{display:flex;align-items:center;gap:8px}
-#legend i{width:10px;height:10px;border-radius:2px;flex:none}
-#legend .eyebrow{margin-bottom:4px}
-#legend .eyebrow.next{margin-top:12px}
-#loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font:600 12px/1 var(--ui);letter-spacing:.12em;text-transform:uppercase;color:var(--mute);background:#000;z-index:9}
-#credit{position:fixed;right:24px;bottom:24px;width:300px;margin:0;font-size:11px;line-height:16px;color:var(--faint);text-align:right}
+/* the map key and the collar, like the margin of a printed sheet */
+#legend{margin-top:auto;padding-top:12px;display:grid;grid-template-columns:1fr 1fr;column-gap:14px;font-size:11.5px;line-height:17px;color:var(--ink-2)}
+#legend::before{content:"";grid-column:1/-1;border-top:1px solid var(--rule-2);margin:0 0 10px}
+#legend .col{display:flex;flex-direction:column;min-width:0}
+#legend .eyebrow{margin-bottom:2px}
+#legend .k{display:flex;align-items:center;gap:7px;white-space:nowrap}
+#legend svg.sw{width:22px;height:12px;flex:none;display:block}
+#collar{grid-column:1/-1;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-top:10px;padding-top:10px;border-top:1px solid var(--rule-2);font-size:11px;line-height:14px;color:var(--ink-2)}
+#scale{display:flex;flex-direction:column;min-width:0;font-variant-numeric:tabular-nums}
+#scaleBar{display:block;height:6px;margin:3px 0 4px;border:1px solid var(--ink);background:linear-gradient(90deg,var(--ink) 0 25%,#fff 25% 50%,var(--ink) 50% 75%,#fff 75% 100%)}
+#scaleNote{color:var(--faint)}
+#sheetNote{color:var(--mute)}
+#decl{display:flex;align-items:center;gap:6px;flex:none}
+#declSvg{width:50px;height:50px;flex:none;overflow:visible}
+
+/* top and bottom bars, centred on the map between the sidebar and the phone */
+#views{left:calc(50% + 30px);top:24px;transform:translateX(-50%);width:max-content;display:flex;padding:6px}
+#banner{left:calc(50% + 30px);top:80px;transform:translateX(-50%);padding:8px 16px;display:none;border-color:var(--danger);color:var(--ink-2);white-space:nowrap}
+#banner b{color:var(--danger);font-weight:700;margin-right:10px}
+#steps{left:calc(50% + 30px);bottom:24px;transform:translateX(-50%);width:max-content;display:flex;gap:3px;padding:6px;align-items:center}
+#steps button{padding:0 9px}
+#steps .n{font-family:var(--num);font-size:12px;color:var(--faint)}
+#steps .act .n{color:#d9d4c8}
+#walkbar{left:calc(50% + 30px);bottom:80px;transform:translateX(-50%);width:max-content;display:none;gap:8px;padding:6px;align-items:center}
+#walkbar input{width:200px;accent-color:var(--route)}
+#clock{font:500 12px/1 var(--ui);font-variant-numeric:tabular-nums;color:var(--mute);min-width:132px;text-align:center}
+#loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font:500 13px/1 var(--ui);color:var(--mute);background:var(--paper);z-index:9}
+#credit{position:fixed;right:24px;bottom:16px;width:340px;margin:0;padding:6px 10px;border-radius:6px;background:rgba(236,231,220,.9);font-size:10.5px;line-height:15px;color:var(--mute);text-align:right}
 
 /* right: the phone the survivor holds, no map */
-#phone{right:24px;top:50%;transform:translateY(-50%);width:300px;height:640px;border-radius:40px;border:8px solid #151517;background:#000;box-shadow:0 0 0 1px var(--hair);padding:16px 10px 12px;display:flex;flex-direction:column;gap:8px}
-#phone .notch{position:absolute;top:6px;left:50%;transform:translateX(-50%);width:88px;height:20px;border-radius:12px;background:#151517}
-.ph-status{display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding:0 4px}
-.tag{font:700 11px/1 var(--num);letter-spacing:.04em;padding:4px 8px;border-radius:4px;border:1px solid var(--hair);color:var(--mute)}
-.tag.red{color:var(--red);border-color:var(--red)}
-.tag.ok{color:var(--cyan);border-color:var(--cyan)}
-#tape,#sky{width:280px;display:block;border-radius:var(--r);background:var(--well);border:1px solid var(--hair-2)}
+#phone{right:24px;top:50%;transform:translateY(-50%);width:300px;height:640px;border-radius:42px;border:8px solid #1d1d1f;background:#000;color:#fff;box-shadow:0 0 0 1px #6f6a60,0 18px 40px rgba(30,25,15,.28);padding:14px 10px 12px;display:flex;flex-direction:column;gap:8px}
+#phone .notch{position:absolute;top:6px;left:50%;transform:translateX(-50%);width:88px;height:22px;border-radius:12px;background:#1d1d1f}
+.ph-status{display:flex;justify-content:space-between;align-items:center;margin-top:18px;padding:0 6px;font:600 12px/1 var(--ui)}
+.ph-status .ns{color:#ff453a}
+.tag{font:600 11px/1 var(--ui);font-variant-numeric:tabular-nums;padding:4px 8px;border-radius:6px;background:#1c1c1e;color:#8e8e93}
+.tag.ok{background:rgba(48,209,88,.16);color:#30d158}
+#tape,#sky{width:280px;display:block;border-radius:10px;background:#0b0b0c;border:1px solid #232326}
 #tape{height:46px}
 #sky{height:96px}
 .ph-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;padding:0 8px}
-#arrow{width:140px;height:140px;transition:transform .25s linear}
+#arrow{width:136px;height:136px;transition:transform .25s linear}
 #phBig{font:700 40px/1 var(--ui);font-variant-numeric:tabular-nums}
-#phSay{font-size:14px;line-height:1.5;color:var(--ink-2);min-height:42px;text-wrap:balance}
-#phStop{display:none;font:700 30px/1.15 var(--ui);letter-spacing:.08em;color:var(--red)}
-.ph-coords{font:400 12px/18px var(--ui);font-variant-numeric:tabular-nums;color:var(--ink);background:var(--well);border:1px solid var(--hair-2);border-radius:var(--r);padding:8px 10px;white-space:pre}
-.ph-coords span{color:var(--faint)}
-#phBtn{width:100%;height:44px;border-radius:12px;background:var(--ink);border-color:var(--ink);color:#000}
-#phBtn:hover{background:#e4e4ea}
-@media (max-width:1180px){#credit{display:none}}
+#phSay{font-size:14px;line-height:1.5;color:#d1d1d6;min-height:42px;text-wrap:balance}
+#phStop{display:none;font:700 30px/1.15 var(--ui);color:#ff453a}
+.ph-coords{font:400 12px/18px var(--ui);font-variant-numeric:tabular-nums;color:#fff;background:#1c1c1e;border-radius:10px;padding:8px 10px;white-space:pre}
+.ph-coords span{color:#8e8e93}
+#phBtn{width:100%;height:44px;border-radius:12px;background:#f2f2f7;border-color:#f2f2f7;color:#000;font:600 15px/1 var(--ui)}
+#phBtn:hover{background:#fff}
+@media (max-width:1180px),(max-height:840px){#credit{display:none}}
 /* fitUI() zooms the panels as one layout below 1440 x 760; under 760 px wide only the phone and the steps stay */
-body.narrow #info,body.narrow #legend,body.narrow #views,body.narrow #walkbar,body.narrow #banner,body.narrow #credit{display:none!important}
+body.narrow #info,body.narrow #views,body.narrow #walkbar,body.narrow #banner,body.narrow #credit{display:none!important}
 body.narrow #phone{right:auto;left:50%;top:8px;transform:translateX(-50%)}
 body.narrow #steps{left:50%;bottom:8px}
-#loading.err{text-transform:none;letter-spacing:0;font:400 14px/22px var(--ui);color:var(--ink-2);padding:24px;text-align:center}
+#loading.err{font:400 14px/22px var(--ui);color:var(--ink-2);padding:24px;text-align:center}
 #loading.err b{color:var(--ink);font-weight:600}
-#loading.err a{color:var(--cyan)}
+#loading.err a{color:var(--water)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+html.still *{transition:none!important;animation:none!important}
 </style>
 </head>
 <body>
 <div id="stage"></div>
 <div id="loading">Loading terrain…</div>
 
-<div id="info" class="panel">
-  <h1>Team-8 · GPS-denied land nav</h1>
-  <div class="place">Mount Moran, Grand Teton National Park</div>
+<aside id="info" class="panel">
+  <p id="team">Team-8 · GPS-denied land navigation</p>
+  <div id="areaRow"><select id="areaSel" aria-label="Terrain tile"></select></div>
+  <div id="region"></div>
   <div id="stepEyebrow" class="eyebrow"></div>
   <h2 id="stepTitle"></h2>
   <p id="stepText" aria-live="polite"></p>
   <dl id="sensors">
-    <dt>GPS</dt><dd class="alert">OFF, JAMMED</dd>
+    <dt>GPS</dt><dd class="alert">Off, jammed</dd>
     <dt>Barometer</dt><dd id="sBaro">waiting</dd>
     <dt>Compass bearing</dt><dd id="sComp">waiting</dd>
     <dt>Tilt angle</dt><dd id="sTilt">waiting</dd>
     <dt>Steps and heading</dt><dd id="sDR">idle</dd>
   </dl>
-  <div id="area"><div class="eyebrow">Where you can be · 95%</div><span id="areaVal"></span><span id="areaFrom"></span></div>
-</div>
+  <div id="area"><div class="eyebrow">Where you can be · 95%</div><span id="areaVal"></span><span id="areaFrom"></span><p id="mc"></p></div>
+  <div id="legend" role="group" aria-label="Map key">
+    <div class="col">
+      <div class="eyebrow">Map</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M11 1.5 16.5 10.5H5.5Z" fill="#1f1d1a"/></svg>Summit, metres</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="1" y="1" width="20" height="10" rx="2" fill="#cee0bc" stroke="#aec49a" stroke-width=".8"/></svg>Woodland</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="1" y="1" width="20" height="10" rx="2" fill="#d6d1ca" stroke="#bdb6aa" stroke-width=".8"/></svg>Rock and scree</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="1" y="1" width="20" height="10" rx="2" fill="#aacee4" stroke="#4a80ac" stroke-width="1"/></svg>Water</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M1 4.5c6-3.5 10 2.5 20-1" fill="none" stroke="#b58a63" stroke-width=".9"/><path d="M1 9c6-3.5 10 2.5 20-1" fill="none" stroke="#8a542e" stroke-width="1.6"/></svg>Contours</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M1 3.5H21M1 8.5H21M7.5 0.5V11.5M15 0.5V11.5" fill="none" stroke="#5f7393" stroke-width=".9"/></svg><span id="lgGrid">1 km grid</span></div>
+    </div>
+    <div class="col">
+      <div class="eyebrow">Plotting</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="1" y="1" width="20" height="10" rx="3" fill="rgba(217,72,28,.3)" stroke="#a8330c" stroke-width="1.2"/></svg>Where you can be</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M1 6H21" stroke="#1f1d1a" stroke-width="1.6" stroke-dasharray="4 2.5"/></svg><span id="lgSight">Line to the peak</span></div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><circle cx="11" cy="6" r="4.4" fill="#fff" stroke="#1f1d1a" stroke-width="1.6"/><circle cx="11" cy="6" r="1.3" fill="#1f1d1a"/></svg>Fix</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M2 6H20" stroke="#fff" stroke-width="5.5" stroke-linecap="round"/><path d="M2 6H20" stroke="#b0157f" stroke-width="2.8" stroke-linecap="round"/></svg>Route</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><circle cx="11" cy="6" r="4.4" fill="#fff" stroke="#1f1d1a" stroke-width="2.2"/></svg>Rendezvous</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><defs><pattern id="hp" width="3.5" height="3.5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V3.5" stroke="#c62828" stroke-width="1.1"/></pattern></defs><rect x="1" y="1" width="20" height="10" rx="2" fill="url(#hp)" stroke="#c62828" stroke-width=".8"/></svg><span id="lgSteep">Too steep for you</span></div>
+    </div>
+    <div id="collar">
+      <div id="scale"><span><span id="scaleLab"></span> <span id="scaleNote"></span></span><span id="scaleBar" style="width:100px"></span><span id="sheetNote"></span></div>
+      <div id="decl"><svg id="declSvg" viewBox="0 0 54 54" aria-hidden="true"></svg><span id="declText"></span></div>
+    </div>
+  </div>
+</aside>
 
 <div id="views" class="panel">
   <div class="group" role="group" aria-label="View">
-    <button data-view="2d" aria-pressed="false">2D Map</button>
-    <button data-view="3d" class="act" aria-pressed="true">3D Terrain</button>
-    <button data-view="eye" aria-pressed="false">Eye View</button>
+    <button data-view="2d" aria-pressed="false">Map</button>
+    <button data-view="3d" class="act" aria-pressed="true">3D</button>
+    <button data-view="eye" aria-pressed="false">Eye level</button>
   </div>
   <span class="vr" aria-hidden="true"></span>
   <div class="group" role="group" aria-label="Condition">
-    <button data-health="healthy" class="act" aria-pressed="true">Healthy 30°</button>
-    <button data-health="injured" aria-pressed="false">Injured 18°</button>
+    <button data-health="healthy" id="bHealthy" class="act" aria-pressed="true">Healthy</button>
+    <button data-health="injured" id="bInjured" aria-pressed="false">Injured</button>
   </div>
 </div>
 
@@ -146,12 +191,12 @@ body.narrow #steps{left:50%;bottom:8px}
   <div class="group" role="group" aria-label="Playback speed">
     <button data-speed="120" aria-pressed="false">×120</button><button data-speed="300" class="act" aria-pressed="true">×300</button><button data-speed="900" aria-pressed="false">×900</button>
   </div>
-  <button id="refix">Re-fix Now</button>
+  <button id="refix">Re-fix now</button>
 </div>
 
 <nav id="steps" class="panel" aria-label="Demo steps">
   <button id="prev" aria-label="Previous step"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M9 2 4 7l5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
-  <button data-step="0"><span class="n">0</span>GPS Lost</button>
+  <button data-step="0"><span class="n">0</span>GPS lost</button>
   <button data-step="1"><span class="n">1</span>Barometer</button>
   <button data-step="2"><span class="n">2</span>Bearing</button>
   <button data-step="3"><span class="n">3</span>Tilt</button>
@@ -162,23 +207,12 @@ body.narrow #steps{left:50%;bottom:8px}
   <button id="next" aria-label="Next step"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M5 2l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
 </nav>
 
-<div id="legend" class="panel" role="group" aria-label="Legend">
-  <div class="eyebrow">Slope</div>
-  <div class="k"><i style="background:#2e9d4f"></i>Under 15°</div>
-  <div class="k"><i style="background:#e3c440"></i>15 to 25°</div>
-  <div class="k"><i style="background:#ef8a2a"></i>25 to 35°</div>
-  <div class="k"><i style="background:#d7263d"></i>35° and over, cliff</div>
-  <div class="eyebrow next">Overlays</div>
-  <div class="k"><i style="background:var(--cyan)"></i>Where you can be</div>
-  <div class="k"><i style="background:var(--gold)"></i>Line of sight to the peak</div>
-</div>
-
 <div id="phone" class="panel" role="region" aria-label="Survivor phone, no map">
   <div class="notch" aria-hidden="true"></div>
-  <div class="ph-status"><span class="tag red">GPS OFF</span><span id="phFix" class="tag">NO FIX</span></div>
+  <div class="ph-status"><span class="ns">No service · GPS off</span><span id="phFix" class="tag">No fix</span></div>
   <canvas id="tape" width="560" height="92" role="img" aria-label="Compass tape"></canvas>
   <div class="ph-main">
-    <svg id="arrow" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="none" stroke="#2c2c31" stroke-width="1.5"/><path d="M50 8 L74 72 L50 60 L26 72 Z" fill="#38e1ff"/></svg>
+    <svg id="arrow" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="none" stroke="#2c2c2e" stroke-width="1.5"/><path id="arrowPath" d="M50 8 L74 72 L50 60 L26 72 Z" fill="#ff375f"/></svg>
     <div id="phStop">STAY<br>SIGNAL<br>WAIT</div>
     <div id="phBig"></div>
     <div id="phSay"></div>
@@ -188,11 +222,21 @@ body.narrow #steps{left:50%;bottom:8px}
   <button id="phBtn">Next</button>
 </div>
 
-<p id="credit">USGS 3DEP 1&nbsp;m lidar via OpenTopography, shown at 5&nbsp;m. Synthetic demo spot and simulated sensors, no real person or position. deck.gl 9.3.11, Noto Sans JP and B612 Mono (OFL), all offline.</p>
+<p id="credit"></p>
 <script src="lib/deck.gl@9.3.11/dist.min.js"></script>
-<script src="data/bundle.js"></script>
+<script src="data/areas.js"></script>
 <script>
+// Pick the area (?area=<id>, else the first), load its bundle as a classic script so file:// works, then start.
 (function () {
+  'use strict';
+  const AREAS = window.TEAM8_AREAS || [], want = new URLSearchParams(location.search).get('area');
+  const pick = AREAS.find(a => a.id === want) || AREAS[0], sel = document.getElementById('areaSel');
+  AREAS.forEach(a => { const o = document.createElement('option'); o.value = a.id; o.textContent = a.name; o.selected = !!pick && a.id === pick.id; sel.appendChild(o); });
+  sel.onchange = () => { const q = new URLSearchParams(location.search); q.set('area', sel.value); q.delete('t'); location.search = q.toString(); };
+  if (!pick || !window.deck) { TEAM8_MAIN(); return; }
+  const sc = document.createElement('script'); sc.src = `data/${pick.id}/bundle.js`; sc.onload = sc.onerror = TEAM8_MAIN; document.body.appendChild(sc);
+})();
+function TEAM8_MAIN() {
 'use strict';
 const D = window.TEAM8;
 if (!D || !window.deck) {
@@ -200,12 +244,15 @@ if (!D || !window.deck) {
   L.classList.add('err');
   L.innerHTML = /^(data|about|blob):$/.test(location.protocol)
     ? '<div><b>This window opened the page without its folder.</b><br>Open <a href="http://localhost:8792/">http://localhost:8792</a> (run <code>python -m http.server 8792</code> in this folder),<br>or double-click index.html so it opens in Chrome or Edge.</div>'
-    : '<div><b>Missing files.</b><br>Keep index.html next to the lib and data folders.</div>';
+    : '<div><b>Missing files.</b><br>Keep index.html next to the lib and data folders (data/areas.js and data/&lt;area&gt;/bundle.js).</div>';
   return;
 }
 const {Deck, MapView, FirstPersonView, LinearInterpolator, WebMercatorViewport,
   TerrainLayer, TripsLayer, PathLayer, LineLayer, ScatterplotLayer, TextLayer} = deck;
 const M = D.meta, S = D.sim, B = M.bounds;
+const LMN = S.landmark.name, DECL = (M.declination && M.declination.deg) || 0;
+const DECL_TXT = `${Math.abs(DECL).toFixed(1)}° ${DECL >= 0 ? 'E' : 'W'}`;
+const CAP_OK = S.routes.healthy ? S.routes.healthy.cap_deg : 30, CAP_INJ = S.routes.injured ? S.routes.injured.cap_deg : 18;
 const TW = M.grid.width, TH = M.grid.height, PW = S.grid.width, PH = S.grid.height;
 const MPLON = M.grid.cell_m[0] / ((B[2] - B[0]) / TW), MPLAT = M.grid.cell_m[1] / ((B[3] - B[1]) / TH);
 // peak labels sit above their dot, or beside it (west one to the left, east one to the right) when another peak is within 1.2 km east or west
@@ -284,71 +331,77 @@ let SIG0 = 60;
 // ---------------------------------------------------------------- images and the texture compositor
 const loadImg = src => new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; });
 const canvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-let COLOR, GLOW = [], EDGE = [];
+let COLOR, GLOW = [], SLOPE = null;
+const TSC = Math.max(1, Math.max(TW, TH * 1.35) / 1150);   // texture pixels per screen pixel when the whole tile fills the view
 async function prepImages() {
   COLOR = await loadImg(D.img.color);
+  const sl = await loadImg(D.img.slope), slc = canvas(sl.width, sl.height), slx = slc.getContext('2d', {willReadFrequently: true});
+  slx.drawImage(sl, 0, 0); SLOPE = {w: sl.width, h: sl.height, d: slx.getImageData(0, 0, sl.width, sl.height).data};
   const probs = await Promise.all(D.img.prob.map(loadImg));
-  probs.forEach((im, k) => {
+  probs.forEach(im => {
     const w = im.width, h = im.height, c = canvas(w, h), x = c.getContext('2d');
     x.drawImage(im, 0, 0);
-    const p = x.getImageData(0, 0, w, h).data;
-    const g = x.createImageData(w, h), e = x.createImageData(w, h), o = g.data, q = e.data;
-    let sw = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
-    const cw = M.grid.cell_m[0] * 2, ch = M.grid.cell_m[1] * 2;
+    const p = x.getImageData(0, 0, w, h).data, g = x.createImageData(w, h), o = g.data;
     for (let i = 0; i < w * h; i++) {
-      const v = p[4 * i] / 255;
-      if (v > 0) {
-        const t1 = Math.min(1, v / 0.55), t2 = Math.max(0, (v - 0.55) / 0.45);
-        o[4 * i] = 12 + 40 * t1 + 200 * t2; o[4 * i + 1] = 70 + 150 * t1 + 35 * t2; o[4 * i + 2] = 150 + 95 * t1 + 10 * t2;
-        o[4 * i + 3] = Math.round(Math.min(1, Math.pow(v, 0.85) * 1.1) * 235);
-        if (k === probs.length - 1) { const wt = v * v, xx = (i % w) * cw, yy = Math.floor(i / w) * ch; sw += wt; sx += wt * xx; sy += wt * yy; sxx += wt * xx * xx; syy += wt * yy * yy; sxy += wt * xx * yy; }
-      }
-      if (p[4 * i + 1] > 127) {
-        const X = i % w, Y = Math.floor(i / w);
-        const out = (dx, dy) => { const a = X + dx, b = Y + dy; return a < 0 || b < 0 || a >= w || b >= h || p[4 * (b * w + a) + 1] < 128; };
-        if (out(1, 0) || out(-1, 0) || out(0, 1) || out(0, -1)) { q[4 * i] = q[4 * i + 1] = q[4 * i + 2] = 255; q[4 * i + 3] = 235; }
-      }
+      const v = p[4 * i] / 255;   // square root of the posterior relative to its peak
+      if (v > 0.03) { o[4 * i] = 217; o[4 * i + 1] = 72; o[4 * i + 2] = 28; o[4 * i + 3] = Math.round((0.16 + 0.5 * v) * 255); }
     }
-    // fix radius shown on the phone: radius of a circle with the area of the 50% region (outlying islands would inflate a covariance)
-    SIG0 = Math.max(25, Math.sqrt(ST[ST.length - 1].hpd50_km2 * 1e6 / Math.PI));
     const gc = canvas(w, h); gc.getContext('2d').putImageData(g, 0, 0); GLOW.push(gc);
-    const ec = canvas(w, h); ec.getContext('2d').putImageData(e, 0, 0); EDGE.push(ec);
   });
+  SIG0 = Math.max(25, Math.sqrt(ST[ST.length - 1].hpd50_km2 * 1e6 / Math.PI));   // fix radius on the phone: a circle with the area of the 50% region
 }
-function strokePath(ctx, pts, color, width) {
+const trace = (ctx, pts, close) => { pts.forEach((p, i) => { const [x, y] = px(p[0], p[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); if (close) ctx.closePath(); };
+function strokePath(ctx, pts, color, width, casing, dash) {
   ctx.lineJoin = ctx.lineCap = 'round';
-  [[`rgba(5,8,12,.85)`, width + 4], [color, width]].forEach(([c, w]) => {
-    ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath();
-    pts.forEach((p, i) => { const [x, y] = px(p[0], p[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-    ctx.stroke();
+  (casing ? [[casing, width + 2.6 * TSC], [color, width]] : [[color, width]]).forEach(([c, w]) => {
+    ctx.strokeStyle = c; ctx.lineWidth = w; ctx.setLineDash(dash || []); ctx.beginPath(); trace(ctx, pts); ctx.stroke();
   });
+  ctx.setLineDash([]);
+}
+function hatch(cap) {   // red hatching where the smoothed slope is over the limit; the route planner reads the same slope file
+  const key = 'hatch' + cap;
+  if (state.tex[key]) return state.tex[key];
+  const {w, h, d} = SLOPE, m = canvas(w, h), mx = m.getContext('2d'), id = mx.createImageData(w, h), lim = cap * 2;
+  for (let i = 0; i < w * h; i++) if (d[4 * i] > lim) id.data[4 * i + 3] = 255;
+  mx.putImageData(id, 0, 0);
+  const sp = Math.max(4, Math.round(6 * TSC)), t = canvas(sp, sp), tx = t.getContext('2d');
+  tx.strokeStyle = 'rgba(198,40,40,.6)'; tx.lineWidth = Math.max(1, 1.1 * TSC);
+  tx.beginPath(); tx.moveTo(0, sp); tx.lineTo(sp, 0); tx.moveTo(-sp / 2, sp / 2); tx.lineTo(sp / 2, -sp / 2); tx.moveTo(sp / 2, sp * 1.5); tx.lineTo(sp * 1.5, sp / 2); tx.stroke();
+  const c = canvas(TW, TH), x = c.getContext('2d');
+  x.fillStyle = x.createPattern(t, 'repeat'); x.fillRect(0, 0, TW, TH);
+  x.globalCompositeOperation = 'destination-in'; x.imageSmoothingEnabled = true; x.drawImage(m, 0, 0, TW, TH);
+  return (state.tex[key] = c);
 }
 function texture(key) {
   if (state.tex[key]) return state.tex[key];
   const c = canvas(TW, TH), x = c.getContext('2d');
   x.drawImage(COLOR, 0, 0, TW, TH);
-  const k = {p1: 0, p2: 1, p3: 2, route: 2, route_inj: 2, reveal: 2}[key];
-  const late = key === 'route' || key === 'route_inj' || key === 'reveal';
-  if (!late) { x.fillStyle = 'rgba(0,0,0,.5)'; x.fillRect(0, 0, TW, TH); }
-  if (key === 'p0') { x.fillStyle = 'rgba(56,225,255,.10)'; x.fillRect(0, 0, TW, TH); }
+  const k = key === 'p0' ? undefined : ({p1: 0, p2: 1, p3: 2}[key] ?? 2);
+  const late = key.startsWith('route') || key === 'reveal';
+  if (key.startsWith('route')) x.drawImage(hatch(key === 'route_injured' ? CAP_INJ : CAP_OK), 0, 0);
+  if (key === 'p0') { x.fillStyle = 'rgba(217,72,28,.06)'; x.fillRect(0, 0, TW, TH); }
   if (k !== undefined) {
-    x.imageSmoothingEnabled = true; x.globalAlpha = late ? 0.55 : 1; x.drawImage(GLOW[k], 0, 0, TW, TH);
-    x.globalAlpha = 1; x.imageSmoothingEnabled = false; x.drawImage(EDGE[k], 0, 0, TW, TH);
+    x.imageSmoothingEnabled = true; x.globalAlpha = late ? 0.45 : 1; x.drawImage(GLOW[k], 0, 0, TW, TH); x.globalAlpha = 1;
+    const ol = ST[k].outline;
+    if (ol) {
+      x.lineJoin = 'round'; x.strokeStyle = '#a8330c'; x.lineWidth = 1.7 * TSC;
+      x.beginPath(); ol.hpd95.forEach(r => trace(x, r, true)); x.stroke();
+      if (!late) { x.setLineDash([5 * TSC, 4 * TSC]); x.lineWidth = 1.1 * TSC; x.beginPath(); ol.hpd50.forEach(r => trace(x, r, true)); x.stroke(); x.setLineDash([]); }
+    }
   }
-  if (key === 'p2' || key === 'p3') {
-    const lop = S.line_of_position, L = dist(lop[0], lop[lop.length - 1]), back = S.measurements.bearing_deg + 180;
-    x.setLineDash([10, 8]);
+  if (key === 'p2' || key === 'p3') {   // the pencil line from the landmark along the back azimuth, and its ±sigma wedge
+    const lop = S.line_of_position, L = dist(lop[0], lop[lop.length - 1]), back = S.measurements.bearing_deg + 180, [mx, my] = toXY(MORAN[0], MORAN[1]);
     [-S.measurements.bearing_sigma_deg, S.measurements.bearing_sigma_deg].forEach(dd => {
-      const th = (back + dd) * Math.PI / 180, [mx, my] = toXY(MORAN[0], MORAN[1]);
-      strokePath(x, [MORAN, fromXY(mx + Math.sin(th) * L, my + Math.cos(th) * L)], 'rgba(255,200,70,.65)', 2);
+      const th = (back + dd) * Math.PI / 180;
+      strokePath(x, [MORAN, fromXY(mx + Math.sin(th) * L, my + Math.cos(th) * L)], 'rgba(31,29,26,.5)', 1 * TSC, null, [2.5 * TSC, 3 * TSC]);
     });
-    x.setLineDash([]);
-    strokePath(x, lop, '#ffc846', 4);
+    strokePath(x, lop, '#1f1d1a', 1.6 * TSC, 'rgba(255,255,255,.75)', [7 * TSC, 4 * TSC]);
   }
-  if ((key === 'route' || key === 'reveal') && R) strokePath(x, RP, '#ffffff', 3);
+  const rr = key === 'route_injured' ? S.routes.injured : R;
+  if ((key.startsWith('route') || key === 'reveal') && rr) strokePath(x, rr.path, '#b0157f', 2.6 * TSC, '#ffffff');
   return (state.tex[key] = c.toDataURL('image/jpeg', 0.9));
 }
-const texKey = () => state.step <= 3 ? 'p' + state.step : (state.step === 6 ? 'reveal' : (state.health === 'injured' && !S.routes.injured ? 'route_inj' : 'route'));
+const texKey = () => state.step <= 3 ? 'p' + state.step : (state.step === 6 ? 'reveal' : 'route_' + state.health);
 
 // ---------------------------------------------------------------- terrain mesh on the main thread
 // The deck.gl bundle parses terrain only in a web worker fetched from a CDN, which breaks offline and on file://.
@@ -380,7 +433,7 @@ const GridTerrainLoader = {
       const a = j * gw + i, b = a + 1, cc = a + gw, d = cc + 1;
       idx[n++] = a; idx[n++] = cc; idx[n++] = b; idx[n++] = b; idx[n++] = cc; idx[n++] = d;
     }
-    window.TEAM8_MESH = {vertices: gw * gh, triangles: idx.length / 3, ms: Math.round(performance.now() - t0)};
+    window.TEAM8_MESH = {vertices: gw * gh, triangles: idx.length / 3, ms: Math.round(performance.now() - t0), at: Math.round(t0)};
     setTimeout(() => { $('loading').style.display = 'none'; }, 300);
     return {loaderData: {header: {}}, header: {vertexCount: idx.length, boundingBox: [[x0, y0, zmin], [x1, y1, zmax]]}, mode: 4,
       indices: {value: idx, size: 1}, attributes: {POSITION: {value: pos, size: 3}, TEXCOORD_0: {value: uv, size: 2}}};
@@ -395,7 +448,7 @@ function fitUI() {
   const w = window.innerWidth, h = window.innerHeight, narrow = w < 760;
   document.body.classList.toggle('narrow', narrow);
   const z = narrow ? 1 : Math.min(1, w / 1440, h / 760);
-  ['info', 'views', 'banner', 'walkbar', 'legend', 'credit', 'steps', 'phone'].forEach(id => { $(id).style.zoom = z; });
+  ['info', 'views', 'banner', 'walkbar', 'credit', 'steps', 'phone'].forEach(id => { $(id).style.zoom = z; });
   if (narrow) {
     const st = $('steps'), sz = Math.min(1, (w - 16) / st.offsetWidth);
     st.style.zoom = sz;
@@ -408,7 +461,13 @@ function fitVS(pitch, bearing) {
   let v;
   try { v = new WebMercatorViewport({width: w, height: h}).fitBounds([[B[0], B[1]], [B[2], B[3]]], {padding: pad}); }
   catch (e) { v = {longitude: (B[0] + B[2]) / 2, latitude: (B[1] + B[3]) / 2, zoom: 12.3}; }
-  return {longitude: v.longitude, latitude: v.latitude, zoom: v.zoom + (pitch ? -0.25 : 0), pitch, bearing, maxPitch: 80, minZoom: 10, maxZoom: 17};
+  let zoom = v.zoom + (pitch ? -0.25 : 0);
+  if (!pitch) {   // the terrain stands closer to the camera than sea level, so a flat fit of a high tile runs off the screen
+    const e = (M.elev_range_m[0] + M.elev_range_m[1]) / 2, ppm = 512 * Math.pow(2, v.zoom) / (40075016.686 * Math.cos(v.latitude * Math.PI / 180));
+    const A = 1.5 * h / ppm;   // deck.gl camera distance in metres (altitude 1.5 viewport heights)
+    zoom += Math.log2(A / (A + e));
+  }
+  return {longitude: v.longitude, latitude: v.latitude, zoom, pitch, bearing, maxPitch: 80, minZoom: 9, maxZoom: 17};
 }
 function eyeVS() {
   return {longitude: EST[0], latitude: EST[1], position: [0, 0, S.estimate.elev_m + 6], bearing: state.heading,
@@ -433,57 +492,83 @@ function setView(v, instant) {
 
 // ---------------------------------------------------------------- layers
 const ON_TOP = {depthCompare: 'always', depthWriteEnabled: false};
+const PAPER = [251, 250, 246, 235], INK = [31, 29, 26], ROUTE = [176, 21, 127], WATER_INK = [47, 111, 163];
+const TXT = {fontFamily: UI_FONT, fontSettings: {sdf: true}, outlineWidth: 3, outlineColor: PAPER, characterSet: 'auto'};
+const PEAK_NAMES = new Set(M.peaks.map(p => p.name));   // a glacier item that only repeats a summit name is dropped
+const SUPP = new Set(M.peaks.filter(p => M.peaks.some(q => q !== p && q.elev_m > p.elev_m && (q.verified || !p.verified)
+  && Math.hypot((q.lon - p.lon) * MPLON, (q.lat - p.lat) * MPLAT) < 750)));   // a sub-summit within 750 m of a higher one keeps its triangle, not its name
+const nearPeak = l => NAMED.some(p => Math.hypot((p.lon - l.lon) * MPLON, (p.lat - l.lat) * MPLAT) < 700);   // and so is a glacier name sitting on a named summit
+const GRID_LABELS = (() => {   // kilometre digits of the UTM grid along the map edge, as on a military sheet
+  const g = M.utm_grid, two = v => String(Math.floor(v / 1000) % 100).padStart(2, '0'), z0 = M.elev_range_m[0];
+  if (!g) return [];
+  return [...g.south.map(t => ({...t, s: two(t.v), o: [0, 12], z: z0})), ...g.north.map(t => ({...t, s: two(t.v), o: [0, -12], z: z0})),
+    ...g.west.map(t => ({...t, s: two(t.v), o: [-14, 0], z: z0})), ...g.east.map(t => ({...t, s: two(t.v), o: [14, 0], z: z0}))];
+})();
 function layers() {
-  const eye = state.view === 'eye', step = state.step, top = eye ? {} : ON_TOP;
+  const eye = state.view === 'eye', flat = state.view === '2d', step = state.step, top = eye ? {} : ON_TOP;
   const out = [new TerrainLayer({id: 'terrain', elevationData: D.img.terrain, texture: texture(texKey()), bounds: BOUNDS,
     elevationDecoder: DECODER, meshMaxError: 2.0, material: false, loaders: [GridTerrainLoader]})];
-  const peaks = eye ? S.peaks_from_estimate.filter(p => p.visible) : M.peaks;
-  const side = p => eye ? 0 : (SIDE.get(p) || 0);
-  // dots first so a label is never crossed by another peak's dot, and only named peaks get labels in the tilted 3D view
-  out.push(new ScatterplotLayer({id: 'peak-dots', data: peaks, billboard: true, getPosition: p => [p.lon, p.lat, p.elev_m + 8], getRadius: 5, radiusUnits: 'pixels',
-    getFillColor: p => p.name === 'Mount Moran' ? [255, 200, 70] : [230, 236, 240], stroked: true, getLineColor: [5, 8, 12], lineWidthMinPixels: 1.5, parameters: top}));
-  out.push(new TextLayer({id: 'peaks', data: eye || state.view === '2d' ? peaks : NAMED, characterSet: 'auto', getPosition: p => [p.lon, p.lat, p.elev_m + (eye ? 30 : 8)],
-    getText: p => eye ? `${p.verified ? p.name : Math.round(p.elev_m) + ' m'}  ${(p.dist_m / 1000).toFixed(1)} km` : (p.verified ? `${p.name} ${Math.round(p.elev_m)} m` : `${Math.round(p.elev_m)} m`),
-    getSize: p => p.name === 'Mount Moran' ? 16 : 12, getColor: p => p.name === 'Mount Moran' ? [255, 214, 110] : (p.verified ? [235, 242, 246] : [170, 185, 195]),
-    fontFamily: UI_FONT, fontWeight: 600, fontSettings: {sdf: true}, outlineWidth: 3, outlineColor: [0, 0, 0, 230],
+  const peaks = eye ? S.peaks_from_estimate.filter(p => p.visible) : (flat ? M.peaks : NAMED);
+  const side = p => eye ? 0 : (SIDE.get(p) || 0), lm = p => p.name === LMN;
+  out.push(new TextLayer({id: 'peak-marks', data: peaks, ...TXT, getPosition: p => [p.lon, p.lat, p.elev_m + 8], getText: () => '▲',
+    getSize: p => lm(p) ? 15 : 11, getColor: INK, outlineWidth: 2, getAlignmentBaseline: 'center', parameters: top}));
+  out.push(new TextLayer({id: 'peaks', data: eye ? peaks : peaks.filter(p => !SUPP.has(p)), ...TXT, getPosition: p => [p.lon, p.lat, p.elev_m + (eye ? 30 : 8)], fontWeight: 600,
+    getText: p => eye ? `${p.verified ? p.name : Math.round(p.elev_m) + ' m'}  ${(p.dist_m / 1000).toFixed(1)} km` : (p.verified ? `${p.name} ${Math.round(p.elev_m)}` : `${Math.round(p.elev_m)}`),
+    getSize: p => lm(p) ? 16 : (p.verified ? 12.5 : 11), getColor: p => p.verified ? INK : [86, 80, 70],
     getTextAnchor: p => ['end', 'middle', 'start'][side(p) + 1], getAlignmentBaseline: p => side(p) ? 'center' : 'bottom',
-    getPixelOffset: p => side(p) ? [side(p) * 10, 0] : [0, -9], parameters: top}));
+    getPixelOffset: p => side(p) ? [side(p) * 11, 0] : [0, -9], parameters: top}));
+  if (!eye) {   // water names in blue italic, glaciers only on the flat map
+    const names = (M.labels || []).filter(l => l.elev_m !== undefined && !PEAK_NAMES.has(l.name) && !(l.kind === 'glacier' && nearPeak(l)) && (flat || (l.kind === 'lake' && l.area_m2 > 300000)));
+    out.push(new TextLayer({id: 'water-names', data: names, ...TXT, getPosition: l => [l.lon, l.lat, l.elev_m + 4], getText: l => l.name,
+      getSize: l => l.kind === 'lake' ? (l.area_m2 > 1e6 ? 14 : 11.5) : 11, getColor: WATER_INK, fontWeight: 'italic 600', parameters: ON_TOP}));
+  }
+  if (flat) {
+    out.push(new TextLayer({id: 'contour-labels', data: M.contours.labels || [], ...TXT, getPosition: l => [l.lon, l.lat, l.elev_m], getText: l => String(l.elev_m),
+      getSize: 10.5, getColor: [138, 84, 46], getAngle: l => l.angle, outlineWidth: 2.5, parameters: ON_TOP}));
+    out.push(new TextLayer({id: 'grid-labels', data: GRID_LABELS, ...TXT, getPosition: t => [t.lon, t.lat, t.z], getText: t => t.s,
+      getSize: 11, getColor: [42, 74, 116], fontWeight: 600, getPixelOffset: t => t.o, parameters: ON_TOP}));
+  }
   if (step >= 3 && step < 5) {
     out.push(new LineLayer({id: 'sight', data: [0], getSourcePosition: () => [EST[0], EST[1], S.estimate.elev_m + 2], getTargetPosition: () => MORAN,
-      getColor: [255, 200, 70, 210], getWidth: 2.5, widthUnits: 'pixels', parameters: top}));
+      getColor: [31, 29, 26, 220], getWidth: 2, widthUnits: 'pixels', parameters: top}));
   }
-  if (step >= 4 && R && state.health === 'healthy') {
-    const lifted = RP.map(p => [p[0], p[1], p[2] + 8]);
-    out.push(new PathLayer({id: 'route', data: [{path: lifted}], getPath: d => d.path, getColor: [255, 255, 255, step >= 5 ? 90 : 230],
-      getWidth: 4, widthUnits: 'pixels', jointRounded: true, capRounded: true, parameters: top}));
-    if (step === 5) {
+  const RR = state.health === 'healthy' ? R : S.routes.injured;
+  if (step >= 4 && RR) {
+    const lifted = RR.path.map(p => [p[0], p[1], p[2] + 8]), walking = step === 5 && RR === R;
+    out.push(new PathLayer({id: 'route-casing', data: [{path: lifted}], getPath: d => d.path, getColor: [255, 255, 255, walking ? 120 : 235],
+      getWidth: 7, widthUnits: 'pixels', jointRounded: true, capRounded: true, parameters: top}));
+    out.push(new PathLayer({id: 'route', data: [{path: lifted}], getPath: d => d.path, getColor: [...ROUTE, walking ? 110 : 255],
+      getWidth: 3.5, widthUnits: 'pixels', jointRounded: true, capRounded: true, parameters: top}));
+    if (walking) {
       out.push(new TripsLayer({id: 'trail', data: [{path: lifted, timestamps: RT}], getPath: d => d.path, getTimestamps: d => d.timestamps,
-        getColor: [56, 225, 255], widthMinPixels: 5, trailLength: 1500, fadeTrail: true, currentTime: state.t, jointRounded: true, capRounded: true, parameters: top}));
+        getColor: ROUTE, widthMinPixels: 5, trailLength: 1500, fadeTrail: true, currentTime: state.t, jointRounded: true, capRounded: true, parameters: top}));
       const w = routeAt(state.t), est = devicePos(w);
       out.push(new ScatterplotLayer({id: 'dr-circle', data: [0], getPosition: () => [est[0], est[1], w.pos[2] + 10], getRadius: () => sigmaNow(w),
-        radiusUnits: 'meters', filled: true, getFillColor: [56, 225, 255, 40], stroked: true, getLineColor: [56, 225, 255, 230], lineWidthMinPixels: 2,
+        radiusUnits: 'meters', filled: true, getFillColor: [...ROUTE, 28], stroked: true, getLineColor: [...ROUTE, 230], lineWidthMinPixels: 1.6,
         updateTriggers: {getPosition: state.t, getRadius: state.t}, parameters: top}));
-      out.push(new ScatterplotLayer({id: 'walker', data: [0], getPosition: () => [w.pos[0], w.pos[1], w.pos[2] + 10], getRadius: 7, radiusUnits: 'pixels',
-        getFillColor: [255, 255, 255], stroked: true, getLineColor: [5, 8, 12], lineWidthMinPixels: 2, updateTriggers: {getPosition: state.t}, parameters: top}));
+      out.push(new ScatterplotLayer({id: 'walker', data: [0], getPosition: () => [w.pos[0], w.pos[1], w.pos[2] + 10], getRadius: 6.5, radiusUnits: 'pixels',
+        getFillColor: ROUTE, stroked: true, getLineColor: [255, 255, 255], lineWidthMinPixels: 2, updateTriggers: {getPosition: state.t}, parameters: top}));
     }
   }
   if (step >= 4) {
-    out.push(new ScatterplotLayer({id: 'lz', data: [LZ], getPosition: p => [p[0], p[1], p[2] + 8], getRadius: 9, radiusUnits: 'pixels',
-      getFillColor: [255, 255, 255], stroked: true, getLineColor: [56, 225, 255], lineWidthMinPixels: 3, parameters: top}));
-    out.push(new TextLayer({id: 'lz-label', data: [LZ], getPosition: p => [p[0], p[1], p[2] + 8], getText: () => 'Rendezvous', getSize: 13, getPixelOffset: [0, -14],
-      getColor: [230, 250, 255], fontFamily: UI_FONT, fontWeight: 600, fontSettings: {sdf: true}, outlineWidth: 3, outlineColor: [0, 0, 0, 230], getAlignmentBaseline: 'bottom', parameters: top}));
+    out.push(new ScatterplotLayer({id: 'lz', data: [LZ], getPosition: p => [p[0], p[1], p[2] + 8], getRadius: 7, radiusUnits: 'pixels',
+      getFillColor: [255, 255, 255], stroked: true, getLineColor: INK, lineWidthMinPixels: 2.5, parameters: top}));
+    if (step < 6) out.push(new TextLayer({id: 'lz-label', data: [LZ], ...TXT, getPosition: p => [p[0], p[1], p[2] + 8], getText: () => 'Rendezvous', getSize: 13,
+      getPixelOffset: [0, -13], getColor: INK, fontWeight: 700, getAlignmentBaseline: 'bottom', parameters: top}));
   }
-  if (step >= 3 && step !== 5 && !eye) {
+  if (step >= 3 && step !== 5 && !eye) {   // the fix, plotted as a circle with a dot
     out.push(new ScatterplotLayer({id: 'fix', data: [EST], getPosition: p => [p[0], p[1], S.estimate.elev_m + 8], getRadius: 8, radiusUnits: 'pixels',
-      filled: false, stroked: true, getLineColor: [56, 225, 255], lineWidthMinPixels: 3, parameters: top}));
+      filled: true, getFillColor: [255, 255, 255, 170], stroked: true, getLineColor: INK, lineWidthMinPixels: 2.4, parameters: top}));
+    out.push(new ScatterplotLayer({id: 'fix-dot', data: [EST], getPosition: p => [p[0], p[1], S.estimate.elev_m + 8], getRadius: 2.2,
+      radiusUnits: 'pixels', getFillColor: INK, parameters: top}));
   }
   if (step === 6) {
     out.push(new LineLayer({id: 'err', data: [0], getSourcePosition: () => [EST[0], EST[1], S.estimate.elev_m + 9], getTargetPosition: () => [TRUTH[0], TRUTH[1], S.truth.elev_m + 9],
-      getColor: [255, 77, 94], getWidth: 3, widthUnits: 'pixels', parameters: top}));
-    out.push(new ScatterplotLayer({id: 'truth', data: [TRUTH], getPosition: p => [p[0], p[1], S.truth.elev_m + 9], getRadius: 8, radiusUnits: 'pixels',
-      getFillColor: [255, 77, 94], stroked: true, getLineColor: [255, 255, 255], lineWidthMinPixels: 2, parameters: top}));
-    out.push(new TextLayer({id: 'truth-label', data: [TRUTH], getPixelOffset: [0, -13], getPosition: p => [p[0], p[1], S.truth.elev_m + 9], getText: () => `true spot, ${S.estimate.error_m} m from the fix`,
-      getSize: 14, getColor: [255, 225, 228], fontFamily: UI_FONT, fontWeight: 600, fontSettings: {sdf: true}, outlineWidth: 3, outlineColor: [0, 0, 0, 230], getAlignmentBaseline: 'bottom', parameters: top}));
+      getColor: [198, 40, 40], getWidth: 2.5, widthUnits: 'pixels', parameters: top}));
+    out.push(new ScatterplotLayer({id: 'truth', data: [TRUTH], getPosition: p => [p[0], p[1], S.truth.elev_m + 9], getRadius: 6, radiusUnits: 'pixels',
+      getFillColor: [198, 40, 40], stroked: true, getLineColor: [255, 255, 255], lineWidthMinPixels: 2, parameters: top}));
+    out.push(new TextLayer({id: 'truth-label', data: [TRUTH], ...TXT, getPixelOffset: [0, -12], getPosition: p => [p[0], p[1], S.truth.elev_m + 9],
+      getText: () => `True spot, ${S.estimate.error_m} m from the fix`, getSize: 14, getColor: [150, 25, 25], fontWeight: 700, getAlignmentBaseline: 'bottom', parameters: top}));
   }
   return out;
 }
@@ -509,17 +594,17 @@ function resetWalk() { state.t = 0; state.fixD = 0; state.lastD = 0; state.drift
 // ---------------------------------------------------------------- texts
 const MS = S.measurements, ST = S.stages;
 function stepCopy() {
-  const s = state.step, r = state.health === 'healthy' ? R : S.routes.injured;
+  const s = state.step, r = state.health === 'healthy' ? R : S.routes.injured, mc = S.mc;
   switch (s) {
-    case 0: return ['GPS lost',`GPS is jammed. The device has only the pre-loaded terrain, a barometer, and a compass with tilt. You could be anywhere in ${S.prior_km2} km².`];
-    case 1: return ['Barometer',`Altitude ${MS.baro_alt_m.toFixed(0)} m ±${MS.baro_sigma_m} m. Only this contour band fits.`];
-    case 2: return ['Bearing to Mount Moran',`Pointing the phone at the summit reads ${MS.bearing_deg.toFixed(0)}° ±${MS.bearing_sigma_deg}°. Only spots on this line of sight fit.`];
-    case 3: return ['Tilt up to the summit',`The phone tilts +${MS.elev_angle_deg.toFixed(1)}° ±${MS.elev_sigma_deg}°. Altitude plus the angle gives the distance, so one peak is enough.`];
-    case 4: return r ? ['Safe route',`A* with Tobler walking time and a ${r.cap_deg}° slope limit, around cliffs and water. ${(r.length_m / 1000).toFixed(1)} km, about ${fmtT(r.time_s)}, steepest ${r.max_slope_deg}°.`]
-      : ['No safe route','With an injured ankle (18° limit, half speed) every way out crosses steeper ground. Stay, signal, wait.'];
-    case 5: return r ? ['Walk out','Steps and heading move the fix as you walk. The circle grows with distance, and a new peak sighting shrinks it again.']
-      : ['Stay put','No walk-out under the injured limit. The phone keeps the fix and beacons it when any signal returns.'];
-    default: return ['Reveal', `The hidden true spot was ${S.estimate.error_m} m from the fix. The simulated sensors carried +${MS.noise_added.baro_m} m, +${MS.noise_added.bearing_deg}° and ${MS.noise_added.elev_deg}° of error.`];
+    case 0: return ['GPS lost', `GPS is jammed. The device has only the pre-loaded map, a barometer, and a compass with tilt. You could be anywhere in ${fmtKm2(S.prior_km2)} km².`];
+    case 1: return ['Barometer', `Altitude ${MS.baro_alt_m.toFixed(0)} m ±${MS.baro_sigma_m} m. Only this band of contours fits.`];
+    case 2: return [`Bearing to ${LMN}`, `Pointing at the summit reads ${MS.bearing_deg.toFixed(0)}° true ±${MS.bearing_sigma_deg}°, after the ${DECL_TXT} declination stored with the map. Only spots on this line fit.`];
+    case 3: return ['Tilt up to the summit', `The phone tilts +${MS.elev_angle_deg.toFixed(1)}° ±${MS.elev_sigma_deg}°. Altitude plus the angle gives the distance, so one peak is enough.`];
+    case 4: return r ? ['Safe route', `A* with Tobler walking time and a ${r.cap_deg}° slope limit, around cliffs and water. ${(r.length_m / 1000).toFixed(1)} km, about ${fmtT(r.time_s)}, steepest ${r.max_slope_deg}°.`]
+      : ['No safe route', `With an injured ankle (${CAP_INJ}° limit, half speed) every way out crosses the hatched ground. Stay, signal, wait.`];
+    case 5: return r ? ['Walk out', `Steps and heading move the fix as you walk. The circle grows with distance, and a new sighting of ${LMN} shrinks it again.`]
+      : ['Stay put', 'No walk-out under the injured limit. The phone keeps the fix and beacons it when any signal returns.'];
+    default: return ['Reveal', `The hidden spot was ${S.estimate.error_m} m from the fix.` + (mc ? ` ${LMN} is in view from only ${Math.round(mc.landmark_visible_share * 100)}% of this land, so picking the landmark for you is the next step.` : '')];
   }
 }
 function updatePanels() {
@@ -532,22 +617,24 @@ function updatePanels() {
   });
   const set = (id, on, txt) => { $(id).classList.toggle('on', on); $(id).textContent = NB(txt); };
   set('sBaro', s >= 1, s >= 1 ? `${MS.baro_alt_m.toFixed(0)} m ±${MS.baro_sigma_m}` : 'waiting');
-  set('sComp', s >= 2, s >= 2 ? `${MS.bearing_deg.toFixed(0)}° ±${MS.bearing_sigma_deg}` : 'waiting');
+  set('sComp', s >= 2, s >= 2 ? `${MS.bearing_deg.toFixed(0)}° true ±${MS.bearing_sigma_deg}` : 'waiting');
   set('sTilt', s >= 3, s >= 3 ? `+${MS.elev_angle_deg.toFixed(1)}° ±${MS.elev_sigma_deg}` : 'waiting');
   set('sDR', s === 5 && !!R && state.health === 'healthy', s === 5 && R && state.health === 'healthy' ? 'tracking' : 'idle');
   const a = s === 0 ? S.prior_km2 : s <= 3 ? ST[s - 1].hpd95_km2 : ST[2].hpd95_km2;
-  $('areaVal').textContent = NB(`${a} km²`);
-  $('areaFrom').textContent = s === 0 ? 'anywhere on the map tile' : s <= 3 ? NB(`down from ${S.prior_km2} km²`) : 'after three readings';
+  countArea(a);
+  $('areaFrom').textContent = s === 0 ? 'anywhere on the map tile' : s <= 3 ? NB(`down from ${fmtKm2(S.prior_km2)} km²`) : 'after three readings';
   $('walkbar').style.display = s === 5 && R && state.health === 'healthy' ? 'flex' : 'none';
   if (s === 5 && R) { const end = RT[RT.length - 1]; $('scrub').value = Math.round(state.t / end * 1000); $('clock').textContent = `${fmtT(state.t)} of ${fmtT(end)}`; }
   const ban = $('banner'), noRoute = s >= 4 && s <= 5 && state.health === 'injured' && !S.routes.injured;
   ban.style.display = noRoute ? 'block' : 'none';
-  ban.innerHTML = noRoute ? '<b>No safe route under 18°</b>Stay, signal, wait.' : '';
+  ban.innerHTML = noRoute ? `<b>No safe route under ${CAP_INJ}°</b>Stay, signal, wait.` : '';
   document.querySelectorAll('[data-health]').forEach(b => press(b, b.dataset.health === state.health));
 }
 
 // ---------------------------------------------------------------- phone (no map: compass tape, arrow, one line, skyline)
 const tape = $('tape').getContext('2d'), sky = $('sky').getContext('2d');
+const SKY_LO = Math.min(-8, Math.floor(Math.min(...S.skyline.horizon_deg)) - 2);
+const SKY_HI = Math.max(SKY_LO + 40, Math.ceil(Math.max(0, ...S.peaks_from_estimate.filter(p => p.visible).map(p => p.elev_deg))) + 8);
 function drawTape(h, marks) {
   const c = tape, w = c.canvas.width, hh = c.canvas.height, span = 110, k = w / span;
   c.clearRect(0, 0, w, hh); c.fillStyle = '#050505'; c.fillRect(0, 0, w, hh);
@@ -563,7 +650,7 @@ function drawTape(h, marks) {
       c.font = card ? `700 24px ${NUM_FONT}` : `400 20px ${NUM_FONT}`; c.fillStyle = card ? '#ffffff' : '#9a9aa3'; c.fillText(lab, x, 30);
     }
   }
-  marks.forEach(m => {   // gold diamond = Mount Moran, cyan diamond = where to walk, a chevron at the edge when it is out of view
+  marks.forEach(m => {   // yellow diamond = the landmark, pink diamond = where to walk, a chevron at the edge when it is out of view
     const off = angd(m.deg, h), x = w / 2 + off * k;
     c.fillStyle = m.color; c.beginPath();
     if (Math.abs(off) <= span / 2) { c.moveTo(x, hh - 30); c.lineTo(x + 10, hh - 16); c.lineTo(x, hh - 2); c.lineTo(x - 10, hh - 16); }
@@ -573,7 +660,7 @@ function drawTape(h, marks) {
   c.fillStyle = '#ffffff'; c.beginPath(); c.moveTo(w / 2 - 10, 0); c.lineTo(w / 2 + 10, 0); c.lineTo(w / 2, 12); c.closePath(); c.fill();
 }
 function drawSky(h, target) {
-  const c = sky, w = c.canvas.width, hh = c.canvas.height, span = 90, k = w / span, a0 = -8, a1 = 32;
+  const c = sky, w = c.canvas.width, hh = c.canvas.height, span = 90, k = w / span, a0 = SKY_LO, a1 = SKY_HI;
   const Y = a => hh - (a - a0) / (a1 - a0) * hh, HZ = S.skyline.horizon_deg, NR = S.skyline.near_ridge_deg, st = S.skyline.az_step_deg;
   c.fillStyle = '#070a0d'; c.fillRect(0, 0, w, hh);
   [[HZ, '#6c737c'], [NR, '#2b3036']].forEach(([arr, col]) => {
@@ -582,15 +669,18 @@ function drawSky(h, target) {
     c.lineTo(w, hh); c.closePath(); c.fill();
   });
   c.font = `600 18px ${UI_FONT}`; c.textAlign = 'center';
-  S.peaks_from_estimate.filter(p => p.visible).forEach(p => {
+  const shown = [], vis = S.peaks_from_estimate.filter(p => p.visible).sort((a, b) => (b.name === target) - (a.name === target) || b.elev_deg - a.elev_deg);
+  vis.forEach(p => {   // the target first, then the highest; a name that would overlap one already drawn is left off
     const off = angd(p.bearing_deg, h); if (Math.abs(off) > span / 2) return;
     const x = w / 2 + off * k, y = Y(p.elev_deg), hit = target && p.name === target;
-    c.fillStyle = hit ? '#ffc846' : '#e6eef2'; c.beginPath(); c.moveTo(x, y - 4); c.lineTo(x - 7, y + 8); c.lineTo(x + 7, y + 8); c.fill();
-    if (hit) { c.strokeStyle = '#ffc846'; c.lineWidth = 2; c.strokeRect(x - 34, y - 34, 68, 56); }
-    const half = c.measureText(p.name).width / 2 + 6;   // keep the name inside the strip
-    c.fillStyle = hit ? '#ffc846' : '#e6eef2'; c.fillText(p.name, Math.min(w - half, Math.max(half, x)), Math.max(20, y - 40));
+    c.fillStyle = hit ? '#ffd60a' : '#e6eef2'; c.beginPath(); c.moveTo(x, y - 4); c.lineTo(x - 7, y + 8); c.lineTo(x + 7, y + 8); c.fill();
+    if (hit) { c.strokeStyle = '#ffd60a'; c.lineWidth = 2; c.strokeRect(x - 34, y - 34, 68, 56); }
+    const half = c.measureText(p.name).width / 2 + 6, lx = Math.min(w - half, Math.max(half, x)), ly = Math.max(20, y - 40);
+    if (shown.some(b => Math.abs(b.x - lx) < b.half + half && Math.abs(b.y - ly) < 22)) return;
+    shown.push({x: lx, y: ly, half});
+    c.fillStyle = hit ? '#ffd60a' : '#e6eef2'; c.fillText(p.name, lx, ly);
   });
-  c.strokeStyle = 'rgba(56,225,255,.8)'; c.lineWidth = 2; c.beginPath(); c.moveTo(w / 2, 0); c.lineTo(w / 2, hh); c.stroke();
+  c.strokeStyle = 'rgba(255,255,255,.6)'; c.lineWidth = 2; c.beginPath(); c.moveTo(w / 2, 0); c.lineTo(w / 2, hh); c.stroke();
 }
 function updatePhone(now) {
   const s = state.step, inj = state.health === 'injured', r = inj ? S.routes.injured : R;
@@ -598,8 +688,8 @@ function updatePhone(now) {
   const mor = wrap(brg(EST, MORAN));
   $('phStop').style.display = 'none'; $('arrow').style.display = '';
   if (s === 0) { big = 'Hold on'; say = 'GPS lost. Finding you from the terrain.'; btn = 'Read barometer'; }
-  else if (s === 1) { big = `${MS.baro_alt_m.toFixed(0)} m`; say = 'Altitude from the barometer. Next, find the peak in the box.'; target = 'Mount Moran'; btn = 'Aim at the peak'; }
-  else if (s === 2) { big = `${MS.bearing_deg.toFixed(0)}°`; say = 'Bearing locked. Now tilt up to the summit.'; target = 'Mount Moran'; arrowTo = mor; btn = 'Tilt and press'; }
+  else if (s === 1) { big = `${MS.baro_alt_m.toFixed(0)} m`; say = 'Altitude from the barometer. Next, find the peak in the box.'; target = LMN; btn = 'Aim at the peak'; }
+  else if (s === 2) { big = `${MS.bearing_deg.toFixed(0)}°`; say = 'Bearing locked. Now tilt up to the summit.'; target = LMN; arrowTo = mor; btn = 'Tilt and press'; }
   else if (s === 3) { big = `+${MS.elev_angle_deg.toFixed(1)}°`; say = 'Position found.'; coords = EST; sig = SIG0; btn = 'Plan route'; }
   else if (s === 4) {
     if (r) { big = `${(r.length_m / 1000).toFixed(1)} km`; say = `Safe route, about ${fmtT(r.time_s)}, steepest ${r.max_slope_deg}°.`; arrowTo = wrap(brg(EST, RP[Math.min(20, RP.length - 1)])); btn = 'Start walking'; }
@@ -608,27 +698,82 @@ function updatePhone(now) {
     const w = routeAt(state.t), est = devicePos(w), leg = S.legs.find(l => l.t1_s > state.t) || S.legs[S.legs.length - 1];
     const legEnd = RP[leg.i1], remain = RD[leg.i1] - w.d, total = RD[RD.length - 1] - w.d;
     arrowTo = wrap(brg(est, legEnd)); big = remain > 0 ? `${Math.round(remain / 10) * 10} m` : 'Arrived';
-    say = now < state.refixUntil ? 'Re-fix. Point at Mount Moran again.' : `${leg.say}. ${(total / 1000).toFixed(1)} km to the rendezvous.`;
-    if (now < state.refixUntil) target = 'Mount Moran';
+    say = now < state.refixUntil ? `Re-fix. Point at ${LMN} again.` : `${leg.say}. ${(total / 1000).toFixed(1)} km to the rendezvous.`;
+    if (now < state.refixUntil) target = LMN;
     coords = est; sig = sigmaNow(w); btn = state.playing ? 'Pause' : 'Resume';
   } else if (s === 6) { big = `${S.estimate.error_m} m`; say = 'The fix was this far from the hidden true spot.'; coords = EST; sig = SIG0; btn = 'Start over'; }
   if ((s === 4 || s === 5) && inj && !S.routes.injured) {
-    $('phStop').style.display = 'block'; $('arrow').style.display = 'none'; big = ''; say = 'No safe way out under 18°. Beacon armed, fix kept.'; coords = EST; sig = SIG0; btn = 'Back';
+    $('phStop').style.display = 'block'; $('arrow').style.display = 'none'; big = ''; say = `No safe way out under ${CAP_INJ}°. Beacon armed, fix kept.`; coords = EST; sig = SIG0; btn = 'Back';
   }
   $('phBig').textContent = NB(big); $('phSay').textContent = NB(say); $('phBtn').textContent = btn;
   $('arrow').style.opacity = arrowTo === null ? 0.15 : 1;
+  $('arrowPath').setAttribute('fill', s === 2 ? '#ffd60a' : '#ff375f');
   $('arrow').style.transform = `rotate(${arrowTo === null ? 0 : angd(arrowTo, state.heading)}deg)`;
-  $('phFix').className = 'tag' + (sig ? ' ok' : ''); $('phFix').textContent = sig ? NB(`FIX ±${Math.round(sig)} m`) : 'NO FIX';
+  $('phFix').className = 'tag' + (sig ? ' ok' : ''); $('phFix').textContent = sig ? NB(`Fix ±${Math.round(sig)} m`) : 'No fix';
   $('phCoords').innerHTML = coords ? `<span>LAT</span> ${coords[1].toFixed(5)}  <span>LON</span> ${coords[0].toFixed(5)}<br><span>MGRS</span> ${mgrs(coords[0], coords[1])}<br><span>HDG</span> ${Math.round(state.heading)}°  <span>±</span>${Math.round(sig)} m  <span>re-fixes</span> ${state.fixes}`
     : '<span>LAT</span> ?  <span>LON</span> ?<br><span>MGRS</span> ?<br><span>HDG</span> ' + Math.round(state.heading) + '°';
-  const marks = [{deg: mor, color: '#ffc846'}]; if (arrowTo !== null) marks.push({deg: arrowTo, color: '#38e1ff'});
+  const marks = [{deg: mor, color: '#ffd60a'}]; if (arrowTo !== null) marks.push({deg: arrowTo, color: '#ff375f'});
   drawTape(state.heading, marks); drawSky(state.heading, target);
+}
+
+// ---------------------------------------------------------------- static texts, the map collar, the area count-down
+function initStatic() {
+  document.title = `${M.name} · Team-8 Terrain Nav`;
+  $('region').textContent = M.region;
+  $('bHealthy').textContent = `Healthy · ${CAP_OK}°`; $('bInjured').textContent = `Injured · ${CAP_INJ}°`;
+  const c = M.bounds, sq = mgrs((c[0] + c[2]) / 2, (c[1] + c[3]) / 2).split(' ');
+  $('sheetNote').innerHTML = NB(`Contours every ${M.contours.interval_m} m<br>UTM ${sq[0]} ${sq[1]}, 1 km grid`);
+  $('lgSteep').textContent = 'Too steep for you';
+  const mc = S.mc;
+  $('mc').innerHTML = mc ? NB(`<b>${mc.n} random tests</b> · median error <b>${mc.median_err_m} m</b> · inside the 95% area <b>${Math.round(mc.truth_in_95_share * 100)}%</b> · without the declination <b>${mc.no_declination.median_err_m} m</b>`) : '';
+  const dem = {cop30: 'Copernicus DEM GLO-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the EU and ESA',
+    '3dep10': 'USGS 3DEP 1/3 arc-second DEM, public domain', file: 'USGS 3DEP 1 m lidar via OpenTopography, public domain'}[M.dem.source] || M.dem.label;
+  $('credit').textContent = `${dem}. ESA WorldCover 2021 (CC BY 4.0). Names from Wikidata (CC0). Declination WMM2025. deck.gl 9.3.11 (MIT), Noto Sans JP and B612 Mono (OFL). Synthetic demo spot, no real person or position. Runs offline.`;
+}
+let collarKey = '';
+function updateCollar() {
+  const vs = state.vs || {}, eye = state.view === 'eye', z = parseFloat($('info').style.zoom) || 1;
+  const key = [state.view, vs.zoom, vs.latitude, vs.bearing, eye ? state.heading : 0, z].join('|');
+  if (key === collarKey) return;
+  collarKey = key;
+  if (eye || vs.zoom === undefined) { $('scaleLab').textContent = 'No scale at eye level'; $('scaleNote').textContent = ''; $('scaleBar').style.visibility = 'hidden'; }
+  else {
+    const mpp = 40075016.686 * Math.cos(vs.latitude * Math.PI / 180) / (512 * Math.pow(2, vs.zoom));
+    const nice = [50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000].find(n => n / (mpp * z) >= 60) || 10000;
+    $('scaleBar').style.visibility = 'visible';
+    $('scaleBar').style.width = `${Math.min(150, Math.round(nice / (mpp * z)))}px`;
+    $('scaleLab').textContent = nice >= 1000 ? `${nice / 1000} km` : `${nice} m`;
+    $('scaleNote').textContent = state.view === '3d' ? 'at the centre' : '';
+  }
+  // true north and magnetic north from one pivot, turned with the map so the star always points at true north on screen
+  const rot = eye ? state.heading : (vs.bearing || 0), a = DECL * Math.PI / 180, f = n => n.toFixed(1);
+  const ex = 27 + 17 * Math.sin(a), ey = 30 - 17 * Math.cos(a), tx = 27 + 23 * Math.sin(a), ty = 30 - 23 * Math.cos(a) + 2.6;
+  $('declSvg').innerHTML = `<g transform="rotate(${f(-rot)} 27 30)" fill="none" stroke="#1f1d1a" stroke-width="1.2"><path d="M27 30V10"/>`
+    + `<path d="M27 30L${f(ex)} ${f(ey)}" stroke-dasharray="3 2"/><circle cx="27" cy="30" r="1.6" fill="#1f1d1a" stroke="none"/>`
+    + `<text x="27" y="8.5" text-anchor="middle" font-size="9" fill="#1f1d1a" stroke="none">★</text>`
+    + `<text x="${f(tx)}" y="${f(ty)}" text-anchor="middle" font-size="7" font-weight="700" fill="#1f1d1a" stroke="none">MN</text></g>`;
+  $('declText').innerHTML = NB(`★ True north<br>MN ${DECL_TXT}<br><span style="color:var(--faint)">WMM2025, ${Math.floor(M.declination.year)}</span>`);
+}
+let areaFrom = null, areaRaf = 0;
+const fmtKm2 = v => v >= 10 ? v.toFixed(1) : v >= 1 ? v.toFixed(2) : v.toFixed(3);
+function countArea(to) {   // the area counts down when a reading lands (on a log scale, so each cut feels its true size)
+  const el = $('areaVal');
+  if (areaFrom === null || REDUCED || STILL || Math.abs(areaFrom - to) < 1e-9) { areaFrom = to; el.textContent = NB(`${fmtKm2(to)} km²`); return; }
+  const from = areaFrom, t0 = performance.now(), dur = 900;
+  areaFrom = to; cancelAnimationFrame(areaRaf);
+  const f = now => {
+    const u = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - u, 3);
+    el.textContent = NB(`${fmtKm2(Math.exp(Math.log(from) + (Math.log(to) - Math.log(from)) * e))} km²`);
+    if (u < 1) areaRaf = requestAnimationFrame(f);
+  };
+  areaRaf = requestAnimationFrame(f);
 }
 
 // ---------------------------------------------------------------- render loop
 let deckgl, lastFrame = performance.now();
 const STILL = new URLSearchParams(location.search).has('still');
-function render() { if (deckgl) deckgl.setProps({layers: layers()}); updatePanels(); updatePhone(performance.now()); }
+if (STILL) document.documentElement.classList.add('still');   // screenshots: no half-finished button transitions
+function render() { if (deckgl) deckgl.setProps({layers: layers()}); updatePanels(); updatePhone(performance.now()); updateCollar(); }
 function tick(now) {
   const dt = Math.min(0.1, (now - lastFrame) / 1000); lastFrame = now;
   if (state.step === 5 && R && state.health === 'healthy' && state.playing && now >= state.refixUntil) {
@@ -659,7 +804,9 @@ function go(step) {
   // the map labels are drawn into a glyph atlas once, so the bundled fonts must be ready before deck.gl starts
   const faces = ['600 16px "Noto Sans JP"', '700 16px "Noto Sans JP"', '400 16px "B612 Mono"', '700 16px "B612 Mono"'];
   await Promise.all([prepImages(), document.fonts ? Promise.all(faces.map(f => document.fonts.load(f))).catch(() => null) : null]);
+  window.TEAM8_PREP = Math.round(performance.now());
   fitUI();
+  initStatic();
   state.vs = fitVS(58, -62);
   deckgl = new Deck({
     parent: $('stage'), views: [mapView], viewState: state.vs, layers: [], useDevicePixels: true,
@@ -667,6 +814,7 @@ function go(step) {
       state.vs = viewState;
       if (state.view === 'eye') { state.heading = wrap(viewState.bearing); updatePhone(performance.now()); }
       deckgl.setProps({viewState});
+      updateCollar();
     },
     onAfterRender: () => {
       if (state.loaded) return;
@@ -714,7 +862,7 @@ window.addEventListener('keydown', e => {
   else if (e.key === 'q' || e.key === 'e') { state.heading = wrap(state.heading + (e.key === 'q' ? -5 : 5)); if (state.view === 'eye') { state.vs = {...state.vs, bearing: state.heading}; deckgl.setProps({viewState: state.vs}); } updatePhone(performance.now()); }
 });
 window.addEventListener('resize', () => { fitUI(); if (state.view !== 'eye') setView(state.view); });
-})();
+}
 </script>
 </body>
 </html>
