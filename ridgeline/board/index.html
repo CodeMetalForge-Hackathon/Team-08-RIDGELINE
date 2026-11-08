@@ -49,15 +49,15 @@ td.r{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
 .legend svg{display:block}
 .legend .wide{grid-column:1/-1;font-size:12px;color:var(--ink2);border-top:1px solid var(--rule);margin-top:4px;padding-top:2px}
 .legend:not(.has-marks) .lg-m,.legend:not(.has-gps) .lg-g{display:none}
-.marks{display:flex;flex-direction:column;gap:6px;border-top:2px solid var(--ink);padding-top:12px}
-.marks .mr{display:grid;grid-template-columns:22px 26px 1fr;gap:6px;align-items:start;font-size:13px;line-height:1.4}
+.marks{display:flex;flex-direction:column;gap:3px;border-top:2px solid var(--ink);padding-top:12px}
+.marks .mr{display:grid;grid-template-columns:22px 26px 1fr;gap:6px;align-items:start;font-size:13px;line-height:1.35}
 .marks .mr svg{margin-top:1px}
 .marks b{font:800 14px/1.3 var(--mono)}.marks b.h{color:var(--hide)}.marks b.s{color:var(--sig-ink)}
-.atak{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--ink2)}
-.atak b{letter-spacing:.08em;color:var(--ink)}
-.atak i{width:8px;height:8px;border-radius:50%;background:#8a8f93}
+.atak{font-size:12px;line-height:1.5;color:var(--ink2)}
+.atak b{letter-spacing:.08em;color:var(--ink);margin-right:6px}
+.atak i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#8a8f93;margin-right:6px;vertical-align:1px}
 .atak.on i{background:var(--green)}
-.atak .err{color:var(--red)}
+.atak .err{color:var(--red)}.atak .nw{white-space:nowrap}
 </style>
 </head>
 <body>
@@ -458,14 +458,15 @@ async function atakPoll() {
     const on = a.connected === true || (typeof a.connected === 'number' && a.connected > 0);
     const n = Array.isArray(a.clients) ? a.clients.length : Number.isFinite(+a.clients) && a.clients !== null && a.clients !== '' ? +a.clients : null;
     const parts = [];
-    if (a.mode) parts.push(esc(String(a.mode).slice(0, 24)));
+    if (a.mode) parts.push(esc(String(a.mode).slice(0, 24).replace('server', a.cot_port ? 'server ' + (+a.cot_port || '') : 'server')));
     parts.push(on ? 'linked' : 'not linked');
     if (n != null) parts.push(`${n} client${n === 1 ? '' : 's'}`);
     if (Number.isFinite(+a.sent) && a.sent !== null && a.sent !== '') parts.push(`${+a.sent} sent`);
     const ago = agoText(a.last_sent);
     if (ago) parts.push('last ' + ago);
-    if (a.last_error) parts.push(`<span class="err">${esc(String(a.last_error).slice(0, 80))}</span>`);
-    $('atak-t').innerHTML = parts.join(' · ');
+    const html = parts.map(p => `<span class="nw">${p}</span>`);   // wrap between the parts, not inside one
+    if (a.last_error) html.push(`<span class="err">${esc(String(a.last_error).slice(0, 80))}</span>`);
+    $('atak-t').innerHTML = html.join(' · ');
     el.classList.toggle('on', on);
     el.hidden = false;
   } catch (e) { el.hidden = true; /* no server or no ATAK */ }
