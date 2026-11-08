@@ -115,6 +115,7 @@ async function aim(phone, wrongPeak) {
 
 async function lockAndTime(phone, viewer, expectLocks, label) {
   const seq0 = await viewer.eval('window.TEAM8_LIVE_LAST ? TEAM8_LIVE_LAST.seq : 0');
+  const vt0 = await viewer.eval('performance.now()');   // to line up the viewer's long tasks with this lock
   const t0 = Date.now();
   await phone.key('Enter');
   await viewer.until(`window.TEAM8_LIVE_LAST && TEAM8_LIVE_LAST.seq > ${seq0} && TEAM8_LIVE_LAST.locks === ${expectLocks} && TEAM8_LIVE_LAST.painted_at_ms`, 8000, 20);
@@ -129,7 +130,15 @@ async function lockAndTime(phone, viewer, expectLocks, label) {
     verdict: document.getElementById('verdict').textContent, lag_ms_sent_to_shown: TEAM8_LIVE_LAST.lag_ms, r95_m: TEAM8_LIVE.geometry.r95,
     layers: TEAM8_DECK.props.layers.filter(l => l.id.startsWith('live') && l.props.data && l.props.data.length).map(l => l.id)})`);
   log(`  ${label}: viewer showed it ${ms} ms after Enter (sent to shown ${vw.lag_ms_sent_to_shown} ms) | phone ${ph.meter} · ${ph.fix}${ph.wrong ? ' · WRONG: ' + ph.wrong : ''} | viewer "${vw.title}" ±${vw.r95_m} m`);
-  return {label, viewer_update_ms: ms, seen_by_test_ms: seen_ms, same_r95: ph.r95_m === vw.r95_m, phone: ph, viewer: vw};
+  const long_tasks = await viewer.eval(`(window.__lt || []).filter(e => e[0] + e[1] > ${vt0}).map(e => [Math.round(e[0] - ${vt0}), e[1]])`);   // [ms after Enter, ms long]
+  // the phone's POST /lock for this lock: total, time spent starting the service worker first, connect, server wait
+  const post = await phone.eval(`(() => { const e = performance.getEntriesByType('resource').filter(e => /\\/lock$/.test(e.name)).at(-1);
+    return e && {ms: Math.round(e.duration), sw_ms: e.workerStart ? Math.round(e.fetchStart - e.workerStart) : 0, connect_ms: Math.round(e.connectEnd - e.connectStart),
+      wait_ms: Math.round(e.responseStart - e.requestStart)}; })()`);
+  const polls = await viewer.eval(`performance.getEntriesByType('resource').filter(e => /\\/state$/.test(e.name) && e.startTime + e.duration > ${vt0} - 600)
+    .map(e => [Math.round(e.startTime - ${vt0}), Math.round(e.duration), Math.round(e.connectEnd - e.connectStart), Math.round(e.responseStart - e.requestStart),
+      Math.round((e.connectStart || e.requestStart) - e.fetchStart), Math.round(e.responseEnd - e.responseStart), e.encodedBodySize])`);   // [ms after Enter, ms long, connect, server wait, queued, body, bytes]
+  return {label, viewer_update_ms: ms, seen_by_test_ms: seen_ms, long_tasks, post, polls, same_r95: ph.r95_m === vw.r95_m, phone: ph, viewer: vw};
 }
 
 async function main() {
@@ -157,24 +166,36 @@ async function main() {
     await phone.key('Enter');
     await phone.until(`screen === 'aim'`, 5000);
     await viewer.until(`window.TEAM8_LIVE && TEAM8_LIVE.on && document.getElementById('stepTitle').textContent === 'Phone ready'`, 5000);
+    // main-thread tasks over 50 ms in the viewer, to see what holds up a lock when it is slow
+    await phone.eval('performance.setResourceTimingBufferSize(20000); true');
+    await viewer.eval(`performance.setResourceTimingBufferSize(20000); window.__lt = []; new PerformanceObserver(l => { for (const e of l.getEntries()) __lt.push([Math.round(e.startTime), Math.round(e.duration)]); }).observe({type: 'longtask'}); true`);
     res.checks.viewer_phone_ready = true;
     await phone.shot('phone_0_aim.png'); await viewer.shot('viewer_0_ready.png');
     // P1.3: camera behind a crosshair on the Lock screen, in three stages, because headless Chrome's fake camera opens only
     // once per process (a second getUserMedia gives NotFoundError, see .local/camprobe.mjs), and in some runs its track
     // ends by itself after a few seconds:
     //  1. the real (fake) camera through getUserMedia and the permission prompt, then Camera off ends its track;
+    //     on a busy machine headless Chrome sometimes hands over a track that has already ended: then the phone must
+    //     say the camera did not start, and the run records that the real camera was not seen this time;
     //  2. a track that ends by itself (an 'ended' event on a canvas track): the phone notices and says so;
     //  3. an animated canvas stream stands in for the camera: it stays on through two locks, and Use this fix ends it.
     const camUp = `(() => { const v = document.getElementById('cam'); return !!(camOn && camStream && v && !v.hidden && v.srcObject === camStream && camStream.getVideoTracks().length > 0 && camStream.getVideoTracks()[0].readyState === 'live' && document.getElementById('sky-wrap').classList.contains('cam-on')); })()`;   // headless Chrome does not always decode the fake frames into the element, so frames are not required
     const camOff = `!camOn && camStream === null && document.getElementById('cam').hidden && !document.getElementById('sky-wrap').classList.contains('cam-on')`;
     await phone.eval(`document.getElementById('cam-toggle').click()`);
-    await phone.until(camUp, 25000);   // Chrome's media process can take a while to start on a busy machine
-    res.checks.camera = {notice: await phone.eval(`document.getElementById('notice').textContent`), size: await phone.eval(`[document.getElementById('cam').videoWidth, document.getElementById('cam').videoHeight]`),
-      track: await phone.eval(`camStream.getVideoTracks()[0].label`), settings: await phone.eval(`(({width, height, frameRate}) => ({width, height, frameRate}))(camStream.getVideoTracks()[0].getSettings())`),
-      focus_on_main: await phone.eval(`document.activeElement === document.getElementById('main')`), skyline_hidden: await phone.eval(`getComputedStyle(document.getElementById('sky')).visibility === 'hidden'`)};
-    await phone.shot('phone_1_camera.png');
-    await phone.eval(`window.__camTracks = camStream.getTracks(); document.getElementById('cam-toggle').click()`);
-    res.checks.camera.off_ends_tracks = await phone.eval(`${camOff} && __camTracks.length > 0 && __camTracks.every(t => t.readyState === 'ended')`);
+    // Chrome's media process can take a while to start on a busy machine
+    const real = await phone.until(`(${camUp}) ? 'opened' : (!camOn && camStream === null && camLostAt > 0 ? 'did not start' : '')`, 25000);
+    res.checks.camera = {real_camera: real, notice: await phone.eval(`document.getElementById('notice').textContent`)};
+    if (real === 'opened') {
+      Object.assign(res.checks.camera, {size: await phone.eval(`[document.getElementById('cam').videoWidth, document.getElementById('cam').videoHeight]`),
+        track: await phone.eval(`camStream.getVideoTracks()[0].label`), settings: await phone.eval(`(({width, height, frameRate}) => ({width, height, frameRate}))(camStream.getVideoTracks()[0].getSettings())`),
+        focus_on_main: await phone.eval(`document.activeElement === document.getElementById('main')`), skyline_hidden: await phone.eval(`getComputedStyle(document.getElementById('sky')).visibility === 'hidden'`)});
+      await phone.shot('phone_1_camera.png');
+      await phone.eval(`window.__camTracks = camStream.getTracks(); document.getElementById('cam-toggle').click()`);
+      res.checks.camera.off_ends_tracks = await phone.eval(`${camOff} && __camTracks.length > 0 && __camTracks.every(t => t.readyState === 'ended')`);
+    } else {
+      res.checks.camera.failure_reported = await phone.eval(`${camOff} && /camera did not start/i.test(document.getElementById('notice').textContent)`);
+      await phone.shot('phone_1_camera_failed.png');
+    }
     // from here getUserMedia hands out an animated canvas stream (frames keep coming, nothing ends by itself)
     await phone.eval(`(() => { const c = document.createElement('canvas'); c.width = 160; c.height = 120; const x = c.getContext('2d'); let f = 0;
       setInterval(() => { x.fillStyle = '#4a6b52'; x.fillRect(0, 0, 160, 120); x.fillStyle = '#d8d2c0'; x.fillRect((f++ * 3) % 160, 40, 30, 30); }, 100);
@@ -313,6 +334,13 @@ async function main() {
     // leaving and coming back
     await viewer.eval(`document.querySelector('[data-live="leave"]').click()`);
     res.checks.viewer_left_live = await viewer.eval(`!TEAM8_LIVE.on`);
+    // a route update from the phone after Leave is kept but does not take the screen back (only a lock does)
+    {
+      const seq0 = await viewer.eval('TEAM8_LIVE_LAST ? TEAM8_LIVE_LAST.seq : 0');
+      await phone.eval(`postLive('route')`);
+      await sleep(1200);
+      res.checks.route_after_leave_stays_off = await viewer.eval(`!TEAM8_LIVE.on`);
+    }
     // P1.1 is the teammate's judge flow (PR #5): a click on the map drops a pilot there, makes noisy locks from that
     // spot, solves and shows the error. Checked here so the live mode is known not to break it: a real mouse click at
     // the screen point of the demo spot (solver_grid.json, with its ground height). The viewer keeps its state private,
@@ -344,11 +372,13 @@ async function main() {
       unlock_needs_two_actions: !!(res.checks.pin && res.checks.pin.unlock_after_one_action_still_locked === true && res.checks.pin.unlock_after_two_actions_locked === false),
       keyboard_pin: !!(res.checks.keyboard_pin && res.checks.keyboard_pin.moved_west && res.checks.keyboard_pin.dropped_unlocked && res.checks.keyboard_pin.locked_by_hold)};
     const cam = res.checks.camera;
-    res.summary.camera = !!(cam && /fake_device/.test(cam.track) && cam.focus_on_main && cam.skyline_hidden && cam.off_ends_tracks && cam.off_ends_tracks && cam.ended_noticed && cam.on_after_two_locks && cam.stopped_off_aim);
+    const realOk = cam && (cam.real_camera === 'opened' ? /fake_device/.test(cam.track) && cam.focus_on_main && cam.skyline_hidden && cam.off_ends_tracks : cam.failure_reported === true);
+    res.summary.camera = !!(realOk && cam.ended_noticed && cam.on_after_two_locks && cam.stopped_off_aim);
+    res.summary.real_camera_opened = !!(cam && cam.real_camera === 'opened');   // informational: headless Chrome does not always start it
     const tr = res.checks.trust;
     res.summary.trust_card = !!(tr && tr.open && tr.curves >= 3 && tr.marks_this_fix && new RegExp('±' + res.checks.reveal.r95_m + ' m').test(tr.title) && /19 in 20/.test(tr.caption) && tr.closes);
     const jc = res.checks.judge_click;
-    res.summary.judge_click = !!(jc && jc.how === 'mouse click' && !jc.live_on && jc.fix && Number.isFinite(jc.fix.err_m) && Number.isFinite(jc.fix.r95_m));
+    res.summary.judge_click = !!(res.checks.route_after_leave_stays_off && jc && jc.how === 'mouse click' && !jc.live_on && jc.fix && Number.isFinite(jc.fix.err_m) && Number.isFinite(jc.fix.r95_m));
     log('summary', JSON.stringify(res.summary));
   } catch (err) {
     res.error = String(err && err.stack || err);
