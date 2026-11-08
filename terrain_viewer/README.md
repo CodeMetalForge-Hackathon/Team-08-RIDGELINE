@@ -8,8 +8,9 @@ Click anywhere on the map to drop the pilot there. The page works out what the p
 with noise, and solves the fix from those readings alone in about 0.2 s, in the browser. Click again to pick where
 to go, and the route is planned in the browser too.
 
-The map is drawn like a printed topographic sheet (woods, rock, water, contours, a 1 km UTM grid, a collar with
-scale bar and declination), and any mountain on Earth can be added with five commands.
+The map is painted in the team's relief style, the same as Noah's route plots (elevation tint, relief shading, water,
+contours, a 1 km UTM grid), with the collar of a printed sheet (scale bar and declination), and any mountain on Earth
+can be added with five commands.
 
 ![Three peaks, Mount Moran, step 4](screenshots/01_fix_3d.png)
 
@@ -101,9 +102,11 @@ summits outside the tile.
 
 ## Design rules
 
-* A printed topographic sheet that moves. Conventions follow USGS US Topo, swisstopo and CalTopo. Green woods,
-  grey rock, blue water with italic names, brown contours with bold index lines and elevation labels along the line,
-  a 1 km UTM grid with its digits on the edge, summits as black triangles with names and heights.
+* One map style for the whole team. The texture is painted like Noah's route plots (`scripts/team8_relief.py`,
+  from `plotting.py` on `Sprint2-NavAlgorithm`): elevation tint from green valleys through tan and brown to grey
+  summits between the 2nd and 98th percentile, soft relief shading lit from the north-west (vertical exaggeration 2),
+  blue water with italic names (only water is blue), dark contours with bold index lines and elevation labels along
+  the line, a white 1 km UTM grid with its digits on the edge, summits as black triangles with names and heights.
 * The collar sits at the bottom of the sidebar, as on a paper map. Scale bar, contour interval, UTM zone and
   100 km square, and a declination diagram that turns with the map.
 * Plotting follows the paper habit of land navigation. A pencil line from each aimed summit, the fix as a circle with a dot.
@@ -124,15 +127,19 @@ summits outside the tile.
 | `data/<area>/nogo.png` | water (red) and cliffs (green) on the working grid, from `scripts/team8_masks.py` |
 | `data/<area>/terrain_meta.json` | bounds, grid, decoder, contours and their labels, UTM grid ticks, declination, peaks, lake and glacier names, credits |
 | `data/<area>/terrain_rgb.png`, `terrain_rgb_mesh.png` | Mapbox terrain-RGB, h = -10000 + (R*65536 + G*256 + B) * 0.1, EPSG:4326 grid, edges = `bounds` |
-| `data/<area>/topo.jpg` | the printed-map texture (land cover tints, relief shading, water, contours, 1 km grid) |
+| `data/<area>/topo.jpg` | the map texture in the team's relief style (elevation tint, relief shading, water, contours, 1 km grid), from `scripts/team8_relief.py`; the tint range is in `terrain_meta.json` as `map_style` |
 | `data/<area>/slope.png` | slope in degrees x 2 on a 30 m smoothed surface. The route planner and the red hatching read the same file |
 | `data/<area>/sim.json` | the demo spot (truth), the Python run of the first version, the Monte Carlo test of that version |
-| `scripts/` | fetch, prep, simulate, masks, bundle, the WMM2025 model and its coefficients, the font packer |
+| `scripts/` | fetch, prep, relief (prep calls it; run it alone to repaint a prepared tile), simulate, masks, bundle, the WMM2025 model and its coefficients, the font packer |
 | `lib/deck.gl@9.3.11/` | deck.gl standalone bundle and its MIT license |
 | `lib/fonts/fonts.css` | Noto Sans JP and B612 Mono as data URLs, because Chrome blocks font files on `file://` |
 | `screenshots/` | 1600 x 900 headless captures |
 
-The first version (one tile, dark theme, PR #2) and the one-summit version (PR #4) stay in the git history.
+The first version (one tile, dark theme, PR #2), the one-summit version (PR #4) and the printed-sheet colours (land
+cover tints and brown contours, up to PR #5) stay in the git history.
+
+`index.html` draws the terrain unlit (`material: {unlit: true}`), because the shading is already in the map picture.
+In deck.gl 9, `material: false` still lights the mesh with the default material, which darkened the map and shaded it twice.
 
 The deck.gl bundle parses terrain only in a web worker downloaded from a CDN. `index.html` therefore passes its own
 loader (`GridTerrainLoader`) that decodes the PNG on the main thread and builds a regular grid mesh. That is what
