@@ -190,8 +190,13 @@ async function main() {
         track: await phone.eval(`camStream.getVideoTracks()[0].label`), settings: await phone.eval(`(({width, height, frameRate}) => ({width, height, frameRate}))(camStream.getVideoTracks()[0].getSettings())`),
         focus_on_main: await phone.eval(`document.activeElement === document.getElementById('main')`), skyline_hidden: await phone.eval(`getComputedStyle(document.getElementById('sky')).visibility === 'hidden'`)});
       await phone.shot('phone_1_camera.png');
-      await phone.eval(`window.__camTracks = camStream.getTracks(); document.getElementById('cam-toggle').click()`);
-      res.checks.camera.off_ends_tracks = await phone.eval(`${camOff} && __camTracks.length > 0 && __camTracks.every(t => t.readyState === 'ended')`);
+      // the fake camera's track can end by itself seconds after it opened (see above): then the phone must have said so
+      if (await phone.eval(camUp)) {
+        await phone.eval(`window.__camTracks = camStream.getTracks(); document.getElementById('cam-toggle').click()`);
+        res.checks.camera.off_ends_tracks = await phone.eval(`${camOff} && __camTracks.length > 0 && __camTracks.every(t => t.readyState === 'ended')`);
+      } else {
+        res.checks.camera.ended_by_itself_reported = await phone.eval(`${camOff} && /camera stopped/i.test(document.getElementById('notice').textContent)`);
+      }
     } else {
       res.checks.camera.failure_reported = await phone.eval(`${camOff} && /camera did not start/i.test(document.getElementById('notice').textContent)`);
       await phone.shot('phone_1_camera_failed.png');
@@ -372,7 +377,7 @@ async function main() {
       unlock_needs_two_actions: !!(res.checks.pin && res.checks.pin.unlock_after_one_action_still_locked === true && res.checks.pin.unlock_after_two_actions_locked === false),
       keyboard_pin: !!(res.checks.keyboard_pin && res.checks.keyboard_pin.moved_west && res.checks.keyboard_pin.dropped_unlocked && res.checks.keyboard_pin.locked_by_hold)};
     const cam = res.checks.camera;
-    const realOk = cam && (cam.real_camera === 'opened' ? /fake_device/.test(cam.track) && cam.focus_on_main && cam.skyline_hidden && cam.off_ends_tracks : cam.failure_reported === true);
+    const realOk = cam && (cam.real_camera === 'opened' ? /fake_device/.test(cam.track) && cam.focus_on_main && cam.skyline_hidden && (cam.off_ends_tracks || cam.ended_by_itself_reported) : cam.failure_reported === true);
     res.summary.camera = !!(realOk && cam.ended_noticed && cam.on_after_two_locks && cam.stopped_off_aim);
     res.summary.real_camera_opened = !!(cam && cam.real_camera === 'opened');   // informational: headless Chrome does not always start it
     const tr = res.checks.trust;
