@@ -56,6 +56,7 @@ FILES = {
     '/hide.js': HERE / 'hide.js',            # HIDE and SIGNAL candidates (terrain only)
     '/skyline.js': HERE / 'skyline.js',      # expected horizon toward the next peak
     '/pace.js': HERE / 'pace.js',            # Auto-PACE, the fix keeps living as you walk
+    '/follow.js': HERE / 'follow.js',        # Follow, the locked route one instruction at a time
     '/sw.js': HERE / 'phone' / 'sw.js',      # service worker at the root so its scope is the whole app
     '/manifest.webmanifest': HERE / 'phone' / 'manifest.webmanifest',
     '/data/moran.json': HERE / 'data' / 'moran.json',
