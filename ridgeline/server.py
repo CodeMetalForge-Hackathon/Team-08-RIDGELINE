@@ -32,6 +32,10 @@ FILES = {
     '/trust/': HERE / 'trust' / 'index.html',
     '/data/trust.json': HERE / 'data' / 'trust.json',
     '/solver.js': HERE / 'solver.js',
+    '/hide.js': HERE / 'hide.js',            # HIDE and SIGNAL candidates (terrain only)
+    '/skyline.js': HERE / 'skyline.js',      # expected horizon toward the next peak
+    '/sw.js': HERE / 'phone' / 'sw.js',      # service worker at the root so its scope is the whole app
+    '/manifest.webmanifest': HERE / 'phone' / 'manifest.webmanifest',
     '/data/moran.json': HERE / 'data' / 'moran.json',
     '/topo/moran.jpg': REPO / 'terrain_viewer' / 'data' / 'moran' / 'topo.jpg',
 }
