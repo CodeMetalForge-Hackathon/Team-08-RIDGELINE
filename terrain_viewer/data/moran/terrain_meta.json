@@ -1,0 +1,571 @@
+{
+ "schema": "team8-terrain/v2",
+ "id": "moran",
+ "name": "Mount Moran",
+ "region": "Grand Teton National Park, Wyoming",
+ "bounds": [
+  -110.8470901,
+  43.8170335,
+  -110.7183154,
+  43.8887408
+ ],
+ "grid": {
+  "width": 2070,
+  "height": 1596,
+  "cell_m": [
+   5.002,
+   4.992
+  ],
+  "crs": "EPSG:4326",
+  "note": "pixel edges match bounds; row 0 is north"
+ },
+ "mesh": {
+  "width": 1035,
+  "height": 798
+ },
+ "elevation_decoder": {
+  "rScaler": 6553.6,
+  "gScaler": 25.6,
+  "bScaler": 0.1,
+  "offset": -10000
+ },
+ "elev_range_m": [
+  2055.4,
+  3843.4
+ ],
+ "contours": {
+  "interval_m": 50,
+  "index_m": 250,
+  "labels": [
+   {
+    "lon": -110.759903,
+    "lat": 43.883445,
+    "elev_m": 2250,
+    "angle": 12.0
+   },
+   {
+    "lon": -110.765004,
+    "lat": 43.864778,
+    "elev_m": 2250,
+    "angle": 51.1
+   },
+   {
+    "lon": -110.746237,
+    "lat": 43.850214,
+    "elev_m": 2250,
+    "angle": -59.0
+   },
+   {
+    "lon": -110.739125,
+    "lat": 43.838146,
+    "elev_m": 2250,
+    "angle": -73.0
+   },
+   {
+    "lon": -110.739685,
+    "lat": 43.82439,
+    "elev_m": 2250,
+    "angle": 27.8
+   },
+   {
+    "lon": -110.783196,
+    "lat": 43.88436,
+    "elev_m": 2500,
+    "angle": 72.3
+   },
+   {
+    "lon": -110.800071,
+    "lat": 43.859379,
+    "elev_m": 2500,
+    "angle": -22.3
+   },
+   {
+    "lon": -110.821491,
+    "lat": 43.860688,
+    "elev_m": 2500,
+    "angle": -5.4
+   },
+   {
+    "lon": -110.838225,
+    "lat": 43.856341,
+    "elev_m": 2500,
+    "angle": 62.5
+   },
+   {
+    "lon": -110.778709,
+    "lat": 43.851741,
+    "elev_m": 2500,
+    "angle": 59.8
+   },
+   {
+    "lon": -110.792936,
+    "lat": 43.875907,
+    "elev_m": 2750,
+    "angle": 25.7
+   },
+   {
+    "lon": -110.774842,
+    "lat": 43.875869,
+    "elev_m": 2750,
+    "angle": -46.5
+   },
+   {
+    "lon": -110.787213,
+    "lat": 43.863377,
+    "elev_m": 2750,
+    "angle": -12.8
+   },
+   {
+    "lon": -110.839023,
+    "lat": 43.868051,
+    "elev_m": 2750,
+    "angle": -25.6
+   },
+   {
+    "lon": -110.831434,
+    "lat": 43.843699,
+    "elev_m": 2750,
+    "angle": 47.1
+   },
+   {
+    "lon": -110.813091,
+    "lat": 43.838667,
+    "elev_m": 2750,
+    "angle": 63.3
+   },
+   {
+    "lon": -110.813986,
+    "lat": 43.826671,
+    "elev_m": 2750,
+    "angle": 58.7
+   },
+   {
+    "lon": -110.797042,
+    "lat": 43.848258,
+    "elev_m": 2750,
+    "angle": 18.5
+   },
+   {
+    "lon": -110.757103,
+    "lat": 43.839391,
+    "elev_m": 2750,
+    "angle": -77.0
+   },
+   {
+    "lon": -110.761272,
+    "lat": 43.82402,
+    "elev_m": 2750,
+    "angle": 89.2
+   },
+   {
+    "lon": -110.790572,
+    "lat": 43.822587,
+    "elev_m": 2750,
+    "angle": 41.4
+   },
+   {
+    "lon": -110.81469,
+    "lat": 43.872364,
+    "elev_m": 3000,
+    "angle": -30.0
+   },
+   {
+    "lon": -110.831693,
+    "lat": 43.828521,
+    "elev_m": 3000,
+    "angle": 25.4
+   },
+   {
+    "lon": -110.785554,
+    "lat": 43.833231,
+    "elev_m": 3500,
+    "angle": 58.1
+   }
+  ]
+ },
+ "utm_grid": {
+  "zone": 12,
+  "epsg": "EPSG:32612",
+  "south": [
+   {
+    "v": 513000,
+    "lon": -110.838349,
+    "lat": 43.817034
+   },
+   {
+    "v": 514000,
+    "lon": -110.825914,
+    "lat": 43.817034
+   },
+   {
+    "v": 515000,
+    "lon": -110.813479,
+    "lat": 43.817034
+   },
+   {
+    "v": 516000,
+    "lon": -110.801044,
+    "lat": 43.817034
+   },
+   {
+    "v": 517000,
+    "lon": -110.78861,
+    "lat": 43.817034
+   },
+   {
+    "v": 518000,
+    "lon": -110.776175,
+    "lat": 43.817034
+   },
+   {
+    "v": 519000,
+    "lon": -110.76374,
+    "lat": 43.817034
+   },
+   {
+    "v": 520000,
+    "lon": -110.751305,
+    "lat": 43.817034
+   },
+   {
+    "v": 521000,
+    "lon": -110.738871,
+    "lat": 43.817034
+   },
+   {
+    "v": 522000,
+    "lon": -110.726436,
+    "lat": 43.817034
+   }
+  ],
+  "north": [
+   {
+    "v": 513000,
+    "lon": -110.838155,
+    "lat": 43.888741
+   },
+   {
+    "v": 514000,
+    "lon": -110.825705,
+    "lat": 43.888741
+   },
+   {
+    "v": 515000,
+    "lon": -110.813256,
+    "lat": 43.888741
+   },
+   {
+    "v": 516000,
+    "lon": -110.800806,
+    "lat": 43.888741
+   },
+   {
+    "v": 517000,
+    "lon": -110.788357,
+    "lat": 43.888741
+   },
+   {
+    "v": 518000,
+    "lon": -110.775907,
+    "lat": 43.888741
+   },
+   {
+    "v": 519000,
+    "lon": -110.763457,
+    "lat": 43.888741
+   },
+   {
+    "v": 520000,
+    "lon": -110.751008,
+    "lat": 43.888741
+   },
+   {
+    "v": 521000,
+    "lon": -110.738558,
+    "lat": 43.888741
+   },
+   {
+    "v": 522000,
+    "lon": -110.726109,
+    "lat": 43.888741
+   }
+  ],
+  "west": [
+   {
+    "v": 4852000,
+    "lon": -110.84709,
+    "lat": 43.82097
+   },
+   {
+    "v": 4853000,
+    "lon": -110.84709,
+    "lat": 43.829973
+   },
+   {
+    "v": 4854000,
+    "lon": -110.84709,
+    "lat": 43.838977
+   },
+   {
+    "v": 4855000,
+    "lon": -110.84709,
+    "lat": 43.847981
+   },
+   {
+    "v": 4856000,
+    "lon": -110.84709,
+    "lat": 43.856985
+   },
+   {
+    "v": 4857000,
+    "lon": -110.84709,
+    "lat": 43.865988
+   },
+   {
+    "v": 4858000,
+    "lon": -110.84709,
+    "lat": 43.874992
+   },
+   {
+    "v": 4859000,
+    "lon": -110.84709,
+    "lat": 43.883996
+   }
+  ],
+  "east": [
+   {
+    "v": 4852000,
+    "lon": -110.718315,
+    "lat": 43.820725
+   },
+   {
+    "v": 4853000,
+    "lon": -110.718315,
+    "lat": 43.829729
+   },
+   {
+    "v": 4854000,
+    "lon": -110.718315,
+    "lat": 43.838733
+   },
+   {
+    "v": 4855000,
+    "lon": -110.718315,
+    "lat": 43.847736
+   },
+   {
+    "v": 4856000,
+    "lon": -110.718315,
+    "lat": 43.85674
+   },
+   {
+    "v": 4857000,
+    "lon": -110.718315,
+    "lat": 43.865744
+   },
+   {
+    "v": 4858000,
+    "lon": -110.718315,
+    "lat": 43.874748
+   },
+   {
+    "v": 4859000,
+    "lon": -110.718315,
+    "lat": 43.883751
+   }
+  ]
+ },
+ "declination": {
+  "deg": 10.72,
+  "year": 2026.85,
+  "model": "WMM2025"
+ },
+ "slope_share_land": {
+  "lt15": 0.216,
+  "s15_25": 0.16,
+  "s25_35": 0.237,
+  "ge35": 0.387
+ },
+ "landcover_share": {
+  "10": 0.452,
+  "30": 0.362,
+  "60": 0.174,
+  "70": 0.005,
+  "100": 0.005
+ },
+ "water_share": 0.082,
+ "area_km2": 82.49,
+ "files": {
+  "terrain_rgb": "terrain_rgb.png",
+  "terrain_rgb_mesh": "terrain_rgb_mesh.png",
+  "topo": "topo.jpg",
+  "slope": "slope.png",
+  "water_mask": "water_mask.png"
+ },
+ "dem": {
+  "source": "file",
+  "native_res_m": 1.0,
+  "label": "USGS 3DEP 1 m lidar"
+ },
+ "landmark": "Mount Moran",
+ "peaks": [
+  {
+   "name": "Mount Moran",
+   "lon": -110.776513,
+   "lat": 43.835073,
+   "elev_m": 3843.4,
+   "verified": true,
+   "source": "https://www.wikidata.org/wiki/Q1546616"
+  },
+  {
+   "name": "Thor Peak",
+   "lon": -110.795176,
+   "lat": 43.830625,
+   "elev_m": 3665.7,
+   "verified": true,
+   "source": "https://www.wikidata.org/wiki/Q7796089"
+  },
+  {
+   "name": "East Horn",
+   "lon": -110.766746,
+   "lat": 43.834174,
+   "elev_m": 3497.8,
+   "verified": true,
+   "source": "https://www.wikidata.org/wiki/Q49026960"
+  },
+  {
+   "name": "Pk 3388",
+   "lon": -110.806685,
+   "lat": 43.823571,
+   "elev_m": 3388.5,
+   "verified": false
+  },
+  {
+   "name": "Traverse Peak",
+   "lon": -110.794927,
+   "lat": 43.867781,
+   "elev_m": 3368.7,
+   "verified": true,
+   "source": "https://www.wikidata.org/wiki/Q7836165"
+  },
+  {
+   "name": "Pk 3336",
+   "lon": -110.823233,
+   "lat": 43.832557,
+   "elev_m": 3335.9,
+   "verified": false
+  },
+  {
+   "name": "Raynolds Peak",
+   "lon": -110.825783,
+   "lat": 43.870702,
+   "elev_m": 3325.8,
+   "verified": true,
+   "source": "https://www.wikidata.org/wiki/Q7299349"
+  },
+  {
+   "name": "Pk 3316",
+   "lon": -110.841398,
+   "lat": 43.822897,
+   "elev_m": 3316.1,
+   "verified": false
+  },
+  {
+   "name": "Pk 3309",
+   "lon": -110.840776,
+   "lat": 43.882473,
+   "elev_m": 3309.4,
+   "verified": false
+  },
+  {
+   "name": "Bivouac Peak",
+   "lon": -110.784227,
+   "lat": 43.868455,
+   "elev_m": 3297.9,
+   "verified": true,
+   "source": "https://www.wikidata.org/wiki/Q4919268"
+  },
+  {
+   "name": "Pk 3292",
+   "lon": -110.830262,
+   "lat": 43.822178,
+   "elev_m": 3292.5,
+   "verified": false
+  },
+  {
+   "name": "Pk 3112",
+   "lon": -110.825223,
+   "lat": 43.88153,
+   "elev_m": 3112.1,
+   "verified": false
+  }
+ ],
+ "labels": [
+  {
+   "kind": "lake",
+   "name": "Cirque Lake",
+   "area_m2": 243907,
+   "elev_m": 2926.8,
+   "lon": -110.836049,
+   "lat": 43.829438
+  },
+  {
+   "kind": "lake",
+   "name": "Bearpaw Lake",
+   "area_m2": 37954,
+   "elev_m": 2089.7,
+   "lon": -110.729629,
+   "lat": 43.829735
+  },
+  {
+   "kind": "lake",
+   "name": "Dudley Lake",
+   "area_m2": 36057,
+   "elev_m": 2513.4,
+   "lon": -110.781612,
+   "lat": 43.879944
+  },
+  {
+   "kind": "lake",
+   "name": "Trapper Lake",
+   "area_m2": 10612,
+   "elev_m": 2104.4,
+   "lon": -110.732454,
+   "lat": 43.83293
+  },
+  {
+   "kind": "glacier",
+   "name": "Falling Ice Glacier",
+   "lon": -110.770278,
+   "lat": 43.833333,
+   "elev_m": 3339.2
+  },
+  {
+   "kind": "glacier",
+   "name": "Mount Moran",
+   "lon": -110.776431,
+   "lat": 43.835134,
+   "elev_m": 3842.4
+  },
+  {
+   "kind": "glacier",
+   "name": "Skillet Glacier",
+   "lon": -110.765833,
+   "lat": 43.836667,
+   "elev_m": 3126.2
+  },
+  {
+   "kind": "glacier",
+   "name": "Triple Glaciers",
+   "lon": -110.784722,
+   "lat": 43.838611,
+   "elev_m": 3162.3
+  }
+ ],
+ "credits": [
+  "USGS 3DEP 1 m lidar DEM via OpenTopography (WY_GrandTetonElkRefuge_2014, WY_GrandTetonNP_D22, WY_North_Converse_2020_D20), public domain",
+  "ESA WorldCover 10 m 2021 v200 (© ESA WorldCover project 2021, contains modified Copernicus Sentinel data processed by the ESA WorldCover consortium), CC BY 4.0",
+  "Place names and coordinates from Wikidata, CC0",
+  "Magnetic declination from the World Magnetic Model 2025 (NOAA NCEI and BGS), public domain"
+ ]
+}

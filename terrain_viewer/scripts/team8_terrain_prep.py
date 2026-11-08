@@ -1,16 +1,18 @@
-"""Team-8 terrain prep for the deck.gl viewer.
+"""Team-8 terrain prep: turn one fetched area into the viewer's map files. Any place, any DEM resolution.
 
-Reads the USGS 3DEP 1 m mosaic (EPSG:26912) and writes, on one EPSG:4326 grid of about 5 m:
-  terrain_rgb_5m.png    Mapbox terrain-RGB  h = -10000 + (R*65536 + G*256 + B) * 0.1
-  terrain_rgb_10m.png   same at about 10 m (lighter mesh, for the repo and slow laptops)
-  terrain_color_5m.png  hillshade x slope safety (green <15, yellow <25, orange <35, red >=35 deg)
-  terrain_color_5m.jpg  the same picture as JPEG (small, used by the offline bundle)
-  lake_mask_5m.png      255 = hydro-flattened water
-  terrain_meta.json     bounds [west, south, east, north], decoder, peaks, shares, credits
+  python -I scripts/team8_terrain_prep.py .cache/<id> data/<id> [--cell 5]
 
-Usage: python -I team8_terrain_prep.py <output_USGS1m.tif> <out_data_dir>
+Reads area.json, the DEM, landcover.tif and places.json written by team8_fetch_area.py, and writes on one EPSG:4326 grid
+(cell 5 m for lidar, 10 m for 10 m and 30 m DEMs unless --cell says otherwise):
+  terrain_rgb.png       Mapbox terrain-RGB at the texture cell, h = -10000 + (R*65536 + G*256 + B) * 0.1
+  terrain_rgb_mesh.png  the same at twice the cell, for the 3D mesh
+  topo.jpg              the printed-map picture: land cover tints, relief shading, contours, water, 1 km UTM grid
+  slope.png             slope x2 (0.5 deg steps) on the mesh grid, smoothed over about 30 m. The route limit and the
+                        too-steep hatching both read this file, so they always agree
+  water_mask.png        255 = water, texture grid
+  terrain_meta.json     bounds, grid, decoder, peaks, labels, UTM grid labels, declination, credits
 """
-import sys, os, json, math, time
+import argparse, json, math, os, time
 import numpy as np
 import rasterio
 from rasterio.enums import Resampling
@@ -18,11 +20,17 @@ from rasterio.warp import reproject, transform as rtransform
 from rasterio.transform import from_bounds
 from scipy import ndimage
 from PIL import Image
+import contourpy
 
-DEM, OUT = sys.argv[1], sys.argv[2]
+ap = argparse.ArgumentParser()
+ap.add_argument("area_dir")
+ap.add_argument("out_dir")
+ap.add_argument("--cell", type=float, default=0.0)
+A = ap.parse_args()
+AREA = json.load(open(os.path.join(A.area_dir, "area.json"), encoding="utf-8"))
+OUT = A.out_dir
 os.makedirs(OUT, exist_ok=True)
 T0 = time.time()
-CELL = 5.0
 
 
 def log(*a):
@@ -31,194 +39,324 @@ def log(*a):
 
 def m_per_deg(lat):
     p = math.radians(lat)
-    mlat = 111132.954 - 559.822 * math.cos(2 * p) + 1.175 * math.cos(4 * p)
-    mlon = 111412.84 * math.cos(p) - 93.5 * math.cos(3 * p) + 0.118 * math.cos(5 * p)
-    return mlat, mlon
+    return (111132.954 - 559.822 * math.cos(2 * p) + 1.175 * math.cos(4 * p),
+            111412.84 * math.cos(p) - 93.5 * math.cos(3 * p) + 0.118 * math.cos(5 * p))
 
 
-# ------------------------------------------------------------ reproject to a lon/lat grid
-with rasterio.open(DEM) as ds:
-    src = ds.read(1).astype(np.float32)
-    nd, st, scrs, b = ds.nodata, ds.transform, ds.crs, ds.bounds
-bad = ~np.isfinite(src) | (src < -100) | (src > 9000)
-if nd is not None:
-    bad |= src == nd
-src[bad] = np.nan
-log("read", src.shape, "nodata share", round(float(bad.mean()), 4))
-
-xs = [b.left, b.right, b.left, b.right]
-ys = [b.top, b.top, b.bottom, b.bottom]
-lo, la = rtransform(scrs, "EPSG:4326", xs, ys)
-lat_c = (max(la[2], la[3]) + min(la[0], la[1])) / 2
-MLAT, MLON = m_per_deg(lat_c)
-pad_lon, pad_lat = 15.0 / MLON, 15.0 / MLAT          # stay 15 m inside the UTM footprint
-west, east = max(lo[0], lo[2]) + pad_lon, min(lo[1], lo[3]) - pad_lon
-south, north = max(la[2], la[3]) + pad_lat, min(la[0], la[1]) - pad_lat
-W = int(round((east - west) * MLON / CELL / 6.0)) * 6   # multiples of 6 so 10 m and 30 m grids divide evenly
+native = float(AREA["dem"].get("native_res_m", 30))
+CELL = A.cell or (5.0 if native <= 3 else 10.0)
+west, south, east, north = AREA["bbox"]
+MLAT, MLON = m_per_deg((south + north) / 2)
+W = int(round((east - west) * MLON / CELL / 6.0)) * 6        # multiples of 6: the mesh (x2) and summit (x6) grids divide evenly
 H = int(round((north - south) * MLAT / CELL / 6.0)) * 6
 DLON, DLAT = (east - west) / W, (north - south) / H
 DX, DY = DLON * MLON, DLAT * MLAT
-dst_tf = from_bounds(west, south, east, north, W, H)
-Z = np.full((H, W), np.nan, np.float32)
-reproject(src, Z, src_transform=st, src_crs=scrs, dst_transform=dst_tf, dst_crs="EPSG:4326",
-          resampling=Resampling.average, src_nodata=np.nan, dst_nodata=np.nan)
+TF = from_bounds(west, south, east, north, W, H)
+
+# ------------------------------------------------------------ elevation and land cover on the grid
+with rasterio.open(AREA["dem"]["path"]) as ds:
+    src = ds.read(1).astype(np.float32)
+    nd = ds.nodata
+    bad = ~np.isfinite(src) | (src < -500) | (src > 9000)
+    if nd is not None:
+        bad |= src == nd
+    src[bad] = np.nan
+    Z = np.full((H, W), np.nan, np.float32)
+    rs = Resampling.average if native < CELL / 1.5 else Resampling.bilinear
+    reproject(src, Z, src_transform=ds.transform, src_crs=ds.crs, dst_transform=TF, dst_crs="EPSG:4326",
+              resampling=rs, src_nodata=np.nan, dst_nodata=np.nan)
 del src
 holes = np.isnan(Z)
 if holes.any():
     idx = ndimage.distance_transform_edt(holes, return_distances=False, return_indices=True)
     Z = Z[tuple(idx)]
-log("grid", (H, W), "cell m", round(DX, 3), round(DY, 3), "holes filled", int(holes.sum()))
+log("grid", (H, W), "cell m", round(DX, 2), round(DY, 2), "native m", native, "holes", int(holes.sum()))
 
-# ------------------------------------------------------------ derived layers
-gy, gx = np.gradient(Z.astype(np.float64), DY, DX)       # rows go south
-SLOPE = np.degrees(np.arctan(np.hypot(gx, gy))).astype(np.float32)
+LC = np.zeros((H, W), np.uint8)
+with rasterio.open(AREA["landcover"]["path"]) as ds:
+    reproject(ds.read(1), LC, src_transform=ds.transform, src_crs=ds.crs, dst_transform=TF, dst_crs="EPSG:4326",
+              resampling=Resampling.nearest, src_nodata=0, dst_nodata=0)
+
+gy, gx = np.gradient(Z.astype(np.float64), DY, DX)            # rows run south
+G = np.hypot(gx, gy)
+SLOPE = np.degrees(np.arctan(G)).astype(np.float32)
+
+# water: WorldCover permanent water, plus hydro-flattened lakes in lidar
+water = LC == 80
+if native <= 3:
+    flat = (ndimage.maximum_filter(Z, 5) - ndimage.minimum_filter(Z, 5)) < 0.15
+    lab, nl = ndimage.label(flat)
+    big = np.zeros(nl + 1, bool)
+    big[1:] = ndimage.sum(flat, lab, np.arange(1, nl + 1)) > 300
+    water |= big[lab]
+water = ndimage.binary_opening(water, iterations=1)
+water = ndimage.binary_closing(water, iterations=2)
+lab, nl = ndimage.label(water)
+keep = np.zeros(nl + 1, bool)
+keep[1:] = ndimage.sum(water, lab, np.arange(1, nl + 1)) * DX * DY >= 2000      # drop puddles under 2000 m2
+WATER = keep[lab]
+log("water share", round(float(WATER.mean()), 3))
+
+# ------------------------------------------------------------ the printed-map picture
+TINT = np.zeros((256, 3), np.float64)
+TINT[:] = (243, 240, 231)                                       # paper
+for k, c in {10: (206, 224, 188), 20: (224, 231, 202), 30: (240, 238, 220), 40: (242, 236, 210), 50: (226, 210, 203),
+             60: (233, 229, 221), 70: (248, 251, 253), 80: (170, 206, 228), 90: (212, 230, 224), 95: (196, 222, 204),
+             100: (229, 231, 218)}.items():
+    TINT[k] = c
+base = TINT[LC]
+rock = (SLOPE > 48) | ((SLOPE > 36) & np.isin(LC, (60, 100)))
+base[rock] = base[rock] * 0.35 + np.array((214, 209, 202)) * 0.65
 
 
-def hillshade(alt=42.0):
+def shade_layer(alt=44.0):
     nx, ny = -gx, gy
     nrm = np.sqrt(nx * nx + ny * ny + 1.0)
     out = np.zeros(Z.shape, np.float64)
     a = math.radians(alt)
-    for az, w in ((315, 0.45), (270, 0.2), (360, 0.2), (225, 0.15)):
+    for az, wt in ((315, 0.55), (270, 0.15), (360, 0.15), (225, 0.15)):
         t = math.radians(az)
-        lx, ly, lz = math.sin(t) * math.cos(a), math.cos(t) * math.cos(a), math.sin(a)
-        out += w * np.clip((nx * lx + ny * ly + lz) / nrm, 0, 1)
+        out += wt * np.clip((nx * math.sin(t) * math.cos(a) + ny * math.cos(t) * math.cos(a) + math.sin(a)) / nrm, 0, 1)
+    return out, math.sin(a)
+
+
+HS, HSF = shade_layer()
+s = np.clip(1.0 + 0.8 * (HS - HSF), 0.46, 1.12)
+rgb = np.where((s < 1)[..., None], base * s[..., None], base + (255 - base) * ((s - 1) * 1.6)[..., None])
+cool = np.clip(1 - s, 0, 1)[..., None] * 0.30                   # shadows lean blue-grey, like hand relief shading
+rgb = rgb * (1 - cool) + np.array((92, 104, 126)) * cool
+
+wsoft = ndimage.gaussian_filter(WATER.astype(np.float32), 0.8)[..., None]
+rgb = rgb * (1 - wsoft) + np.array((170, 206, 228)) * wsoft
+shore = (WATER & ~ndimage.binary_erosion(WATER, iterations=1))
+rgb[shore] = rgb[shore] * 0.4 + np.array((74, 128, 172)) * 0.6
+
+relief = float(np.percentile(Z[~WATER], 99.9) - np.percentile(Z[~WATER], 0.1)) if (~WATER).any() else float(np.ptp(Z))
+CI, IDX = (50, 250) if relief >= 1200 else ((20, 100) if relief >= 400 else (10, 50))
+SCALE = max(W, H * 1.35) / 1150.0                              # texture pixels per screen pixel at the whole-tile view
+
+
+def lines(val, step, width_px, gpx):
+    d = np.abs(np.mod(val / step + 0.5, 1.0) - 0.5) * step / np.maximum(gpx, 1e-6)
+    return np.clip(0.5 * width_px + 0.5 - d, 0, 1)
+
+
+gpx = G * CELL                                                  # metres of climb per texture pixel
+c_minor = lines(Z, CI, max(0.9, 0.85 * SCALE), gpx) * np.where(SLOPE > 55, 0.25, 1.0)
+c_index = lines(Z, IDX, max(1.4, 1.5 * SCALE), gpx)
+c_minor[WATER] = 0
+c_index[WATER] = 0
+for a_, col in ((c_minor * 0.62, (160, 108, 66)), (c_index * 0.88, (138, 84, 46))):
+    rgb = rgb * (1 - a_[..., None]) + np.array(col) * a_[..., None]
+
+# 1 km UTM grid, the lines an MGRS reading refers to
+lat_c, lon_c = (south + north) / 2, (west + east) / 2
+ZONE = int((lon_c + 180) // 6) + 1
+UTM = f"EPSG:{(32600 if lat_c >= 0 else 32700) + ZONE}"
+sr, sc = np.arange(0, H + 8, 8).clip(max=H - 1), np.arange(0, W + 8, 8).clip(max=W - 1)
+LL = np.meshgrid(west + (sc + 0.5) * DLON, north - (sr + 0.5) * DLAT)
+EE, NN = rtransform("EPSG:4326", UTM, LL[0].ravel().tolist(), LL[1].ravel().tolist())
+EE, NN = np.array(EE).reshape(LL[0].shape), np.array(NN).reshape(LL[0].shape)
+rr, cc = np.mgrid[0:H, 0:W]
+E = ndimage.map_coordinates(EE, [rr / 8.0, cc / 8.0], order=1, mode="nearest")
+N = ndimage.map_coordinates(NN, [rr / 8.0, cc / 8.0], order=1, mode="nearest")
+del rr, cc
+for v in (E, N):
+    g_ = np.hypot(*np.gradient(v))
+    a_ = lines(v, 1000.0, max(0.8, 0.75 * SCALE), g_) * 0.5
+    rgb = rgb * (1 - a_[..., None]) + np.array((38, 58, 92)) * a_[..., None]
+TOPO = np.clip(rgb, 0, 255).astype(np.uint8)
+
+
+def edge_ticks(vals, along, axis_len, to_lonlat):
+    out = []
+    for k in range(int(math.ceil(vals.min() / 1000)), int(math.floor(vals.max() / 1000)) + 1):
+        i = np.searchsorted(vals, k * 1000.0) if vals[0] < vals[-1] else None
+        if i is None or i <= 0 or i >= axis_len:
+            continue
+        f = (k * 1000.0 - vals[i - 1]) / (vals[i] - vals[i - 1])
+        out.append(dict(v=k * 1000, **dict(zip(("lon", "lat"), to_lonlat(i - 1 + f)))))
     return out
 
 
-HS = hillshade()
-rng5 = ndimage.maximum_filter(Z, 5) - ndimage.minimum_filter(Z, 5)
-flat = rng5 < 0.15
-lab, nlab = ndimage.label(flat)
-sizes = ndimage.sum(flat, lab, np.arange(1, nlab + 1))
-big = np.zeros(nlab + 1, bool)
-big[1:] = sizes > 300
-LAKE = ndimage.binary_closing(big[lab], iterations=2)
-log("lake share", round(float(LAKE.mean()), 3))
+grid_labels = dict(
+    zone=ZONE, epsg=UTM,
+    south=edge_ticks(E[-1], None, W, lambda x: (west + (x + 0.5) * DLON, south)),
+    north=edge_ticks(E[0], None, W, lambda x: (west + (x + 0.5) * DLON, north)),
+    west=edge_ticks(N[::-1, 0], None, H, lambda y: (west, south + (y + 0.5) * DLAT)),
+    east=edge_ticks(N[::-1, -1], None, H, lambda y: (east, south + (y + 0.5) * DLAT)),
+)
+for side in ("south", "north", "west", "east"):
+    for t in grid_labels[side]:
+        t["lon"], t["lat"] = round(t["lon"], 6), round(t["lat"], 6)
+del E, N
+log("contours", CI, IDX, "m, UTM zone", ZONE, "grid lines", len(grid_labels["south"]), len(grid_labels["west"]))
 
-SAFE = np.array([(46, 157, 79), (227, 196, 64), (239, 138, 42), (215, 38, 61)], np.float64)
-cls = np.digitize(SLOPE, [15, 25, 35])
-tinted = SAFE[cls] * (0.22 + 0.95 * HS)[..., None]
-gray = (255 * 0.92 * HS)[..., None]
-rgb = 0.74 * tinted + 0.26 * gray
-
-
-def contour_edges(step):
-    c = np.floor(Z / step)
-    e = np.zeros(Z.shape, bool)
-    e[:, 1:] |= c[:, 1:] != c[:, :-1]
-    e[1:, :] |= c[1:, :] != c[:-1, :]
-    return e
-
-
-for m, a in ((contour_edges(100) & ~LAKE, 0.16), (ndimage.binary_dilation(contour_edges(500)) & ~LAKE, 0.26)):
-    rgb[m] = rgb[m] * (1 - a) + 255 * a
-rgb[LAKE] = (22, 44, 70)
-shore = LAKE & ~ndimage.binary_erosion(LAKE, iterations=2)
-rgb[shore] = (90, 130, 160)
-COLOR = np.clip(rgb, 0, 255).astype(np.uint8)
-
-
+# ------------------------------------------------------------ files on the grid
 def terrain_rgb(z):
     v = np.round((z.astype(np.float64) + 10000.0) * 10.0).astype(np.int64)
     return np.stack([(v >> 16) & 255, (v >> 8) & 255, v & 255], -1).astype(np.uint8)
 
 
-Z10 = Z.reshape(H // 2, 2, W // 2, 2).mean(axis=(1, 3))
-files = {
-    "terrain_rgb_5m": "terrain_rgb_5m.png", "terrain_rgb_10m": "terrain_rgb_10m.png",
-    "color_5m_png": "terrain_color_5m.png", "color_5m_jpg": "terrain_color_5m.jpg", "lake_mask_5m": "lake_mask_5m.png",
-}
-Image.fromarray(terrain_rgb(Z)).save(os.path.join(OUT, files["terrain_rgb_5m"]), optimize=True)
-Image.fromarray(terrain_rgb(Z10)).save(os.path.join(OUT, files["terrain_rgb_10m"]), optimize=True)
-Image.fromarray(COLOR).save(os.path.join(OUT, files["color_5m_png"]), optimize=True)
-Image.fromarray(COLOR).save(os.path.join(OUT, files["color_5m_jpg"]), quality=88, optimize=True)
-Image.fromarray((LAKE * 255).astype(np.uint8)).save(os.path.join(OUT, files["lake_mask_5m"]), optimize=True)
+Z2 = Z.reshape(H // 2, 2, W // 2, 2).mean(axis=(1, 3))
+sig = 15.0 / (2 * CELL)                                        # about 30 m footprint for the slope limit
+g2y, g2x = np.gradient(ndimage.gaussian_filter(Z2.astype(np.float64), sig), DY * 2, DX * 2)
+S2 = np.degrees(np.arctan(np.hypot(g2x, g2y)))
+files = dict(terrain_rgb="terrain_rgb.png", terrain_rgb_mesh="terrain_rgb_mesh.png", topo="topo.jpg",
+             slope="slope.png", water_mask="water_mask.png")
+Image.fromarray(terrain_rgb(Z)).save(os.path.join(OUT, files["terrain_rgb"]), optimize=True)
+Image.fromarray(terrain_rgb(Z2)).save(os.path.join(OUT, files["terrain_rgb_mesh"]), optimize=True)
+Image.fromarray(TOPO).save(os.path.join(OUT, files["topo"]), quality=90, optimize=True)
+Image.fromarray(np.clip(np.round(S2 * 2), 0, 255).astype(np.uint8)).save(os.path.join(OUT, files["slope"]), optimize=True)
+Image.fromarray((WATER * 255).astype(np.uint8)).save(os.path.join(OUT, files["water_mask"]), optimize=True)
 log("images written")
 
-# ------------------------------------------------------------ peaks (DEM summits, named only when they match a source)
-PEAK_REFS = [  # name, lat, lon, elevation m, source (Wikipedia coordinate boxes, read 2026-11-07)
-    ("Mount Moran", 43.83528, -110.77639, 3840, "https://en.wikipedia.org/wiki/Mount_Moran"),
-    ("Thor Peak", 43.83083, -110.79500, 3668, "https://en.wikipedia.org/wiki/Thor_Peak_(Wyoming)"),
-    ("Traverse Peak", 43.86806, -110.79472, 3370, "https://en.wikipedia.org/wiki/Traverse_Peak"),
-    ("Raynolds Peak", 43.87083, -110.82556, 3327, "https://en.wikipedia.org/wiki/Raynolds_Peak"),
-    ("Bivouac Peak", 43.86889, -110.78417, 3300, "https://en.wikipedia.org/wiki/Bivouac_Peak"),
-]
-
-
-def rc_to_lonlat(r, c):
+# ------------------------------------------------------------ peaks: DEM summits, named where Wikidata agrees
+def rc_lonlat(r, c):
     return west + (c + 0.5) * DLON, north - (r + 0.5) * DLAT
 
 
-def lonlat_to_rc(lon, lat):
+def lonlat_rc(lon, lat):
     return (north - lat) / DLAT - 0.5, (lon - west) / DLON - 0.5
 
 
-H30, W30 = H // 6, W // 6
-Z30 = Z.reshape(H30, 6, W30, 6).mean(axis=(1, 3))
-cand = Z30 >= ndimage.maximum_filter(Z30, size=15)
-cand[:8, :] = cand[-8:, :] = False
-cand[:, :8] = cand[:, -8:] = False
+places = json.load(open(AREA["places"]["path"], encoding="utf-8")) if os.path.exists(AREA["places"]["path"]) else []
+H6, W6 = H // 6, W // 6
+Z6 = Z.reshape(H6, 6, W6, 6).mean(axis=(1, 3))
+cand = Z6 >= ndimage.maximum_filter(Z6, size=15)
+cand[:3, :] = cand[-3:, :] = False
+cand[:, :3] = cand[:, -3:] = False
+min_rel = max(150.0, 0.17 * relief)
 peaks = []
 for r, c in zip(*np.nonzero(cand)):
-    z = Z30[r, c]
-    hr, hc = np.nonzero(Z30 > z + 1.0)
+    z = Z6[r, c]
+    hr, hc = np.nonzero(Z6 > z + 1.0)
     iso = float(np.min(np.hypot((hr - r) * DY * 6, (hc - c) * DX * 6))) if hr.size else 1e9
-    win = Z30[max(0, r - 50):r + 51, max(0, c - 50):c + 51]
-    if iso >= 700 and z - np.percentile(win, 10) >= 300:
+    win = Z6[max(0, r - 50):r + 51, max(0, c - 50):c + 51]
+    if iso >= 700 and z - np.percentile(win, 10) >= min_rel:
         r0, c0 = max(0, (r - 1) * 6), max(0, (c - 1) * 6)
         blk = Z[r0:(r + 2) * 6, c0:(c + 2) * 6]
         br, bc = np.unravel_index(np.argmax(blk), blk.shape)
         peaks.append(dict(r=int(r0 + br), c=int(c0 + bc), elev_m=round(float(blk.max()), 1)))
 peaks.sort(key=lambda p: -p["elev_m"])
 peaks = peaks[:12]
-for name, rlat, rlon, relev, url in PEAK_REFS:
-    rr, cc = lonlat_to_rc(rlon, rlat)
-    rad = int(200 / DX)
-    r0, r1 = max(0, int(rr) - rad), min(H, int(rr) + rad + 1)
-    c0, c1 = max(0, int(cc) - rad), min(W, int(cc) + rad + 1)
+edge_px = 150 / DX
+for pl in [p for p in places if p["kind"] == "peak"]:
+    rr_, cc_ = lonlat_rc(pl["lon"], pl["lat"])
+    if not (edge_px <= rr_ < H - edge_px and edge_px <= cc_ < W - edge_px):
+        continue
+    rad = int(250 / DX)
+    r0, r1, c0, c1 = max(0, int(rr_) - rad), min(H, int(rr_) + rad + 1), max(0, int(cc_) - rad), min(W, int(cc_) + rad + 1)
     blk = Z[r0:r1, c0:c1]
     br, bc = np.unravel_index(np.argmax(blk), blk.shape)
-    pr, pc, pz = r0 + br, c0 + bc, float(blk.max())
-    off = math.hypot((pr - rr) * DY, (pc - cc) * DX)
-    ok = abs(pz - relev) <= 25 and off <= 200
-    log("match", name, "dem", round(pz), "ref", relev, "offset m", round(off), "ok", ok)
-    if not ok:
+    if min(br, bc, blk.shape[0] - 1 - br, blk.shape[1] - 1 - bc) * DX < 40:   # the top is on the search edge: not a summit here
         continue
-    hit = [p for p in peaks if math.hypot((p["r"] - pr) * DY, (p["c"] - pc) * DX) < 150]
+    pr, pc, pz = r0 + br, c0 + bc, float(blk.max())
+    off = math.hypot((pr - rr_) * DY, (pc - cc_) * DX)
+    hit = [p for p in peaks if math.hypot((p["r"] - pr) * DY, (p["c"] - pc) * DX) < 200]
     p = hit[0] if hit else dict(r=int(pr), c=int(pc), elev_m=round(pz, 1))
+    better = "name" not in p or pl["name"] == AREA["name"] or (p.get("name") != AREA["name"] and off < p.get("ref_offset_m", 1e9))
+    if better:
+        p.update(name=pl["name"], verified=True, source=pl["source"], ref_offset_m=round(off))
     if not hit:
         peaks.append(p)
-    p.update(name=name, verified=True, source=url, ref_elev_m=relev, ref_offset_m=round(off))
 for p in peaks:
-    p["lon"], p["lat"] = [round(v, 6) for v in rc_to_lonlat(p["r"], p["c"])]
+    p["lon"], p["lat"] = [round(v, 6) for v in rc_lonlat(p["r"], p["c"])]
     p.setdefault("name", f"Pk {p['elev_m']:.0f}")
     p.setdefault("verified", False)
 peaks.sort(key=lambda p: -p["elev_m"])
+named = [p for p in peaks if p["verified"]]
+LANDMARK = next((p for p in peaks if p["name"] == AREA["name"]), named[0] if named else peaks[0])
+log("peaks", [(p["name"], p["elev_m"]) for p in peaks], "landmark", LANDMARK["name"])
 
-land = ~LAKE
+# water and glacier names
+labels = []
+wl, nwl = ndimage.label(WATER)
+for pl in [p for p in places if p["kind"] in ("lake", "glacier")]:
+    rr_, cc_ = lonlat_rc(pl["lon"], pl["lat"])
+    if not (0 <= rr_ < H and 0 <= cc_ < W):
+        continue
+    if pl["kind"] == "lake":
+        rad = int(300 / DX)
+        r0, c0 = max(0, int(rr_) - rad), max(0, int(cc_) - rad)
+        win = wl[r0:int(rr_) + rad + 1, c0:int(cc_) + rad + 1]
+        if not win.any():
+            continue
+        ii = np.argwhere(win > 0)
+        k = ii[np.argmin(np.hypot(ii[:, 0] + r0 - rr_, ii[:, 1] + c0 - cc_))]
+        comp = wl == win[k[0], k[1]]
+        cm = ndimage.center_of_mass(comp)
+        area_m2 = float(comp.sum() * DX * DY)
+        rr_, cc_ = (cm if comp[int(cm[0]), int(cm[1])] else (k[0] + r0, k[1] + c0))
+        labels.append(dict(kind="lake", name=pl["name"], area_m2=round(area_m2), elev_m=round(float(Z[int(rr_), int(cc_)]), 1), **dict(zip(("lon", "lat"), [round(v, 6) for v in rc_lonlat(rr_, cc_)]))))
+    else:
+        labels.append(dict(kind="glacier", name=pl["name"], lon=pl["lon"], lat=pl["lat"], elev_m=round(float(Z[int(rr_), int(cc_)]), 1)))
+labels.sort(key=lambda l: -l.get("area_m2", 0))
+
+# contour labels along index contours, upright, away from peaks, edges and each other
+cl = []
+gen = contourpy.contour_generator(z=Z.astype(np.float64))
+pk_rc = np.array([(p["r"], p["c"]) for p in peaks]) if peaks else np.zeros((0, 2))
+for lev in range(int(math.ceil(float(Z.min()) / IDX)) * IDX, int(float(Z.max())) + 1, IDX):
+    for ln in gen.lines(lev):
+        xy = np.asarray(ln)                                     # columns x, rows y
+        if len(xy) < 12:
+            continue
+        seg = np.hypot(np.diff(xy[:, 0]) * DX, np.diff(xy[:, 1]) * DY)
+        cum = np.concatenate([[0], np.cumsum(seg)])
+        if cum[-1] < 1200:
+            continue
+        for target in np.arange(600, cum[-1] - 300, 1800):
+            i = int(np.searchsorted(cum, target))
+            i0, i1 = max(0, i - 4), min(len(xy) - 1, i + 4)
+            x, y = xy[i]
+            r_, c_ = int(round(y)), int(round(x))
+            if not (0 <= r_ < H and 0 <= c_ < W) or WATER[r_, c_] or not (8 <= SLOPE[r_, c_] <= 42):
+                continue
+            if min(r_ * DY, (H - r_) * DY, c_ * DX, (W - c_) * DX) < 450:
+                continue
+            if len(pk_rc) and np.min(np.hypot((pk_rc[:, 0] - r_) * DY, (pk_rc[:, 1] - c_) * DX)) < 600:
+                continue
+            lon_, lat_ = rc_lonlat(y, x)
+            if any(math.hypot((lon_ - q["lon"]) * MLON, (lat_ - q["lat"]) * MLAT) < 1100 for q in cl):
+                continue
+            ang = math.degrees(math.atan2(-(xy[i1, 1] - xy[i0, 1]) * DY, (xy[i1, 0] - xy[i0, 0]) * DX))
+            ang = (ang + 90) % 180 - 90                           # keep the text upright
+            cl.append(dict(lon=round(lon_, 6), lat=round(lat_, 6), elev_m=lev, angle=round(ang, 1)))
+cl = cl[:48]
+log("labels", len(labels), "contour labels", len(cl))
+
+land = ~WATER
+lc_share = {int(k): round(float(v), 3) for k, v in zip(*np.unique(LC[land], return_counts=True)) if v / land.sum() >= 0.002}
+total = sum(lc_share.values()) or 1
+lc_share = {k: round(v / land.sum(), 3) for k, v in zip(*np.unique(LC[land], return_counts=True)) if v / land.sum() >= 0.002}
+dem_label = {"file": f"USGS 3DEP {native:g} m lidar", "3dep10": "USGS 3DEP 1/3 arc-second (about 10 m)",
+             "cop30": "Copernicus DEM GLO-30 (about 30 m)"}[AREA["dem"]["source"]]
 meta = dict(
-    schema="team8-terrain/v1",
+    schema="team8-terrain/v2", id=AREA["id"], name=AREA["name"], region=AREA["region"],
     bounds=[round(west, 7), round(south, 7), round(east, 7), round(north, 7)],
-    grid=dict(width=W, height=H, cell_m=[round(DX, 3), round(DY, 3)], crs="EPSG:4326",
-              note="pixel edges match bounds; row 0 is north"),
+    grid=dict(width=W, height=H, cell_m=[round(DX, 3), round(DY, 3)], crs="EPSG:4326", note="pixel edges match bounds; row 0 is north"),
+    mesh=dict(width=W // 2, height=H // 2),
     elevation_decoder=dict(rScaler=6553.6, gScaler=25.6, bScaler=0.1, offset=-10000),
     elev_range_m=[round(float(Z.min()), 1), round(float(Z.max()), 1)],
-    slope_share_land=dict(lt15=round(float((SLOPE[land] < 15).mean()), 3),
-                          s15_25=round(float(((SLOPE[land] >= 15) & (SLOPE[land] < 25)).mean()), 3),
-                          s25_35=round(float(((SLOPE[land] >= 25) & (SLOPE[land] < 35)).mean()), 3),
-                          ge35=round(float((SLOPE[land] >= 35).mean()), 3)),
-    lake_share=round(float(LAKE.mean()), 3),
+    contours=dict(interval_m=CI, index_m=IDX, labels=cl),
+    utm_grid=grid_labels,
+    declination=AREA["declination"],
+    slope_share_land=dict(lt15=round(float((SLOPE[land] < 15).mean()), 3), s15_25=round(float(((SLOPE[land] >= 15) & (SLOPE[land] < 25)).mean()), 3),
+                          s25_35=round(float(((SLOPE[land] >= 25) & (SLOPE[land] < 35)).mean()), 3), ge35=round(float((SLOPE[land] >= 35).mean()), 3)),
+    landcover_share={str(k): v for k, v in lc_share.items()},
+    water_share=round(float(WATER.mean()), 3),
     area_km2=round(W * DX * H * DY / 1e6, 2),
     files=files,
-    peaks=[{k: p[k] for k in ("name", "lon", "lat", "elev_m", "verified") if k in p} |
-           ({"source": p["source"]} if "source" in p else {}) for p in peaks],
-    credits="USGS 3DEP 1 m lidar DEM via OpenTopography (WY_GrandTetonElkRefuge_2014, WY_GrandTetonNP_D22, "
-            "WY_North_Converse_2020_D20), averaged to about 5 m on an EPSG:4326 grid. Public domain (USGS).",
+    dem=dict(source=AREA["dem"]["source"], native_res_m=native, label=dem_label),
+    landmark=LANDMARK["name"],
+    peaks=[{k: p[k] for k in ("name", "lon", "lat", "elev_m", "verified") if k in p} | ({"source": p["source"]} if "source" in p else {}) for p in peaks],
+    labels=labels,
+    credits=[AREA["dem"]["credit"], AREA["landcover"]["credit"], AREA["places"]["credit"],
+             "Magnetic declination from the World Magnetic Model 2025 (NOAA NCEI and BGS), public domain"],
 )
 with open(os.path.join(OUT, "terrain_meta.json"), "w", encoding="utf-8") as f:
     json.dump(meta, f, ensure_ascii=False, indent=1)
 for k, v in files.items():
     log(k, round(os.path.getsize(os.path.join(OUT, v)) / 1e6, 2), "MB")
-log("peaks", [(p["name"], p["elev_m"]) for p in peaks])
-log("bounds", meta["bounds"], "slope share", meta["slope_share_land"])
+log("bounds", meta["bounds"], "declination", AREA["declination"]["deg"])

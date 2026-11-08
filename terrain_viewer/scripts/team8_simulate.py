@@ -13,6 +13,7 @@ import sys, os, json, math, time, heapq
 import numpy as np
 from scipy import ndimage
 from PIL import Image
+import contourpy
 from rasterio.warp import transform as rtransform
 
 DATA = sys.argv[1]
@@ -26,12 +27,14 @@ def log(*a):
 meta = json.load(open(os.path.join(DATA, "terrain_meta.json"), encoding="utf-8"))
 W5, H5 = meta["grid"]["width"], meta["grid"]["height"]
 west, south, east, north = meta["bounds"]
-rgb = np.asarray(Image.open(os.path.join(DATA, meta["files"]["terrain_rgb_5m"])).convert("RGB")).astype(np.int64)
+rgb = np.asarray(Image.open(os.path.join(DATA, meta["files"]["terrain_rgb"])).convert("RGB")).astype(np.int64)
 Z5 = (-10000.0 + (rgb[..., 0] * 65536 + rgb[..., 1] * 256 + rgb[..., 2]) * 0.1).astype(np.float32)
-LAKE5 = np.asarray(Image.open(os.path.join(DATA, meta["files"]["lake_mask_5m"]))) > 127
+LAKE5 = np.asarray(Image.open(os.path.join(DATA, meta["files"]["water_mask"]))) > 127
 DX5, DY5 = meta["grid"]["cell_m"]
+DECL = float(meta["declination"]["deg"])
+N_MC = int(os.environ.get("TEAM8_MC", "200"))
 
-# ------------------------------------------------------------ 10 m working grid
+# ------------------------------------------------------------ working grid (twice the texture cell: 10 m for lidar, 20 m otherwise)
 F = 2
 H, W = H5 // F, W5 // F
 DX, DY = DX5 * F, DY5 * F
@@ -41,13 +44,13 @@ LAKE = LAKE5.reshape(H, F, W, F).any(axis=(1, 3))
 LAND = ~LAKE
 gy5, gx5 = np.gradient(Z5.astype(np.float64), DY5, DX5)
 S5 = np.degrees(np.arctan(np.hypot(gx5, gy5)))
-CLIFF = S5.reshape(H, F, W, F).max(axis=(1, 3)) > 45.0          # any 5 m patch steeper than 45 deg
-ZS = ndimage.gaussian_filter(Z.astype(np.float64), 1.5)            # about 30 m footprint for the slope limit
-gy, gx = np.gradient(ZS, DY, DX)
-SCAP = np.degrees(np.arctan(np.hypot(gx, gy)))
+CLIFF = S5.reshape(H, F, W, F).max(axis=(1, 3)) > 45.0          # any texture-cell patch steeper than 45 deg
+ZS = ndimage.gaussian_filter(Z.astype(np.float64), 15.0 / DX)      # about 30 m footprint
+SCAP = np.asarray(Image.open(os.path.join(DATA, meta["files"]["slope"]))).astype(np.float64) / 2.0   # same file the map hatches
 ROWS, COLS = np.mgrid[0:H, 0:W]
 XE = (COLS + 0.5) * DX                                              # metres east of the west edge
 YN = (H - ROWS - 0.5) * DY                                          # metres north of the south edge
+DIAG = math.hypot(W * DX, H * DY)
 
 
 def rc_lonlat(r, c):
@@ -66,7 +69,8 @@ def z5_at(lons, lats):
 
 R_E, KREF, EYE = 6371000.0, 0.13, 1.7
 CURV = (1 - KREF) / (2 * R_E)
-moran = next(p for p in meta["peaks"] if p["name"] == "Mount Moran")
+moran = next(p for p in meta["peaks"] if p["name"] == meta["landmark"])   # the landmark (Mount Moran in the first tile)
+LM_NAME = moran["name"]
 mr, mc = lonlat_rc(moran["lon"], moran["lat"])
 XM, YM, ZM = (mc + 0.5) * DX, (H - mr - 0.5) * DY, moran["elev_m"]
 DE, DN = XM - XE, YM - YN
@@ -87,7 +91,7 @@ for r0 in range(0, H, 40):
     sc = np.clip(np.rint(C_ + TS * (mc - C_)), 0, W - 1).astype(np.int32)
     zs = Z[sr, sc] - CURV * (TS * D) ** 2
     VIS[r0:r1] = ~np.any(zs > zo + TS * (zpe - zo) + 2.0, axis=0) & (D > 120)
-log("Moran visible from", round(float(VIS[LAND].mean()), 3), "of land")
+log(LM_NAME, "visible from", round(float(VIS[LAND].mean()), 3), "of land")
 
 
 def angd(a, b):
@@ -101,7 +105,8 @@ def norm(P):
 
 def hpd(P, mass):
     f = P.ravel()
-    o = np.argsort(f)[::-1]
+    sub = np.flatnonzero(f > f.max() * 1e-9)                  # the far tail holds no mass worth sorting
+    o = sub[np.argsort(f[sub])[::-1]]
     n = int(np.searchsorted(np.cumsum(f[o]), mass)) + 1
     m = np.zeros(f.size, bool)
     m[o[:n]] = True
@@ -112,10 +117,10 @@ SIG_B, SIG_A, SIG_E = 30.0, 5.0, 1.0
 NOISE = dict(baro_m=12.0, bearing_deg=2.0, elev_deg=-0.35)   # fixed, stated sensor errors for the demo
 
 
-def localize(tr, tc):
-    alt = float(Z[tr, tc] + NOISE["baro_m"])
-    brg = float(BEAR[tr, tc] + NOISE["bearing_deg"])
-    ela = float(ELEV[tr, tc] + NOISE["elev_deg"])
+def localize(tr, tc, noise=NOISE):
+    alt = float(Z[tr, tc] + noise["baro_m"])
+    brg = float(BEAR[tr, tc] + noise["bearing_deg"])
+    ela = float(ELEV[tr, tc] + noise["elev_deg"])
     P0 = norm(np.ones((H, W)))
     P1 = norm(P0 * np.exp(-0.5 * ((Z - alt) / SIG_B) ** 2))
     P2 = norm(P1 * np.exp(-0.5 * (angd(BEAR, brg) / SIG_A) ** 2) * np.where(VIS, 1.0, 0.02))
@@ -143,8 +148,18 @@ if lake_big.max():
 else:
     main_lake = LAKE
 flat_ok = ndimage.maximum_filter(SCAP, 7) < 6
-near_shore = ndimage.binary_dilation(main_lake, iterations=15) & ~ndimage.binary_dilation(LAKE, iterations=2)
-lz_pool = np.flatnonzero(LAND & flat_ok & near_shore & ~CLIFF)
+EDGE_M = np.minimum(np.minimum(ROWS, H - 1 - ROWS) * DY, np.minimum(COLS, W - 1 - COLS) * DX)
+LZ_LABEL = "Rendezvous, flat lakeshore"
+lz_pool = np.flatnonzero(LAND & flat_ok & ~CLIFF & (EDGE_M > 100)
+                         & ndimage.binary_dilation(main_lake, iterations=int(150 / DX)) & ~ndimage.binary_dilation(LAKE, iterations=2)) \
+    if main_lake.sum() * DX * DY > 0.2e6 else np.zeros(0, int)
+if lz_pool.size < 20:                                          # no big lake: the flattest low ground instead
+    LZ_LABEL = "Rendezvous, flat valley floor"
+    for lim in (6, 9, 12):
+        lz_pool = np.flatnonzero(LAND & (ndimage.maximum_filter(SCAP, 7) < lim) & ~CLIFF & (EDGE_M > 100)
+                                 & (Z < np.percentile(Z[LAND], 30)))
+        if lz_pool.size >= 20:
+            break
 
 
 def pick_lz(er, ec):
@@ -245,7 +260,7 @@ def plan(tr, tc):
     if not hc:
         return None
     hr = build_route(hc, 30)
-    if not (2500 <= hr["length_m"] <= 8000):
+    if not (0.19 * DIAG <= hr["length_m"] <= 0.62 * DIAG):
         return None
     ic, _ = astar(er, ec, LZ, 18)
     ir = build_route(ic, 18, speed=0.5) if ic else None   # injured: 18 deg limit, half speed
@@ -256,10 +271,14 @@ def plan(tr, tc):
 
 # hidden true spot: try the first preview figure's cell (UTM 12N), then search for a spot that tells the story
 # (fix inside the 95% region and under 150 m, a 2.5 to 8 km walk out, and the 18 deg limit changes or kills the route)
-tx, ty = rtransform("EPSG:26912", "EPSG:4326", [515785.9], [4855038.4])
-cand = [tuple(int(round(v)) for v in lonlat_rc(tx[0], ty[0]))]
-edge = np.minimum(np.minimum(ROWS, H - 1 - ROWS) * DY, np.minimum(COLS, W - 1 - COLS) * DX)
-pool = np.flatnonzero(LAND & VIS & (SCAP < 25) & (DIST > 2000) & (DIST < 4500) & (edge > 800) & (Z > 2300) & (Z < 3000))
+cand = []
+if meta.get("id") == "moran":    # keep the first preview figure's spot for the Moran story
+    tx, ty = rtransform("EPSG:26912", "EPSG:4326", [515785.9], [4855038.4])
+    cand = [tuple(int(round(v)) for v in lonlat_rc(tx[0], ty[0]))]
+edge = EDGE_M
+zl = Z[LAND]
+pool = np.flatnonzero(LAND & VIS & (SCAP < 25) & (DIST > 0.15 * DIAG) & (DIST < 0.35 * DIAG) & (edge > 0.06 * DIAG)
+                      & (Z > np.percentile(zl, 35)) & (Z < np.percentile(zl, 85)))
 cand += [divmod(int(k), W) for k in np.random.default_rng(3).permutation(pool)[:90]]
 best, tried = None, 0
 for tr_, tc_ in cand:
@@ -280,7 +299,7 @@ for k_, v_ in routes.items():
 
 # ------------------------------------------------------------ probability PNGs and stage stats
 stages = []
-keys = [("baro", "Barometer band"), ("bearing", "Bearing to Mount Moran"), ("elev", "Elevation angle to the summit")]
+keys = [("baro", "Barometer band"), ("bearing", f"Bearing to {LM_NAME}"), ("elev", "Elevation angle to the summit")]
 for i, (key, title) in enumerate(keys, start=1):
     P = LOC["P"][i]
     m95, m50 = hpd(P, 0.95), hpd(P, 0.50)
@@ -289,10 +308,45 @@ for i, (key, title) in enumerate(keys, start=1):
     fn = f"prob_{i}_{key}.png"
     Image.fromarray(img).save(os.path.join(DATA, fn), optimize=True)
     pk = int(np.argmax(P))
+    rings = {}
+    for nm, m_ in (("hpd95", m95), ("hpd50", m50)):            # region outlines as lon/lat rings, drawn as smooth lines
+        lev = float(P[m_].min()) * 0.999
+        out_r = []
+        for ln in sorted(contourpy.contour_generator(z=P).lines(lev), key=len, reverse=True)[:30]:
+            xy = np.asarray(ln)
+            if len(xy) < 6:
+                continue
+            xy = xy[::max(1, len(xy) // 400)]
+            out_r.append([[round(west + (x + 0.5) * DLON, 6), round(north - (y + 0.5) * DLAT, 6)] for x, y in xy])
+        rings[nm] = out_r
     stages.append(dict(step=i, key=key, title=title, png=fn, hpd95_km2=round(float(m95.sum() * DX * DY / 1e6), 3),
                        hpd50_km2=round(float(m50.sum() * DX * DY / 1e6), 3), truth_in_hpd95=bool(m95[tr, tc]),
-                       peak_lonlat=[round(v, 6) for v in rc_lonlat(*divmod(pk, W))]))
+                       peak_lonlat=[round(v, 6) for v in rc_lonlat(*divmod(pk, W))], outline=rings))
     log("stage", i, key, stages[-1]["hpd95_km2"], "km2", "truth in 95%", stages[-1]["truth_in_hpd95"])
+
+# ------------------------------------------------------------ the same model on many random spots (not only the demo spot)
+rng = np.random.default_rng(7)
+mc_pool = np.flatnonzero(LAND & VIS & (EDGE_M > 300) & (DIST > 300))
+picks = rng.choice(mc_pool, size=min(N_MC, mc_pool.size), replace=False)
+errs, cover, areas, errs_nd, cover_nd = [], [], [], [], []
+for k in picks:
+    r_, c_ = divmod(int(k), W)
+    nz = dict(baro_m=float(rng.normal(0, SIG_B)), bearing_deg=float(rng.normal(0, SIG_A)), elev_deg=float(rng.normal(0, SIG_E)))
+    for decl, e_, cv in ((0.0, errs, cover), (DECL, errs_nd, cover_nd)):
+        L_ = localize(r_, c_, dict(nz, bearing_deg=nz["bearing_deg"] + decl))
+        m_ = hpd(L_["P"][3], 0.95)
+        e_.append(L_["err"])
+        cv.append(bool(m_[r_, c_]))
+        if decl == 0.0:
+            areas.append(float(m_.sum() * DX * DY / 1e6))
+MC = dict(n=len(errs), sigma=dict(baro_m=SIG_B, bearing_deg=SIG_A, elev_deg=SIG_E),
+          landmark_visible_share=round(float(VIS[LAND].mean()), 3),
+          median_err_m=round(float(np.median(errs))), p90_err_m=round(float(np.percentile(errs, 90))),
+          truth_in_95_share=round(float(np.mean(cover)), 3), median_area95_km2=round(float(np.median(areas)), 3),
+          no_declination=dict(bias_deg=round(DECL, 2), median_err_m=round(float(np.median(errs_nd))),
+                              truth_in_95_share=round(float(np.mean(cover_nd)), 3)),
+          note="Random land spots where the landmark is visible, random sensor noise at the stated sigma, same DEM for truth and model")
+log("monte carlo", MC)
 
 # ------------------------------------------------------------ phone legs (Douglas-Peucker on the healthy route)
 DIRS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
@@ -374,9 +428,9 @@ lzlon, lzlat = rc_lonlat(lzr, lzc)
 sim = dict(
     schema="team8-sim/v1",
     note="Synthetic demo. The hidden point is made up. Same DEM for truth and model, so real-world error is not included.",
-    scenario="Downed pilot, GPS jammed, mild head injury. Pre-loaded terrain, barometer, and pointing at Mount Moran.",
+    scenario=f"Downed pilot near {LM_NAME}, GPS jammed, mild head injury. Pre-loaded terrain, barometer, and pointing at {LM_NAME}.",
     grid=dict(width=W, height=H, cell_m=[round(DX, 3), round(DY, 3)], bounds=meta["bounds"]),
-    landmark=dict(name="Mount Moran", lon=moran["lon"], lat=moran["lat"], elev_m=moran["elev_m"]),
+    landmark=dict(name=LM_NAME, lon=moran["lon"], lat=moran["lat"], elev_m=moran["elev_m"]),
     truth=dict(lon=round(tlon, 6), lat=round(tlat, 6), elev_m=round(float(Z[tr, tc]), 1),
                dist_to_moran_m=round(float(DIST[tr, tc]))),
     measurements=dict(baro_alt_m=round(LOC["alt"], 1), baro_sigma_m=SIG_B, bearing_deg=round(LOC["brg"], 2),
@@ -385,7 +439,7 @@ sim = dict(
     stages=stages,
     estimate=dict(lon=round(elon, 6), lat=round(elat, 6), elev_m=round(float(Z[er, ec]), 1), error_m=round(LOC["err"]),
                   method="argmax of the smoothed final posterior"),
-    rendezvous=dict(lon=round(lzlon, 6), lat=round(lzlat, 6), elev_m=round(float(Z[lzr, lzc]), 1), label="Rendezvous, flat lakeshore"),
+    rendezvous=dict(lon=round(lzlon, 6), lat=round(lzlat, 6), elev_m=round(float(Z[lzr, lzc]), 1), label=LZ_LABEL),
     routes=routes,
     legs=legs,
     line_of_position=lop,
@@ -393,7 +447,9 @@ sim = dict(
                  horizon_deg=[round(float(v), 2) for v in horizon], near_ridge_deg=[round(float(v), 2) for v in near_ridge],
                  data_edge_m=[int(v) for v in edge_m]),
     peaks_from_estimate=seen,
-    model=dict(grid="10 m", barometer="Gaussian, sigma 30 m", bearing="Gaussian on angle, sigma 5 deg, x0.02 where Moran is hidden",
+    mc=MC,
+    declination=meta["declination"],
+    model=dict(grid=f"{DX:.0f} m", barometer="Gaussian, sigma 30 m", bearing="Gaussian on angle, sigma 5 deg, x0.02 where Moran is hidden",
                elevation_angle="Gaussian, sigma 1 deg, curvature and refraction k=0.13", route="A*, Tobler off-trail (x0.6), "
                "slope limit on a 30 m smoothed DEM, cliffs (any 5 m patch over 45 deg) and water blocked"),
 )
