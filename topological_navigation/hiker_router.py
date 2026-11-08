@@ -42,6 +42,12 @@ class CostConfig:
 
     connectivity: int = 8          # 8 or 16 (adds knight moves, less grid bias)
 
+    # Snow (only used when grid.snow_depth_cm is set). Soft by default: snow slows you and makes
+    # slopes riskier, but never blocks a route unless max_snow_cm is set.
+    snow_weight: float = 1.0       # 0 = ignore snow, 1 = realistic, >1 = actively avoid it
+    snow_slope_penalty: float = 1.0  # extra cost for steep ground under snow (slipping)
+    max_snow_cm: float = float("inf")  # hard cap on depth (inf = never block)
+
     @classmethod
     def healthy(cls) -> "CostConfig":
         return cls(max_up=0.25, max_down=0.25, speed_factor=1.0)
@@ -67,6 +73,9 @@ class Grid:
     trails: np.ndarray | None = None    # bool (R, C)
     water: np.ndarray | None = None     # uint8 classes from water.py (display + messages)
     cost_mult: np.ndarray | None = None  # float (R, C) >= 1: multiplier on time to ENTER a cell
+    snow_depth_cm: np.ndarray | None = None  # float (R, C) from weather.apply_conditions (optional)
+    snowline_m: float | None = None     # elevation where lying snow starts (display + messages)
+    weather: dict | None = None         # summary of the conditions applied (age, rain, source, ...)
 
     def __post_init__(self):
         R, C = self.dem.shape
@@ -97,6 +106,29 @@ _OFFSETS_16_EXTRA = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, 
 def tobler_speed(g: np.ndarray) -> np.ndarray:
     """Tobler's hiking function. g = rise/run. Returns speed in m/s."""
     return 6.0 * np.exp(-3.5 * np.abs(g + 0.05)) / 3.6
+
+
+def fmt_duration(minutes) -> str:
+    """Minutes -> '45 min', '1 h 42 min', '3 h'. Used everywhere a time is shown to the user."""
+    if minutes is None or not np.isfinite(minutes):
+        return "no route"
+    m = int(round(abs(float(minutes))))
+    sign = "-" if minutes < 0 and m else ""
+    h, mm = divmod(m, 60)
+    if h == 0:
+        return f"{sign}{mm} min"
+    return f"{sign}{h} h" + (f" {mm:02d} min" if mm else "")
+
+
+def snow_extra(depth_cm):
+    """
+    Extra time multiplier (beyond 1.0) for walking in snow of this depth. A tunable HEURISTIC, not a
+    measured law: +0.04 per cm up to 15 cm (x1.6), then +0.07 per cm (post-holing), capped at x7.
+    Under ~1 cm it is treated as patchy dusting and ignored.
+    """
+    d = np.asarray(depth_cm, float)
+    extra = 0.04 * np.minimum(d, 15.0) + 0.07 * np.maximum(d - 15.0, 0.0)
+    return np.where(d < 1.0, 0.0, np.minimum(extra, 6.0))
 
 
 def _shifted(a: np.ndarray, dr: int, dc: int, fill) -> np.ndarray:
@@ -148,6 +180,12 @@ def build_edge_costs(grid: Grid, cfg: CostConfig):
         mult = np.where(both_trail, mult * cfg.trail_bonus, mult)
         if grid.cost_mult is not None:                      # streams, wet ground, ...
             mult = mult * _shifted(grid.cost_mult, dr, dc, 1.0)
+        snow_dest = None
+        if grid.snow_depth_cm is not None:
+            snow_dest = _shifted(grid.snow_depth_cm, dr, dc, 0.0)   # depth of the cell we step INTO
+            if cfg.snow_weight > 0:
+                slip = cfg.snow_slope_penalty * np.clip(snow_dest / 10.0, 0, 1) * (np.abs(g) / g_cap) ** 2
+                mult = mult * (1.0 + cfg.snow_weight * (snow_extra(snow_dest) + slip))
         cost = t * mult
 
         # Hard blocks
@@ -159,6 +197,8 @@ def build_edge_costs(grid: Grid, cfg: CostConfig):
             | grid.blocked
             | _shifted(grid.blocked, dr, dc, True)
         )
+        if snow_dest is not None and np.isfinite(cfg.max_snow_cm):
+            bad |= snow_dest > cfg.max_snow_cm
         # Moves must not squeeze through a gap between blocked cells (e.g. a diagonal step between
         # two water cells that only touch at their corners): every cell the move passes beside or
         # over has to be walkable.
