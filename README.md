@@ -34,6 +34,28 @@ The event demo uses a real phone aimed by hand at three printed mountain cards. 
 | ![Judge view with Noah's snow routes](docs/screenshots/judge_map_snow.jpg) | **Snow, Noah's planner, switched on.** Dry ground 2 h 49 min and 7.5 km, today's snow 3 h 20 min and 7.9 km, from the demo fix to the rendezvous. Precomputed at 9:00 EST from Open-Meteo, off by default |
 | ![Noah's dry and snow routes](docs/screenshots/noah_snow_routes.jpg) | **Noah's route planner** (`topological_navigation/`) on the real Moran terrain, dry route against today's snow route. The phone and the board do not use this planner yet |
 
+### More from the app
+
+| | |
+| --- | --- |
+| ![ATAK item list](docs/screenshots/atak_item_list.jpg) | **ATAK's own item list, same phone, Nov 8, 8:59 EST.** RIDGELINE 1 95%, RIDGELINE 1 ROUTE to Rendezvous, HIDE 1 and SIGNAL 1 to 3, each with its MGRS and distance. ATAK's corner still says NO GPS. The status bar is cropped |
+| ![3D map, the fix](terrain_viewer/screenshots/01_fix_3d.png) | **The 3D map (`terrain_viewer/`) at step 4 of 6.** Pencil lines from Mount Moran, Thor Peak and Pk 3388 cross where the pilot is, ±350 m at 95%, 0.384 km² down from 75.4 km². The phone on the right shows the same fix |
+| ![Eye level view](terrain_viewer/screenshots/04_eye_view.png) | **The same fix at eye level,** with the pencil lines running toward the peaks |
+| ![Judge view, 2D map with snow](docs/screenshots/judge_map_2d_snow.jpg) | **The judge view in 2D Map mode with snow on,** before the first Lock (75.4 km² where the pilot could be). Snow routes are precomputed from Open-Meteo at 9:00 EST and off by default |
+
+### Design samples and mockups (Nov 7, simulated numbers)
+
+These came before the app and use simulated numbers. They show the idea, not measured results.
+
+| | |
+| --- | --- |
+| ![First prototype figure](docs/screenshots/first_prototype_figure.jpg) | **Our first prototype figure.** How the barometer band, the bearing to Mount Moran and the elevation angle each shrink the area where the pilot can be |
+| ![Map sample](mockups/map_samples/00_hero.png) | **Map sample.** A fix from three peaks and the barometer, and a safe route to the rendezvous (simulated error and route length) |
+| ![Localization steps](mockups/map_samples/02_localization_steps.png) | **The steps in four panels.** The start, the barometer band, pointing at the tallest-looking peak, then the assistant picking two more peaks |
+| ![Skyline](mockups/map_samples/04_skyline.png) | **The skyline from the true spot,** rendered from the elevation model with vertical angles true to scale |
+| ![3D mockup, fix and route](mockups/map_3d/screenshots/4_fix_and_route.jpg) | **3D mockup (`mockups/map_3d/`), the fix and the safe route** to the rendezvous |
+| ![3D mockup, injured](mockups/map_3d/screenshots/5_injured_stay_signal_wait.jpg) | **3D mockup, injured.** No route stays under 18°, so it says Stay, signal, wait instead of sending the pilot over steep ground |
+
 ## Team
 
 | Name | GitHub | Role |
