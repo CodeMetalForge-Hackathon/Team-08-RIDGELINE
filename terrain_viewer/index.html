@@ -10,8 +10,10 @@
 <link rel="stylesheet" href="lib/fonts/fonts.css">
 <style>
 /* A printed topographic sheet that moves, and the judge drives it.
-   Map conventions follow USGS US Topo, swisstopo and CalTopo: green woods, grey rock, blue water (and only water is blue),
-   brown contours with bold index lines, a 1 km UTM grid, and a collar with the scale bar, contour interval and declination.
+   The map picture is the team's relief style, the one Noah's route plots use (scripts/team8_relief.py): elevation tint
+   from green valleys through tan and brown to grey summits, soft relief shading lit from the north-west, blue water (and
+   only water is blue), dark contours with bold index lines and a white 1 km UTM grid. The collar keeps the scale bar,
+   contour interval and declination of a printed sheet.
    Plotting follows the paper habit of land navigation: a pencil line from each peak, the fix as a circle with a dot.
    Red-orange is where you can be, the route is coloured by how hard the ground is (yellow easy, orange moderate,
    pink steep), red is danger. Ink is the only colour of the controls; amber only asks for attention.
@@ -128,6 +130,10 @@ button.hold span{position:relative}
 #legend .eyebrow{margin-bottom:2px}
 #legend .k{display:flex;align-items:center;gap:7px;white-space:nowrap}
 #legend svg.sw{width:22px;height:12px;flex:none;display:block}
+#legend .k.two{align-items:flex-start}
+#legend .k.two svg.sw{margin-top:2.5px}
+#legend .kn{display:block;color:var(--mute);font-variant-numeric:tabular-nums}
+#legend .kn:empty{display:none}
 #collar{grid-column:1/-1;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-top:10px;padding-top:10px;border-top:1px solid var(--rule-2);font-size:11px;line-height:14px;color:var(--ink-2)}
 #scale{display:flex;flex-direction:column;min-width:0;font-variant-numeric:tabular-nums}
 #scaleBar{display:block;height:6px;margin:3px 0 4px;border:1px solid var(--ink);background:linear-gradient(90deg,var(--ink) 0 25%,#fff 25% 50%,var(--ink) 50% 75%,#fff 75% 100%)}
@@ -229,11 +235,10 @@ html.still *{transition:none!important;animation:none!important}
     <div class="col">
       <div class="eyebrow">Map</div>
       <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M11 1.5 16.5 10.5H5.5Z" fill="#1f1d1a"/></svg>Summit, metres</div>
-      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="1" y="1" width="20" height="10" rx="2" fill="#cee0bc" stroke="#aec49a" stroke-width=".8"/></svg>Woodland</div>
-      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="1" y="1" width="20" height="10" rx="2" fill="#d6d1ca" stroke="#bdb6aa" stroke-width=".8"/></svg>Rock and scree</div>
-      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="1" y="1" width="20" height="10" rx="2" fill="#aacee4" stroke="#4a80ac" stroke-width="1"/></svg>Water</div>
-      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M1 4.5c6-3.5 10 2.5 20-1" fill="none" stroke="#b58a63" stroke-width=".9"/><path d="M1 9c6-3.5 10 2.5 20-1" fill="none" stroke="#8a542e" stroke-width="1.6"/></svg>Contours</div>
-      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M1 3.5H21M1 8.5H21M7.5 0.5V11.5M15 0.5V11.5" fill="none" stroke="#5f7393" stroke-width=".9"/></svg>1 km grid</div>
+      <div class="k two"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><defs><linearGradient id="tintKey"><stop offset="0" stop-color="#3f7d3a"/><stop offset=".25" stop-color="#8fba62"/><stop offset=".5" stop-color="#cfba78"/><stop offset=".75" stop-color="#9a7550"/><stop offset="1" stop-color="#5b5550"/></linearGradient></defs><rect x="1" y="1" width="20" height="10" rx="2" fill="url(#tintKey)"/></svg><span>Elevation<span id="tintRange" class="kn"></span></span></div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="1" y="1" width="20" height="10" rx="2" fill="#3b8ed0"/></svg>Water</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="1" y="1" width="20" height="10" rx="2" fill="#cfba78"/><path d="M1 4.5c6-3.5 10 2.5 20-1" fill="none" stroke="#000" stroke-opacity=".35" stroke-width=".8"/><path d="M1 9c6-3.5 10 2.5 20-1" fill="none" stroke="#000" stroke-opacity=".6" stroke-width="1.5"/></svg>Contours</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="1" y="1" width="20" height="10" rx="2" fill="#cfba78"/><path d="M1 4H21M1 8.5H21M7.5 1V11M15 1V11" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width=".9"/></svg>1 km grid</div>
     </div>
     <div class="col">
       <div class="eyebrow">Plotting</div>
@@ -750,8 +755,10 @@ const GRID_LABELS = (() => {   // kilometre digits of the UTM grid along the map
 })();
 function layers() {
   const eye = state.view === 'eye', flat = state.view === '2d', step = state.step, top = eye ? {} : ON_TOP, sc = state.scen;
+  // unlit: the shading is already painted into the map. In deck.gl 9, material: false still lit the mesh with the
+  // default material and lights, which darkened the map to about 0.72 and shaded it twice
   const out = [new TerrainLayer({id: 'terrain', elevationData: D.img.terrain, texture: texture(texKey()), bounds: BOUNDS,
-    elevationDecoder: DECODER, meshMaxError: 2.0, material: false, loaders: [GridTerrainLoader], pickable: !eye})];
+    elevationDecoder: DECODER, meshMaxError: 2.0, material: {unlit: true}, loaders: [GridTerrainLoader], pickable: !eye})];
   const aimedN = aimedAt(step), aimed = sc.sg.peaks.slice(0, aimedN).map((p, i) => ({...p, letter: 'ABC'[i]}));
   const aimedNames = new Set(aimed.map(p => p.name)), nextP = step <= 4 && aimedN < sc.np ? sc.sg.peaks[aimedN] : null;
   const big = p => aimedNames.has(p.name) || (nextP && p.name === nextP.name);
@@ -779,9 +786,9 @@ function layers() {
   }
   if (flat) {
     out.push(new TextLayer({id: 'contour-labels', data: M.contours.labels || [], ...TXT, getPosition: l => [l.lon, l.lat, l.elev_m], getText: l => String(l.elev_m),
-      getSize: 10.5, getColor: [138, 84, 46], getAngle: l => l.angle, outlineWidth: 2.5, parameters: ON_TOP}));
+      getSize: 10.5, getColor: [62, 58, 52], getAngle: l => l.angle, outlineWidth: 2.5, parameters: ON_TOP}));
     out.push(new TextLayer({id: 'grid-labels', data: GRID_LABELS, ...TXT, getPosition: t => [t.lon, t.lat, t.z], getText: t => t.s,
-      getSize: 11, getColor: [42, 74, 116], fontWeight: 600, getPixelOffset: t => t.o, parameters: ON_TOP}));
+      getSize: 11, getColor: [70, 66, 59], fontWeight: 600, getPixelOffset: t => t.o, parameters: ON_TOP}));
   }
   if (eye) return out;
   const T = sc.truth;
@@ -1111,6 +1118,8 @@ function initStatic() {
   $('bHealthy').textContent = `Healthy · ${CAP.healthy}°`; $('bInjured').textContent = `Injured · ${CAP.injured}°`;
   const c = M.bounds, sq = mgrs((c[0] + c[2]) / 2, (c[1] + c[3]) / 2).split(' ');
   $('sheetNote').innerHTML = NB(`Contours every ${M.contours.interval_m} m<br>UTM ${sq[0]} ${sq[1]}, 1 km grid`);
+  const tm = M.map_style && M.map_style.tint_m, r10 = v => (Math.round(v / 10) * 10).toLocaleString('en-US');   // the tint runs green to grey between these heights
+  $('tintRange').textContent = tm ? NB(`${r10(tm[0])} to ${r10(tm[1])} m`) : '';
   const dem = {cop30: 'Copernicus DEM GLO-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the EU and ESA',
     '3dep10': 'USGS 3DEP 1/3 arc-second DEM, public domain', file: 'USGS 3DEP 1 m lidar via OpenTopography, public domain'}[M.dem.source] || M.dem.label;
   $('credit').textContent = `${dem}. ESA WorldCover 2021 (CC BY 4.0). Names from Wikidata (CC0). Declination WMM2025. deck.gl 9.3.11 (MIT), Noto Sans JP and B612 Mono (OFL). Synthetic landing spots, no real person or position. Runs offline.`;

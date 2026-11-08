@@ -6,21 +6,25 @@ Reads area.json, the DEM, landcover.tif and places.json written by team8_fetch_a
 (cell 5 m for lidar, 10 m for 10 m and 30 m DEMs unless --cell says otherwise):
   terrain_rgb.png       Mapbox terrain-RGB at the texture cell, h = -10000 + (R*65536 + G*256 + B) * 0.1
   terrain_rgb_mesh.png  the same at twice the cell, for the 3D mesh
-  topo.jpg              the printed-map picture: land cover tints, relief shading, contours, water, 1 km UTM grid
+  topo.jpg              the map picture in the team's relief style (team8_relief.py, the look of Noah's route plots):
+                        elevation tint, relief shading, water, contours, 1 km UTM grid
   slope.png             slope x2 (0.5 deg steps) on the mesh grid, smoothed over about 30 m. The route limit and the
                         too-steep hatching both read this file, so they always agree
   water_mask.png        255 = water, texture grid
   terrain_meta.json     bounds, grid, decoder, peaks, labels, UTM grid labels, declination, credits
 """
-import argparse, json, math, os, time
+import argparse, json, math, os, sys, time
 import numpy as np
 import rasterio
 from rasterio.enums import Resampling
-from rasterio.warp import reproject, transform as rtransform
+from rasterio.warp import reproject
 from rasterio.transform import from_bounds
 from scipy import ndimage
 from PIL import Image
 import contourpy
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # team8_relief.py sits next to this file; python -I leaves it off the path
+import team8_relief as RELIEF
 
 ap = argparse.ArgumentParser()
 ap.add_argument("area_dir")
@@ -97,75 +101,11 @@ keep[1:] = ndimage.sum(water, lab, np.arange(1, nl + 1)) * DX * DY >= 2000      
 WATER = keep[lab]
 log("water share", round(float(WATER.mean()), 3))
 
-# ------------------------------------------------------------ the printed-map picture
-TINT = np.zeros((256, 3), np.float64)
-TINT[:] = (243, 240, 231)                                       # paper
-for k, c in {10: (206, 224, 188), 20: (224, 231, 202), 30: (240, 238, 220), 40: (242, 236, 210), 50: (226, 210, 203),
-             60: (233, 229, 221), 70: (248, 251, 253), 80: (170, 206, 228), 90: (212, 230, 224), 95: (196, 222, 204),
-             100: (229, 231, 218)}.items():
-    TINT[k] = c
-base = TINT[LC]
-rock = (SLOPE > 48) | ((SLOPE > 36) & np.isin(LC, (60, 100)))
-base[rock] = base[rock] * 0.35 + np.array((214, 209, 202)) * 0.65
-
-
-def shade_layer(alt=44.0):
-    nx, ny = -gx, gy
-    nrm = np.sqrt(nx * nx + ny * ny + 1.0)
-    out = np.zeros(Z.shape, np.float64)
-    a = math.radians(alt)
-    for az, wt in ((315, 0.55), (270, 0.15), (360, 0.15), (225, 0.15)):
-        t = math.radians(az)
-        out += wt * np.clip((nx * math.sin(t) * math.cos(a) + ny * math.cos(t) * math.cos(a) + math.sin(a)) / nrm, 0, 1)
-    return out, math.sin(a)
-
-
-HS, HSF = shade_layer()
-s = np.clip(1.0 + 0.8 * (HS - HSF), 0.46, 1.12)
-rgb = np.where((s < 1)[..., None], base * s[..., None], base + (255 - base) * ((s - 1) * 1.6)[..., None])
-cool = np.clip(1 - s, 0, 1)[..., None] * 0.30                   # shadows lean blue-grey, like hand relief shading
-rgb = rgb * (1 - cool) + np.array((92, 104, 126)) * cool
-
-wsoft = ndimage.gaussian_filter(WATER.astype(np.float32), 0.8)[..., None]
-rgb = rgb * (1 - wsoft) + np.array((170, 206, 228)) * wsoft
-shore = (WATER & ~ndimage.binary_erosion(WATER, iterations=1))
-rgb[shore] = rgb[shore] * 0.4 + np.array((74, 128, 172)) * 0.6
-
+# ------------------------------------------------------------ the map picture, in the team's relief style (team8_relief.py)
 relief = float(np.percentile(Z[~WATER], 99.9) - np.percentile(Z[~WATER], 0.1)) if (~WATER).any() else float(np.ptp(Z))
 CI, IDX = (50, 250) if relief >= 1200 else ((20, 100) if relief >= 400 else (10, 50))
-SCALE = max(W, H * 1.35) / 1150.0                              # texture pixels per screen pixel at the whole-tile view
-
-
-def lines(val, step, width_px, gpx):
-    d = np.abs(np.mod(val / step + 0.5, 1.0) - 0.5) * step / np.maximum(gpx, 1e-6)
-    return np.clip(0.5 * width_px + 0.5 - d, 0, 1)
-
-
-gpx = G * CELL                                                  # metres of climb per texture pixel
-c_minor = lines(Z, CI, max(0.9, 0.85 * SCALE), gpx) * np.where(SLOPE > 55, 0.25, 1.0)
-c_index = lines(Z, IDX, max(1.4, 1.5 * SCALE), gpx)
-c_minor[WATER] = 0
-c_index[WATER] = 0
-for a_, col in ((c_minor * 0.62, (160, 108, 66)), (c_index * 0.88, (138, 84, 46))):
-    rgb = rgb * (1 - a_[..., None]) + np.array(col) * a_[..., None]
-
-# 1 km UTM grid, the lines an MGRS reading refers to
-lat_c, lon_c = (south + north) / 2, (west + east) / 2
-ZONE = int((lon_c + 180) // 6) + 1
-UTM = f"EPSG:{(32600 if lat_c >= 0 else 32700) + ZONE}"
-sr, sc = np.arange(0, H + 8, 8).clip(max=H - 1), np.arange(0, W + 8, 8).clip(max=W - 1)
-LL = np.meshgrid(west + (sc + 0.5) * DLON, north - (sr + 0.5) * DLAT)
-EE, NN = rtransform("EPSG:4326", UTM, LL[0].ravel().tolist(), LL[1].ravel().tolist())
-EE, NN = np.array(EE).reshape(LL[0].shape), np.array(NN).reshape(LL[0].shape)
-rr, cc = np.mgrid[0:H, 0:W]
-E = ndimage.map_coordinates(EE, [rr / 8.0, cc / 8.0], order=1, mode="nearest")
-N = ndimage.map_coordinates(NN, [rr / 8.0, cc / 8.0], order=1, mode="nearest")
-del rr, cc
-for v in (E, N):
-    g_ = np.hypot(*np.gradient(v))
-    a_ = lines(v, 1000.0, max(0.8, 0.75 * SCALE), g_) * 0.5
-    rgb = rgb * (1 - a_[..., None]) + np.array((38, 58, 92)) * a_[..., None]
-TOPO = np.clip(rgb, 0, 255).astype(np.uint8)
+E, N, ZONE, UTM = RELIEF.utm_grid((west, south, east, north), W, H)   # the 1 km UTM grid an MGRS reading refers to
+TOPO, TINT_M = RELIEF.render(Z, WATER, (DX, DY), CI, IDX, (west, south, east, north), utm=(E, N))
 
 
 def edge_ticks(vals, along, axis_len, to_lonlat):
@@ -206,7 +146,7 @@ files = dict(terrain_rgb="terrain_rgb.png", terrain_rgb_mesh="terrain_rgb_mesh.p
              slope="slope.png", water_mask="water_mask.png")
 Image.fromarray(terrain_rgb(Z)).save(os.path.join(OUT, files["terrain_rgb"]), optimize=True)
 Image.fromarray(terrain_rgb(Z2)).save(os.path.join(OUT, files["terrain_rgb_mesh"]), optimize=True)
-Image.fromarray(TOPO).save(os.path.join(OUT, files["topo"]), quality=90, optimize=True)
+RELIEF.save(TOPO, os.path.join(OUT, files["topo"]))
 Image.fromarray(np.clip(np.round(S2 * 2), 0, 255).astype(np.uint8)).save(os.path.join(OUT, files["slope"]), optimize=True)
 Image.fromarray((WATER * 255).astype(np.uint8)).save(os.path.join(OUT, files["water_mask"]), optimize=True)
 log("images written")
@@ -354,6 +294,7 @@ meta = dict(
     labels=labels,
     credits=[AREA["dem"]["credit"], AREA["landcover"]["credit"], AREA["places"]["credit"],
              "Magnetic declination from the World Magnetic Model 2025 (NOAA NCEI and BGS), public domain"],
+    map_style=RELIEF.style_note(TINT_M),
 )
 with open(os.path.join(OUT, "terrain_meta.json"), "w", encoding="utf-8") as f:
     json.dump(meta, f, ensure_ascii=False, indent=1)
