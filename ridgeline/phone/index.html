@@ -1036,7 +1036,7 @@ function checkOffline() {
   Promise.all(need.map(u => caches.match(u).then(Boolean, () => false))).then(hits => {
     const n = hits.filter(Boolean).length, active = !!navigator.serviceWorker.controller;
     offReady = active && n === need.length;
-    setOff(offReady ? 'ok' : 'warn', offReady ? 'Offline ready' : `Saving for offline ${n}/${need.length}`);
+    setOff(offReady ? 'ok' : 'warn', offReady ? 'Offline ready' : `Saving for offline, ${n} of ${need.length}`);
     clearTimeout(offTimer); offTimer = setTimeout(checkOffline, offReady ? 30000 : 2000);
   });
 }
