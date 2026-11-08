@@ -1,0 +1,314 @@
+{
+  "schema": "ridgeline-solver-eval/v1",
+  "generated_by": "tests/solver.test.mjs",
+  "generated_at": "2026-11-08T07:12:27.351Z",
+  "note": "Synthetic. The demo spot is made up and the same 30 m DEM makes the locks and the model, so DEM error, lens and sensor bias, and people who misjudge a summit are not included.",
+  "area": "moran",
+  "grid": {
+    "rows": 266,
+    "cols": 345,
+    "cell_m": [
+      30.012,
+      29.952
+    ],
+    "peaks": 15
+  },
+  "demo": {
+    "cell": 25891,
+    "lon": -110.840931,
+    "lat": 43.868388,
+    "elev_m": 2738.2,
+    "span_deg": 103.5,
+    "peaks": [
+      {
+        "peak_id": "pk-3211",
+        "name": "Pk 3211",
+        "bearing_true_deg": 22.1,
+        "elevation_deg": 27.01,
+        "dist_m": 924
+      },
+      {
+        "peak_id": "raynolds-peak",
+        "name": "Raynolds Peak",
+        "bearing_true_deg": 78.08,
+        "elevation_deg": 25.2,
+        "dist_m": 1245
+      },
+      {
+        "peak_id": "mount-moran",
+        "name": "Mount Moran",
+        "bearing_true_deg": 125.55,
+        "elevation_deg": 9.81,
+        "dist_m": 6366
+      }
+    ]
+  },
+  "noise": {
+    "heading_sigma_deg": 3,
+    "elevation_sigma_deg": 1.5,
+    "baro_sigma_m": 10,
+    "band_m": 30,
+    "frame_offset": "uniform 0 to 360 deg per trial (unknown heading frame)",
+    "seed": 20261108
+  },
+  "solver": {
+    "sigma_az_deg": 3,
+    "sigma_el_deg": 1.5,
+    "hdr_mass": 0.95,
+    "enough_radius_m": 150,
+    "min_locks_for_enough": 3,
+    "poor_fit_p": 0.01
+  },
+  "trials": 200,
+  "three_locks": {
+    "trials": 200,
+    "median_err_m": 60,
+    "p90_err_m": 95,
+    "max_err_m": 190,
+    "truth_in_95_share": 0.98,
+    "median_r95_m": 83,
+    "enough_share": 0.985,
+    "poor_fit_share": 0.015,
+    "no_feasible_cell_share": 0
+  },
+  "by_locks": [
+    {
+      "locks": 1,
+      "trials": 200,
+      "median_err_m": 153,
+      "p90_err_m": 285,
+      "max_err_m": 513,
+      "truth_in_95_share": 0.935,
+      "median_r95_m": 137,
+      "enough_share": 0,
+      "poor_fit_share": 0,
+      "no_feasible_cell_share": 0
+    },
+    {
+      "locks": 2,
+      "trials": 200,
+      "median_err_m": 67,
+      "p90_err_m": 134,
+      "max_err_m": 192,
+      "truth_in_95_share": 0.97,
+      "median_r95_m": 99,
+      "enough_share": 0,
+      "poor_fit_share": 0.015,
+      "no_feasible_cell_share": 0
+    },
+    {
+      "locks": 3,
+      "trials": 200,
+      "median_err_m": 60,
+      "p90_err_m": 95,
+      "max_err_m": 190,
+      "truth_in_95_share": 0.98,
+      "median_r95_m": 83,
+      "enough_share": 0.985,
+      "poor_fit_share": 0.015,
+      "no_feasible_cell_share": 0
+    }
+  ],
+  "wrong_aim": {
+    "method": "One of the three demo locks is measured on another visible peak but labelled as the intended one (a wrong aim). 20 noisy trials per (lock, wrong peak) pair, plus one noise-free trial.",
+    "detectable_rule": "the wrong peak is at least 15 deg from the intended one in bearing",
+    "pairs": 12,
+    "detectable_pairs": 10,
+    "detectable_noise_free_named_share": 1,
+    "detectable_noisy_flagged_share": 1,
+    "detectable_noisy_named_share": 0.96,
+    "detectable_noisy_named_other_share": 0,
+    "false_alarm_share_without_swap": 0.015,
+    "pairs_detail": [
+      {
+        "slot": 0,
+        "meant": "pk-3211",
+        "aimed_at": "pk-3681",
+        "bearing_separation_deg": 109.8,
+        "elevation_difference_deg": -17.6,
+        "detectable": true,
+        "noise_free_named_slot": true,
+        "noisy_flagged_share": 1,
+        "noisy_named_slot_share": 1,
+        "noisy_named_other_share": 0
+      },
+      {
+        "slot": 0,
+        "meant": "pk-3211",
+        "aimed_at": "thor-peak",
+        "bearing_separation_deg": 116.7,
+        "elevation_difference_deg": -17.6,
+        "detectable": true,
+        "noise_free_named_slot": true,
+        "noisy_flagged_share": 1,
+        "noisy_named_slot_share": 0.9,
+        "noisy_named_other_share": 0
+      },
+      {
+        "slot": 0,
+        "meant": "pk-3211",
+        "aimed_at": "pk-3339",
+        "bearing_separation_deg": 136.2,
+        "elevation_difference_deg": -18.3,
+        "detectable": true,
+        "noise_free_named_slot": true,
+        "noisy_flagged_share": 1,
+        "noisy_named_slot_share": 0.95,
+        "noisy_named_other_share": 0
+      },
+      {
+        "slot": 0,
+        "meant": "pk-3211",
+        "aimed_at": "pk-3292",
+        "bearing_separation_deg": 148.4,
+        "elevation_difference_deg": -21,
+        "detectable": true,
+        "noise_free_named_slot": true,
+        "noisy_flagged_share": 1,
+        "noisy_named_slot_share": 1,
+        "noisy_named_other_share": 0
+      },
+      {
+        "slot": 1,
+        "meant": "raynolds-peak",
+        "aimed_at": "pk-3681",
+        "bearing_separation_deg": 53.8,
+        "elevation_difference_deg": -15.7,
+        "detectable": true,
+        "noise_free_named_slot": true,
+        "noisy_flagged_share": 1,
+        "noisy_named_slot_share": 0.95,
+        "noisy_named_other_share": 0
+      },
+      {
+        "slot": 1,
+        "meant": "raynolds-peak",
+        "aimed_at": "thor-peak",
+        "bearing_separation_deg": 60.7,
+        "elevation_difference_deg": -15.8,
+        "detectable": true,
+        "noise_free_named_slot": true,
+        "noisy_flagged_share": 1,
+        "noisy_named_slot_share": 0.95,
+        "noisy_named_other_share": 0
+      },
+      {
+        "slot": 1,
+        "meant": "raynolds-peak",
+        "aimed_at": "pk-3339",
+        "bearing_separation_deg": 80.2,
+        "elevation_difference_deg": -16.5,
+        "detectable": true,
+        "noise_free_named_slot": true,
+        "noisy_flagged_share": 1,
+        "noisy_named_slot_share": 0.9,
+        "noisy_named_other_share": 0
+      },
+      {
+        "slot": 1,
+        "meant": "raynolds-peak",
+        "aimed_at": "pk-3292",
+        "bearing_separation_deg": 92.4,
+        "elevation_difference_deg": -19.2,
+        "detectable": true,
+        "noise_free_named_slot": true,
+        "noisy_flagged_share": 1,
+        "noisy_named_slot_share": 0.95,
+        "noisy_named_other_share": 0
+      },
+      {
+        "slot": 2,
+        "meant": "mount-moran",
+        "aimed_at": "pk-3681",
+        "bearing_separation_deg": 6.3,
+        "elevation_difference_deg": -0.4,
+        "detectable": false,
+        "noise_free_named_slot": false,
+        "noisy_flagged_share": 0.2,
+        "noisy_named_slot_share": 0.2,
+        "noisy_named_other_share": 0
+      },
+      {
+        "slot": 2,
+        "meant": "mount-moran",
+        "aimed_at": "thor-peak",
+        "bearing_separation_deg": 13.2,
+        "elevation_difference_deg": -0.4,
+        "detectable": false,
+        "noise_free_named_slot": false,
+        "noisy_flagged_share": 0.55,
+        "noisy_named_slot_share": 0.55,
+        "noisy_named_other_share": 0
+      },
+      {
+        "slot": 2,
+        "meant": "mount-moran",
+        "aimed_at": "pk-3339",
+        "bearing_separation_deg": 32.7,
+        "elevation_difference_deg": -1.1,
+        "detectable": true,
+        "noise_free_named_slot": true,
+        "noisy_flagged_share": 1,
+        "noisy_named_slot_share": 1,
+        "noisy_named_other_share": 0
+      },
+      {
+        "slot": 2,
+        "meant": "mount-moran",
+        "aimed_at": "pk-3292",
+        "bearing_separation_deg": 45,
+        "elevation_difference_deg": -3.8,
+        "detectable": true,
+        "noise_free_named_slot": true,
+        "noisy_flagged_share": 1,
+        "noisy_named_slot_share": 1,
+        "noisy_named_other_share": 0
+      }
+    ]
+  },
+  "frame_independence": [
+    {
+      "frame_offset_deg": 0,
+      "best_cell": 25891,
+      "err_m": 0,
+      "recovered_offset_deg": 0,
+      "r95_m": 85
+    },
+    {
+      "frame_offset_deg": 47.5,
+      "best_cell": 25891,
+      "err_m": 0,
+      "recovered_offset_deg": 47.5,
+      "r95_m": 85
+    },
+    {
+      "frame_offset_deg": 123,
+      "best_cell": 25891,
+      "err_m": 0,
+      "recovered_offset_deg": 123,
+      "r95_m": 85
+    },
+    {
+      "frame_offset_deg": 271.25,
+      "best_cell": 25891,
+      "err_m": 0,
+      "recovered_offset_deg": 271.25,
+      "r95_m": 85
+    },
+    {
+      "frame_offset_deg": 359.9,
+      "best_cell": 25891,
+      "err_m": 0,
+      "recovered_offset_deg": 359.9,
+      "r95_m": 85
+    }
+  ],
+  "timing": {
+    "median_ms": 0.6,
+    "p90_ms": 1,
+    "max_ms": 54.9,
+    "grid_load_ms": 55,
+    "solves": 600,
+    "environment": "Node v22.17.1 on win32, one thread. Browser timing is measured separately (see the PR)."
+  }
+}
