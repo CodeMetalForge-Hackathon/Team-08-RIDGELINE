@@ -43,6 +43,7 @@ SURVIVOR_TYPE = 'a-f-G-U-C-I'   # friendly, ground, dismounted (the infantry fra
 HOW_FIX = 'm-f'                 # machine, fused: the Locks, the barometer and the lidar terrain together
 HOW_GPS = 'm-g'                 # machine, derived from a GPS receiver
 STALE_S = 600.0                 # every send moves stale 10 minutes ahead
+FIX_OLD_S = 600.0               # past this age the remarks say the person may have moved
 UNKNOWN = 9999999.0             # CoT "no value" for hae, ce and le
 R95_SIGMAS = 2.4477             # circular normal: 95% of the probability lies within sqrt(-2 ln 0.05) sigma
 EYE_M = 1.7
@@ -92,6 +93,16 @@ def fmt_t(s) -> str:
     if s >= 3600:
         return f'{int(s // 3600)} h {round((s % 3600) / 60):02d} min'
     return f'{max(1, round(s / 60))} min'
+
+
+def fmt_age(s) -> str:
+    return 'under 1 min ago' if s < 60 else f'{fmt_t(s)} ago'
+
+
+def position_key(fix):
+    """What makes a new position: the place, its 95% radius and the Lock count. A new route or new
+    marks around the same fix do not reset the fix time."""
+    return (fix['lat'], fix['lon'], fix['r95'], fix['n']) if fix else None
 
 
 def split_stream(buf: bytes) -> tuple[list[bytes], bytes]:
@@ -277,7 +288,7 @@ def xml(ev: ET.Element) -> str:
     return ET.tostring(ev, encoding='unicode')
 
 
-def survivor_remarks(fix: dict) -> str:
+def survivor_remarks(fix: dict, now: float | None = None, fix_at: float | None = None) -> str:
     pace = fix.get('pace')
     if pace and (pace['walked_m'] >= 1 or pace['gps_used'] or pace['refixes']):   # the live Auto-PACE position
         walked = f", {fmt_m(pace['walked_m'])} walked since{' (simulated)' if pace['sim'] else ''}" if pace['walked_m'] >= 1 else ''
@@ -286,6 +297,14 @@ def survivor_remarks(fix: dict) -> str:
             parts.append('Confidence low, aim at 3 peaks again.')
     else:
         parts = [f"Terrain fix from {fix['n']} peaks, no GPS, 95% radius {round(fix['r95'])} m."]
+    if fix_at is not None and now is not None:
+        # every resend restamps time and stale, so the age has to be said in words. With Auto-PACE every
+        # walked update is a new position, so the age is that of the live estimate
+        age = max(0.0, now - fix_at)
+        clock = datetime.fromtimestamp(fix_at, timezone.utc).strftime('%H:%MZ')
+        parts.append(f'Position as of {clock}, {fmt_age(age)}.')
+        if age >= FIX_OLD_S:
+            parts.append(f'Older than {round(FIX_OLD_S / 60)} min, the person may have moved since.')
     gps = fix.get('gps')
     if gps and gps['verdict'] == 'REJECTED':
         parts.append('Simulated GPS disagrees with the terrain estimate' + (f", {fmt_m(gps['dist_m'])} from this fix." if gps['dist_m'] is not None else '.') + ' Cause unknown. Either estimate may be wrong.')
@@ -303,12 +322,12 @@ def survivor_remarks(fix: dict) -> str:
     return ' '.join(parts)
 
 
-def survivor_event(fix: dict, now: float, ground) -> ET.Element:
+def survivor_event(fix: dict, now: float, ground, fix_at: float | None = None) -> ET.Element:
     hae = ground + EYE_M + GEOID_M if ground is not None else UNKNOWN
     ev, d = _event(UID, SURVIVOR_TYPE, HOW_FIX, fix['lat'], fix['lon'], now, hae=hae, ce=fix['r95'] / R95_SIGMAS)
     ET.SubElement(d, 'contact', {'callsign': CALLSIGN})
     ET.SubElement(d, 'precisionlocation', {'geopointsrc': 'CALC', 'altsrc': 'LIDAR' if ground is not None else '???'})
-    ET.SubElement(d, 'remarks').text = survivor_remarks(fix)
+    ET.SubElement(d, 'remarks').text = survivor_remarks(fix, now, fix_at)
     return ev
 
 
@@ -385,12 +404,13 @@ def spot_event(uid: str, callsign: str, argb: int, lat: float, lon: float, now: 
     return ev
 
 
-def build(fix, now: float, ground_fn=None) -> list[tuple[str, str]]:
-    """[(uid, xml)] for a fix from snapshot(), in a stable order. Empty when there is no fix."""
+def build(fix, now: float, ground_fn=None, fix_at: float | None = None) -> list[tuple[str, str]]:
+    """[(uid, xml)] for a fix from snapshot(), in a stable order. Empty when there is no fix.
+    fix_at is when this position was first seen (epoch s), shown as its age in the survivor remarks."""
     if not fix:
         return []
     ground = ground_fn or terrain().ground_m
-    out = [(UID, xml(survivor_event(fix, now, ground(fix['lat'], fix['lon'])))),
+    out = [(UID, xml(survivor_event(fix, now, ground(fix['lat'], fix['lon']), fix_at))),
            (UID + '.r95', xml(circle_event(fix, now)))]
     route = fix.get('route')
     if route and route['points']:

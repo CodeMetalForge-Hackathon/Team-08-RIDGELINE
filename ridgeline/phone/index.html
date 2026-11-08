@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#080c0f">
 <title>RIDGELINE</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/phone/icon-192.png">
 <link rel="apple-touch-icon" href="/phone/icon-192.png">
 <style>
-:root{color-scheme:dark;--bg:#0b0e10;--panel:#11171a;--raise:#1a2225;--line:#2c3837;--line2:#61706b;--text:#f1f3ef;--muted:#afb6b3;--faint:#8f9a96;--cyan:#dee6e1;--amber:#ffcf5c;--red:#ff8c89;--r:3px;--font:"Noto Sans JP","Noto Sans",system-ui,sans-serif;--mono:"B612 Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;--easy:#e3ab06;--mod:#ea7a1c;--steep:#d4386c;--green:#a5d6ad;--action:#ffcf5c;--on-action:#11130f}
+:root{color-scheme:dark;--bg:#080c0f;--panel:#11171a;--raise:#1a2225;--line:#2c3837;--line2:#61706b;--text:#f1f3ef;--muted:#afb6b3;--faint:#8f9a96;--cyan:#dee6e1;--amber:#ffcf5c;--red:#ff8c89;--r:3px;--font:"Noto Sans JP","Noto Sans",system-ui,sans-serif;--mono:"B612 Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;--easy:#e3ab06;--mod:#ea7a1c;--steep:#d4386c;--green:#a5d6ad;--action:#ffcf5c;--on-action:#11130f}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);-webkit-tap-highlight-color:transparent}
 body{min-height:100svh}
@@ -190,6 +190,7 @@ h1,h2,.target{text-wrap:balance}
 .chip.off{border-color:var(--red)}
 .chip.on{border-color:var(--line2);color:var(--text)}
 .icon-btn{width:44px;height:44px;flex-shrink:0}
+@media(max-width:400px){.top{gap:6px}.brand{font-size:13px;gap:6px;letter-spacing:.10em}}
 .eyebrow{font-size:13px;font-weight:600;letter-spacing:.015em}
 h1{font-size:32px;line-height:1.13;letter-spacing:-.025em}
 .row .v{font-family:var(--mono);font-size:14px}
@@ -228,55 +229,65 @@ html.night .lock[data-state=ready]{animation:none;border-color:var(--amber);box-
 @media (prefers-reduced-motion:reduce){button:active:not(:disabled){transform:none}.meter .arc,.dots span,.scope video,.scope .br{transition:none}}
 @media (max-width:370px){.brand{font-size:13px;letter-spacing:.08em;gap:5px}.brand svg{width:20px}.top{gap:5px}.chip{font-size:9px;padding:4px}.coords{font-size:22px}.mgrs{font-size:18px}}
 
-</style>
-<style id="theme-black-gold">
-/* Black and gold, Nov 8. The team read the black ground with a yellow target as clearer and stronger than paper.
-   True black ground, one gold accent kept for what to aim at and what to press, square controls,
-   B612 Mono for every readout. Night (red) still wins, because html.night outranks :root. */
-:root{color-scheme:dark;--bg:#000;--panel:#0d0d0d;--raise:#171717;--line:#242424;--line2:#3a3a3a;--text:#f3f2ee;--muted:#a6a59f;--faint:#73726d;--cyan:#f3f2ee;--amber:#ffc000;--red:#ff453a;--green:#30d158;--action:#ffc000;--on-action:#000;--action-press:#d9a300;--r:0px}
-html.night{--action-press:#7f2012}
-html,body{background:var(--bg)}
-button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
-.top{border-bottom-color:var(--line2)}
-.brand{letter-spacing:.2em}
-.brand path{stroke:var(--amber)}
-.chip{background:var(--bg)}
-.chip.on{color:var(--muted)}
-.eyebrow,.target-label{font:600 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-h1{font-size:34px;letter-spacing:-.03em}
-.pace{border-left-color:var(--amber)}
-.btn{background:var(--raise);border-color:var(--line2);color:var(--text)}
-.btn:active:not(:disabled){background:var(--line)}
-.btn.primary{background:var(--action);border-color:var(--action);color:var(--on-action);font-weight:750;letter-spacing:.02em}
-.btn.primary:active:not(:disabled){background:var(--action-press)}
-.target{color:var(--amber);font-size:36px;letter-spacing:-.02em}
-.scope{--tick:rgba(255,255,255,.55);background:radial-gradient(circle at 50% 50%,#151515 0%,#080808 62%,#000 100%);border-color:var(--line2)}
-.scope::before{content:'';position:absolute;inset:4px;z-index:2;pointer-events:none;background:
- linear-gradient(var(--tick),var(--tick)) left top/14px 2px no-repeat,linear-gradient(var(--tick),var(--tick)) left top/2px 14px no-repeat,
- linear-gradient(var(--tick),var(--tick)) right top/14px 2px no-repeat,linear-gradient(var(--tick),var(--tick)) right top/2px 14px no-repeat,
- linear-gradient(var(--tick),var(--tick)) left bottom/14px 2px no-repeat,linear-gradient(var(--tick),var(--tick)) left bottom/2px 14px no-repeat,
- linear-gradient(var(--tick),var(--tick)) right bottom/14px 2px no-repeat,linear-gradient(var(--tick),var(--tick)) right bottom/2px 14px no-repeat}
-html.night .scope{--tick:var(--line2)}
-.scope .ring{stroke:#262626}
-.scope .hair{stroke:#3a3a3a}
-.scope .tick{stroke:#6e6e69}
-.scope .tlab{fill:#9a9994}
-.edge{background:rgba(0,0,0,.8);border-color:var(--line2)}
-.lock{border:0;background:var(--action);color:var(--on-action);font-weight:800;letter-spacing:.24em}
-.lock[data-state=ready]{outline:2px solid var(--amber);outline-offset:3px}
-.lock:not([data-state=wait]):active{background:var(--action-press)}
-.dots span.on{background:var(--text)}
-.meter .arc{stroke:var(--text)}
-.map{border-color:var(--line2)}
-.big-pm{font-size:56px;color:var(--text)}
-.coords,.mgrs{color:var(--text)}
-.dest.pick[aria-pressed=true]{background:var(--action);border-color:var(--action);color:var(--on-action)}
-.seg button[aria-pressed=true]{box-shadow:inset 0 -3px var(--amber)}
-.spot.hide b{color:#9fb4c7}.spot.signal b{color:#ff9f0a}
-.start-ln{border-left-color:var(--amber)}
-.sheet{background:rgba(0,0,0,.78)}
-.sheet .in{border-top:2px solid var(--amber)}
-.nb.ok i{background:var(--text)}
+/* Field console: mobiGlas' connected panels, Target Cursor's brackets and a static
+   Grid Pattern. Geometry is decorative; every reading and state remains real. */
+:root{--bg:#080c0f;--panel:#111a20;--raise:#1b282f;--line:#2d3d45;--line2:#667c83;--text:#f3f4ee;--muted:#b4c0c1;--faint:#91a3a6;--amber:#ffd15b;--action:#ffd15b;--on-action:#11150d;--r:2px;--grid:rgba(133,166,173,.04);--edge-light:rgba(255,209,91,.28)}
+.app{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+.top{height:60px;flex-shrink:0;border-bottom-color:var(--line2)}
+.brand{font-size:14px;letter-spacing:.13em;gap:7px}.brand svg{width:25px;height:27px}.brand path{stroke:var(--amber)}
+.chip{font-size:9px;padding:5px;border-radius:0;background:var(--panel);letter-spacing:.01em}.chip.off{color:var(--muted);border-color:var(--line2)}
+.icon-btn{border-left:1px solid var(--line);border-radius:0}
+main{gap:12px;padding-top:14px}
+.eyebrow{min-height:24px;font:700 11px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.eyebrow>span:first-child{display:flex;align-items:center;gap:8px}.eyebrow>span:first-child::before{content:'';width:5px;height:5px;background:var(--amber)}
+.dots{gap:4px}.dots span{width:26px;height:22px;display:grid;place-items:center;font:700 10px var(--mono);background:var(--panel);border:1px solid var(--line2);color:var(--muted);transition:background .12s,color .12s}
+.dots span.on{background:var(--amber);border-color:var(--amber);color:var(--on-action)}.dots span.bad{background:var(--red);border-color:var(--red);color:var(--bg)}
+.acquisition{position:relative;border:1px solid var(--line2);background:var(--panel);box-shadow:inset 0 1px var(--edge-light)}
+.acquisition::before{content:'';position:absolute;z-index:2;right:-1px;top:-1px;width:13px;height:13px;background:linear-gradient(45deg,transparent 46%,var(--line2) 47%,var(--line2) 52%,var(--bg) 53%);pointer-events:none}
+.target-panel{padding:15px 14px 12px;border-left:3px solid var(--amber);border-bottom:1px solid var(--line);background:linear-gradient(100deg,var(--raise),var(--panel));position:relative}
+.target-label{font:700 10px var(--mono);letter-spacing:.09em;color:var(--muted);margin-bottom:7px}
+.target{font-size:clamp(24px,6.9vw,30px);font-weight:850;line-height:1.08;letter-spacing:-.025em;text-transform:uppercase;color:var(--amber);text-wrap:balance}
+.tgt-row{gap:10px}.sky{flex-basis:104px}.sky svg{width:104px;height:42px}.sky figcaption{font-size:9px}.sky figcaption b{letter-spacing:.03em}
+.hint{font-size:13px;line-height:1.4;min-height:18px;margin-top:8px;color:var(--muted)}
+.scope{width:100%;height:34svh;min-height:250px;max-height:330px;aspect-ratio:auto;border:0;border-radius:0;background-color:var(--bg);background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:36px 36px;background-position:center;isolation:isolate}
+.scope svg{top:14px;left:0;width:100%;height:calc(100% - 28px)}
+.scope .ring{stroke:var(--line2);opacity:.48}.scope .ring.outer{stroke-dasharray:1 8;stroke-width:2}.scope .ring.inner{stroke-dasharray:104 28;stroke-width:1}
+.scope .hair{stroke:var(--line2);stroke-width:.75;opacity:.65}.scope .calibration{fill:none;stroke:var(--muted);stroke-width:1;opacity:.55}.scope .corners{fill:none;stroke:var(--line2);stroke-width:1.5;opacity:.8}
+.scope .br{stroke-width:2.5}.scope #br{transform-origin:150px 150px;transform:scale(1.05);transition:transform .12s ease-out}.scope.steady #br{transform:scale(1)}
+.scope .center{fill:var(--amber)}.scope .tick{stroke:var(--text);opacity:.8}
+.readout{top:0;left:0;right:0;height:29px;align-items:center;gap:0;border-bottom:1px solid var(--line);background:var(--panel);font-size:12px;letter-spacing:0;color:var(--text)}
+.readout>span{flex:1;text-align:center;min-width:0;padding:0 4px}.readout .st{flex:1.3;border-left:1px solid var(--line);border-right:1px solid var(--line);font-size:10px;letter-spacing:.04em}
+.capture-rail{display:flex;justify-content:space-between;gap:8px;padding:8px 12px;border-top:1px solid var(--line);color:var(--faint);font:700 9px var(--mono);letter-spacing:.1em}
+.capture-action{padding:0 10px 10px;background:var(--panel)}
+.capture-action>.btn,.capture-action>.lock{width:100%;min-height:64px;border-radius:0}
+.lock{border:1px solid var(--action);font:700 23px var(--mono);letter-spacing:.16em;padding:10px 48px;box-shadow:inset 0 -4px rgba(0,0,0,.16)}
+.lock::before,.lock::after{content:'';position:absolute;top:50%;width:11px;height:11px;transform:translateY(-50%);border-color:currentColor;border-style:solid;opacity:.8}.lock::before{left:19px;border-width:2px 0 2px 2px}.lock::after{right:19px;border-width:2px 2px 2px 0}
+.lock[data-state=ready]{border-width:1px;box-shadow:inset 0 -4px rgba(0,0,0,.16)}
+.lock[data-state=wait]{font-size:14px;letter-spacing:.04em;background:var(--raise);border-color:var(--line2);box-shadow:none}
+.meter{grid-template-columns:48px 1fr;gap:12px;padding:13px 12px;border:1px solid var(--line);border-left:2px solid var(--line2);background:var(--panel)}
+.meter svg{width:48px;height:48px}.meter .trk{stroke-width:3;opacity:.65}.meter .arc{stroke-width:4;stroke-linecap:butt;transition:stroke-dashoffset .25s ease-out,stroke .2s}
+.measure-label{font:700 9px var(--mono);letter-spacing:.11em;color:var(--faint);margin-bottom:5px}.pm{font-size:25px;line-height:1.2}.pm small{font-size:10px;font-family:var(--mono);letter-spacing:0;margin-left:5px}
+.status{font-size:13px;line-height:1.45;margin-top:5px}.meter.done{border-left-color:var(--amber)}.meter.bad{border-left-color:var(--red)}
+.map-panel{border:1px solid var(--line);background:var(--panel)}.map-heading{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;gap:10px;font:700 9px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.map-heading::before{content:'';width:9px;height:9px;flex-shrink:0;background:linear-gradient(var(--amber),var(--amber)) center/1px 9px no-repeat,linear-gradient(var(--amber),var(--amber)) center/9px 1px no-repeat}.map-heading>span:first-child{margin-right:auto}
+.map-panel .map{border:0;border-top:1px solid var(--line);border-radius:0}.map.small{aspect-ratio:345/155}.maplab{font-size:9px}
+.btn{border-radius:1px;font-size:15px;min-height:48px;background:var(--panel);font-weight:700;letter-spacing:.01em}.btn.primary{position:relative;min-height:60px;font-size:17px;border-radius:0;box-shadow:inset 0 -4px rgba(0,0,0,.14)}
+.btn.primary::after{content:'';position:absolute;right:20px;top:50%;width:9px;height:9px;border-top:2px solid currentColor;border-right:2px solid currentColor;transform:translateY(-50%) rotate(45deg);pointer-events:none}.btn.primary{padding-right:40px;padding-left:40px}
+.pair>.btn{font-size:13px}.netbar{padding-top:14px;font-size:9px;letter-spacing:.02em}.nb i{width:4px;height:4px;margin-right:5px}
+.boot-hero{position:relative;overflow:hidden;min-height:172px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:21px 0;display:flex;align-items:center}.boot-hero h1{font-size:35px;max-width:290px;line-height:1.06;font-weight:850;letter-spacing:-.035em;position:relative;z-index:1}.boot-mark{position:absolute;right:-25px;bottom:-17px;width:190px;height:170px;stroke:var(--line2);opacity:.25;fill:none;stroke-width:.7;pointer-events:none}
+.rows{border:1px solid var(--line);background:var(--panel)}.row{padding:12px;font-size:13px;gap:8px}.row:last-child{border-bottom:0}.row .v{font-size:12px}.row b{font-weight:600;color:var(--muted)}
+.pace{border:0;background:transparent;padding:2px 0 6px;font-size:14px}.pace .lead{font-size:13px;line-height:1.55}.screen-check>.stack{padding-top:16px}
+.fix-panel{padding:18px 14px;background:var(--panel);border:1px solid var(--line2);border-top:3px solid var(--amber)}
+.fix-panel h1{font:700 12px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px}.coords{font-size:25px;line-height:1.4;letter-spacing:-.03em}.mgrs{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);font-size:20px}.mgrs small{display:block;margin:5px 0 0;font-size:10px}
+.fix-radius{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.big-pm{font-size:46px}.fix-radius .foot{display:inline-block;font:10px var(--mono)}
+.go,.atak{padding:14px 12px;border:1px solid var(--line);background:var(--panel)}.go-head h2{font:700 16px var(--mono);letter-spacing:-.02em}.seg button{font-size:12px;padding:8px}.spot{padding:10px;font-size:13px}.spot b{flex-basis:60px}.dest{font-size:13px;padding:6px 12px}.leg{font-size:13px}.rt-top{font-size:23px}.rt-top small{font-size:12px}.say{font-size:14px}
+.sheet .in{border-top:2px solid var(--amber);border-radius:0;background:var(--panel);box-shadow:0 -12px 40px rgba(0,0,0,.4)}.sheet .eyebrow{color:var(--text)}.sheet label{font-size:13px}.sheet select,.sheet input{border-radius:0}.sheet .foot{font-size:11px}
+html.night{--grid:rgba(217,68,47,.055);--edge-light:#3c0d0a}
+html.night .target-panel{background:var(--panel)}html.night .scope{background-color:#000}html.night .readout{background:var(--panel)}html.night .chip.off{color:var(--muted);border-color:var(--line2)}
+html.night .dots span.on{color:#000;background:var(--amber)}html.night .boot-mark{opacity:.15}
+@media(max-width:400px){.top{gap:5px}.brand{font-size:12px;letter-spacing:.10em;gap:5px}.brand svg{width:22px}.chip{font-size:9px;padding:4px}.target-panel{padding:13px 11px 10px}.target{font-size:25px}.scope{min-height:235px}.pm{font-size:23px}.pm small{font-size:9px}.row .v{font-size:11px}.coords{font-size:23px}.sky{flex-basis:88px}.sky svg{width:88px}.boot-hero h1{font-size:32px}}
+@media(prefers-reduced-motion:reduce){.scope #br,.dots span,.meter .arc{transition:none}}
+
 </style>
 <style id="auto-pace">
 /* Auto-PACE: what the position rests on now. Text and muted for the tiers, red only when a source disagrees or a
@@ -1221,11 +1232,12 @@ const nameOf = id => (model.byId[id] || {}).name || id;
 const cardNo = id => wallIds.indexOf(id) + 1;
 function render() {
   const m = $('main');
+  m.className = 'screen-' + screen;
   $('chip-mode').textContent = source === 'keyboard' ? 'KEYBOARD' : 'TERRAIN';
   if (screen === 'check') {
     const live = performance.now() - sensorSeen < 1500;
     m.innerHTML = `<div class="eyebrow"><span>System check</span><span>${new Date().toISOString().slice(11, 16).replace(':', '')}Z</span></div>
-      <h1>A terrain fix.<br>Without GPS.</h1>
+      <div class="boot-hero"><h1>A terrain fix<br>Without GPS</h1><svg class="boot-mark" viewBox="0 0 200 180" aria-hidden="true"><path d="M8 164 80 20 127 100 154 49 198 164ZM33 164 80 71 126 164M80 20V164M8 164 154 49M80 71 198 164M33 164 154 49"/><circle cx="80" cy="71" r="37"/><circle cx="80" cy="71" r="3"/></svg></div>
       <div class="rows">
         <div class="row"><b>GPS</b><span class="v">Not used</span></div>
         <div class="row"><b>Network</b><span class="v">Not required for a fix</span></div>
@@ -1233,7 +1245,7 @@ function render() {
         <div class="row"><b>Motion sensor</b><span class="v ${live ? 'ok' : source === 'keyboard' ? 'warn' : 'off'}" id="motion-v">${live ? 'Streaming' : source === 'keyboard' ? 'Keyboard' : 'Waiting'}</span></div>
         <div class="row"><b>Heading offset</b><span class="v">Fitted from peak angles</span></div>
       </div>
-      <div class="card pace"><i></i><div><b>Terrain mode ready.</b><p class="lead" style="margin-top:4px">Aim at ${wall.length} peaks you can name. RIDGELINE combines the angles between peaks with a height band. In this demo the height is simulated.</p></div></div>
+      <div class="card pace"><i></i><div><b>Terrain mode ready</b><p class="lead" style="margin-top:4px">Aim at ${wall.length} peaks you can name. RIDGELINE combines the angles between peaks with a height band. In this demo the height is simulated.</p></div></div>
       <div class="stack"><button class="btn primary" id="start">Start terrain fix</button></div>`;
     $('start').onclick = start;
   } else if (screen === 'aim') {
@@ -1248,19 +1260,22 @@ function render() {
     else if (done === 2) msg = `<b>Two peaks, two places still fit.</b> Next: ${nameOf(target)}.`;
     else msg = target ? `<b>Close, not sure yet.</b> One more peak: ${nameOf(target)}.` : `<b>No more cards.</b> This is the best fix.`;
     const pmText = done ? '±' + fmtM(result.r95_m) : '—';
-    m.innerHTML = `<div class="eyebrow"><span>Terrain fix</span><span class="dots">${[0, 1, 2].map(i => `<span class="${i < done ? (st === 'mismatch' && sus && sus.lock_index === i ? 'bad' : 'on') : ''}"></span>`).join('')}</span></div>
-      <div><div class="tgt-row"><div><div class="target-label">${target ? 'AIM AT · CARD ' + cardNo(target) : 'FIX COMPLETE'}</div><div class="target">${target ? nameOf(target) : 'Position found'}</div></div>${skyHtml()}</div><div class="hint" id="hint"></div></div>
+    m.innerHTML = `<div class="eyebrow"><span>Terrain fix</span><span class="dots" role="img" aria-label="${done} peak${done === 1 ? '' : 's'} locked">${[0, 1, 2].map(i => `<span class="${i < done ? (st === 'mismatch' && sus && sus.lock_index === i ? 'bad' : 'on') : ''}">${String(i + 1).padStart(2, '0')}</span>`).join('')}</span></div>
+      <section class="acquisition" aria-label="Terrain sighting"><div class="target-panel"><div class="tgt-row"><div><div class="target-label">${target ? 'AIM AT · CARD ' + cardNo(target) : 'FIX COMPLETE'}</div><div class="target">${target ? nameOf(target) : 'Position found'}</div></div>${skyHtml()}</div><div class="hint" id="hint"></div></div>
       <div class="scope" id="scope"><video id="cam" playsinline muted autoplay aria-hidden="true"></video><svg viewBox="0 0 300 300" aria-hidden="true">
-        <circle class="ring" cx="150" cy="150" r="118"/><circle class="ring" cx="150" cy="150" r="70"/>
+        <circle class="ring outer" cx="150" cy="150" r="111"/><circle class="ring inner" cx="150" cy="150" r="80"/>
+        <path class="corners" d="M18 59V18H59M241 18H282V59M282 227V240H263M37 240H18V227"/>
+        <path class="calibration" d="M11 92H21M11 110H17M11 128H21M11 146H17M11 164H21M11 182H17M11 200H21M279 92H289M283 110H289M279 128H289M283 146H289M279 164H289M283 182H289M279 200H289"/>
         <path class="hair" d="M150 22V112M150 188V246M22 150H112M188 150H278"/>
         <g id="br"></g><circle class="center" cx="150" cy="150" r="2.6"/>
         <g id="tape"></g></svg>
         <div class="readout"><span id="ro-h">HDG ---</span><span class="st" id="ro-s"></span><span id="ro-t">TILT ---</span></div>
         <div class="edge" id="edge" hidden></div></div>
-      ${target ? `<button class="lock" id="lock" data-state="wait">HOLD STEADY</button>` : `<button class="btn primary" id="see" style="min-height:72px;font-size:20px">See my position</button>`}
+      <div class="capture-rail" aria-hidden="true"><span>ANGLE CAPTURE</span><span>ALIGN · HOLD · LOCK</span></div>
+      <div class="capture-action">${target ? `<button class="lock" id="lock" data-state="wait">HOLD STEADY</button>` : `<button class="btn primary" id="see" style="min-height:64px;font-size:17px">See my position</button>`}</div></section>
       <div class="meter ${st === 'mismatch' ? 'bad' : st === 'enough' ? 'done' : ''}"><svg viewBox="0 0 64 64"><circle class="trk" cx="32" cy="32" r="26"/><circle class="arc" id="arc" cx="32" cy="32" r="26" transform="rotate(-90 32 32)" stroke-dasharray="163.4" stroke-dashoffset="163.4"/></svg>
-        <div><div class="pm"><span id="pm">${pmText}</span><small>${done ? '95% · ' + done + ' lock' + (done > 1 ? 's' : '') : 'no lock yet'}</small></div><div class="status ${st === 'mismatch' ? 'bad' : ''}">${msg}</div></div></div>
-      <div class="map small" id="map-wrap"><canvas id="map"></canvas><span class="maplab">${model.json.name} · ${done ? 'live' : 'no fix'}</span></div>
+        <div><div class="measure-label">POSITION UNCERTAINTY</div><div class="pm"><span id="pm">${pmText}</span><small>${done ? '95% · ' + done + ' lock' + (done > 1 ? 's' : '') : 'no lock yet'}</small></div><div class="status ${st === 'mismatch' ? 'bad' : ''}">${msg}</div></div></div>
+      <section class="map-panel" aria-label="Terrain overview"><div class="map-heading"><span>Terrain overview</span><span>${model.json.name}</span></div><div class="map small" id="map-wrap"><canvas id="map"></canvas><span class="maplab">${model.json.name} · ${done ? 'live' : 'no fix'}</span></div></section>
       <div class="pair"><button class="btn ghost" id="skip"${target ? '' : ' disabled'}>Can't see it</button><button class="btn ghost" id="undo"${done ? '' : ' disabled'}>Undo last</button></div>`;
     if ($('lock')) $('lock').onclick = ev => doLock(ev);
     if ($('see')) $('see').onclick = () => go('fix');
@@ -1280,10 +1295,10 @@ function render() {
     const ns = `${Math.abs(q.lat).toFixed(5)}° ${q.lat >= 0 ? 'N' : 'S'}`, ew = `${Math.abs(q.lon).toFixed(5)}° ${q.lon >= 0 ? 'E' : 'W'}`;
     const dir = o ? ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(W360(deg(Math.atan2(o.lon - e.lon, o.lat - e.lat))) / 45) % 8] : '';
     m.innerHTML = `<div class="eyebrow"><span>Position</span><span>SOLVED ON DEVICE</span></div>
-      <h1>You are here.</h1>
+      <section class="fix-panel" aria-label="Terrain position"><h1>You are here</h1>
       <div class="coords" id="coords"></div>
       <div class="mgrs" id="mgrs">${fixMgrs()}<small>MGRS · ${mgrsDigits() === 4 ? '10' : '100'} m squares</small></div>
-      <div><span class="big-pm" id="pm">±${fmtM(q.r95_m)}</span><small class="pm-sub${psm && psm.level === 'low' ? ' low' : ''}" id="pm-sub">${psm && (psm.walked_fix_m || psm.basis === 'gps') ? `95% now · ±${fmtM(psm.r95_fix_m)} at the fix` : `95% · ${locks.length} peaks`}</small></div>
+      <div class="fix-radius"><span class="big-pm" id="pm">±${fmtM(q.r95_m)}</span><small class="pm-sub${psm && psm.level === 'low' ? ' low' : ''}" id="pm-sub">${psm && (psm.walked_fix_m || psm.basis === 'gps') ? `95% now · ±${fmtM(psm.r95_fix_m)} at the fix` : `95% · ${locks.length} peaks`}</small></div></section>
       <div id="pace">${psm ? paceHtml(psm) : ''}</div>
       <div id="gpsbox">${gpsHtml()}</div>
       <div class="map big" id="map-wrap"><canvas id="map"></canvas><span class="maplab">${model.json.name} · USGS 3DEP</span></div>
@@ -1522,7 +1537,7 @@ $('stepsopt').onchange = e => { stepsOn = e.target.checked; store.set('steps', s
 // Night (red), kept on this phone (store wraps localStorage in try/catch)
 function setNight(on) {
   document.documentElement.classList.toggle('night', on);
-  const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.content = on ? '#000000' : '#000000';
+  const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.content = on ? '#000000' : '#080c0f';
   $('nightopt').checked = on;
 }
 setNight(!!store.get('night', false));

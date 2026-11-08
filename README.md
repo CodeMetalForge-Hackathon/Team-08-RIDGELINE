@@ -3,7 +3,9 @@
 Code Metal Forge Hackathon 2026, Operation Lost and Found.
 Search and rescue in dangerous environments, built Nov 7 to Nov 8, 2026 at BASE-X Boston.
 
-The demonstration entry point is [the RIDGELINE technical README](ridgeline/README.md), with the method, trial record and detailed commands. [Judging evidence](docs/JUDGING_EVIDENCE.md) separates recorded phone trials, simulated results and work still to verify. [Plan.md](Plan.md) contains earlier ideas, including approaches that are not part of this demo.
+**GPS is the first thing jammed or spoofed. RIDGELINE gives an isolated person a position from what they can see, says how sure it is, and sends the answer out as Cursor on Target for ATAK.**
+
+The demonstration entry point is [the RIDGELINE technical README](ridgeline/README.md), with the method, trial record and detailed commands. [Judging evidence](docs/JUDGING_EVIDENCE.md) separates recorded phone trials, simulated results and work still to verify. [The demo script](docs/DEMO_SCRIPT.md) has the 90-second and 10-minute runs, the setup check before judging and answers to likely questions. [Plan.md](Plan.md) contains earlier ideas, including approaches that are not part of this demo.
 
 ## What it does
 
@@ -13,7 +15,7 @@ The event demo uses a real phone aimed by hand at three printed mountain cards. 
 
 | Item | Answer |
 | --- | --- |
-| Who uses it | An isolated person who can identify visible peaks, with a responder viewing the shared estimate when a link is available |
+| Who uses it | An isolated person who can identify visible peaks, for example downed aircrew or a lost hiker, with a responder viewing the shared estimate when a link is available |
 | Which objective | Primarily OBJ.01, Locate Isolated People, with terrain-based route previews to support the next decision. CoT output provides a path toward OBJ.04, Deliver Critical Information |
 | What breaks today | GPS can be unavailable or misleading, and cellular service may be absent. A useful position must include its uncertainty and work from local data |
 | Operating assumptions | The terrain tile is loaded in advance, the landmarks are identified correctly and useful sightlines are available |
@@ -31,7 +33,16 @@ The event demo uses a real phone aimed by hand at three printed mountain cards. 
 | Douglas Lilly | @theDclilly | Simulated accelerometer processing and inertial path reconstruction prototype |
 | Seika Karamatsu | @sese0318 | Phone experience, live demo integration, operator feedback, measurement record and demo story |
 
-The inertial navigation work in `accelerometer/` is a separate prototype and is not an input to the demonstrated three-peak fix.
+Where each person's work lives, and whether the live demo uses it.
+
+| Work | Who | Where | In the live demo |
+| --- | --- | --- | --- |
+| Peak selection (`find_true_peaks`), topography and localization prototype | Rohan | `topological_navigation/sprint1_topography.py` and `sprint2_localization.py` on main | Yes. The 23 peaks the phone aims at were picked with Rohan's `find_true_peaks` rule, converted to meters in `ridgeline/scripts/export_grid.py` |
+| Relief colours of the topo map | Noah | `terrain_viewer/scripts/team8_relief.py`, painted like his route plots | Yes. The same map image is used by the phone, the board and the judge view |
+| Terrain route planner with water handling and snapping (`hiker_router.py`, `destination.py`, `water.py`) | Noah | Branch `Sprint2-NavAlgorithm` | No. It runs on the same USGS 1 m Moran tile and is not merged into main at the time of writing |
+| Base-layer COP map (`cop.py`, `sim_feed.py`) | Noah | Branch `Base-Layer-Map` | No, an earlier map concept |
+| Simulated accelerometer processing and inertial path reconstruction | Douglas | `accelerometer/` on main | No. A separate prototype, not an input to the three-peak fix |
+| Phone app, solver, board, CoT hand-off, terrain viewer and measurement record | Seika | `ridgeline/`, `terrain_viewer/`, `docs/` | Yes |
 
 ## Hardware used
 
@@ -60,6 +71,8 @@ flowchart LR
 ```
 
 The solver scores a 30 m grid covering 10.4 × 8.0 km near Mount Moran. Each candidate position fits its own constant heading offset, so the angles **between** the Locks matter, rather than absolute compass north. A height band and precomputed peak visibility narrow the result. The same [solver.js](ridgeline/solver.js) runs on the phone, board and in Node tests without third-party JavaScript dependencies.
+
+Why angles between peaks rather than compass bearings. In the Trust simulation at the demo position with 3° aim error, RIDGELINE's median error is 103 m and its 95% area holds the truth 98% of the time. The same Locks read as compass bearings with a 7° compass bias give 204 m and 54%. A compass that drifts near metal or lacks the local declination cannot move a fix that only uses the differences between Locks. These are simulations from [`ridgeline/scripts/trust.js`](ridgeline/scripts/trust.js), not field measurements.
 
 The phone uses its available browser orientation stream. The browser can fall back to an absolute orientation stream, so this is not a claim that the phone never uses a magnetometer. A constant heading offset cancels, but changing sensor errors do not. The demo height is simulated because the browser does not expose the pressure sensor. A service worker caches the app and terrain after an initial load. The PC is needed for the shared board and CoT relay, not for a cached phone fix. See the [implementation notes](ridgeline/README.md#how-the-fix-works).
 
@@ -103,6 +116,8 @@ For optional ATAK setup and CoT details, see [Hand-off to ATAK](ridgeline/README
 
 ## How to run the demo
 
+⓪ Ten minutes before the judges arrive, run `python -I ridgeline/scripts/preflight.py`. It only reads, and lists anything to fix with the command to fix it. It checks the server, whether the server runs the code in this folder (Python is read once at start, so a server started before a pull shows the old build), the USB link (`adb reverse`), the ATAK link, airplane mode, the phone battery and a previous run still on the board.
+
 ① Open the phone app and board. Explain the test boundary before starting. These are real phone observations of wall cards that reproduce known outdoor geometry, with a simulated height, simulated GPS test readings and a known terrain location for answer checking. Keep the phone connected until the app and terrain have been cached.
 
 ② Stand on the measured floor mark and select **Start terrain fix**. Follow the named target, aim at its card, hold steady and tap **Lock**. Repeat for three targets, letting the aim settle each time. The board draws the observations and uncertainty region as they arrive. Show how the probability region changes and keep any request to re-aim.
@@ -131,11 +146,29 @@ For a laptop dry run, arrows aim and Enter Locks. **A** is keyboard-only demo as
 | Solver simulation | 200 fixes at the demo position with Gaussian 3° aim error and random constant heading offset | Median error 98 m, 90th percentile 184 m, truth inside the 95% bubble in 99.0%, slowest solve 156 ms |
 | Solver simulation across the tile | 120 random positions with three visible peaks | Median error 132 m, 90th percentile 540 m, truth inside the bubble in 99.2% |
 | JavaScript checks, rerun after merging the judging review on Nov 8 | Solver, visibility suggestions, walkable start, expected skyline, Lock input and route water checks | 34 of 34 passing, comprising 6 solver, 9 hide, 6 skyline, 6 Lock input and 7 route tests |
-| Python checks, rerun after merging the judging review on Nov 8 | Stand-in TAK client, local push listener and the trial capture script | 20 of 20 passing. The 10 CoT tests cover fix, uncertainty, route, marks, the disagreeing GPS test point, reconnect and reset deletes. Previously recorded Lock relay under 0.25 s with the test client connected |
+| Python checks, rerun on Nov 8 after adding the server code check | Stand-in TAK client, local push listener and the trial capture script | 31 of 31 passing. The 12 CoT tests cover fix, uncertainty, route, marks, the disagreeing GPS test point, reconnect, reset deletes and the age of the position in the remarks. 9 tests cover the pre-demo check, two of them against a real server on a free port. Previously recorded Lock relay under 0.25 s with the test client connected |
 
 Source is [the detailed test log](ridgeline/README.md#test-results-gate-a), dated Nov 8, 2026. The phone rows are historical observations, not new measurements of this merged revision, and they are not a five-trial series or a field-accuracy estimate. Earlier mismatches and a less accurate wall setup are retained in [the evidence document](docs/JUDGING_EVIDENCE.md#recorded-phone-observations). Simulation results are a separate evidence class, conditional on the simulation inputs, and are not hand-held accuracy or human performance measurements. The 42 m result is one wall trial, not guaranteed accuracy. No outdoor trial, battery test or real RF spoofing test is recorded.
 
 Run the checks in Setup step ④ again on the exact revision used in the demo. The CoT tests use a stand-in client. A passing result does not establish how the objects appear in ATAK.
+
+## Mentor feedback and what we changed
+
+Feedback from mentors during the event, and where the build answers it.
+
+| Feedback | From | What we did | Status |
+| --- | --- | --- | --- |
+| Skip the drone and do not rebuild C2, there are plenty. Add something new and hand it to the tools people already use | Logan | No C2 of our own. The fix, its 95% circle, the route and marks go out as Cursor on Target for ATAK | Done with a stand-in TAK client. Real ATAK display not yet verified |
+| Auto-PACE. Work out which sensors can be trusted, drop the ones that cannot and move the user to the best source available | Brendan | Terrain checks GPS. A GPS reading outside the terrain circle shows GPS DISAGREES and is not used, one inside shows GPS CONSISTENT. Next, the phone keeps its probability map after the fix and shows which source it relies on | Terrain check done. The walking update is in progress |
+| Always show how confident the position is, and lower that confidence when it may be drifting | Matt, as relayed by the team | Every fix shows a ±m radius (95%) and a confidence meter. Next, the radius grows with steps and time since the fix, and the phone asks for a re-aim at its limit | Fix-time confidence done. Growth over time is in progress |
+| Can the phone say how confident its own position is? | Evening mentor | ±m (95%) radius, the 95% and 50% bubble on the map, and MGRS digits limited by the radius | Done |
+| Take the peaks one at a time and say whether that is enough or one more is needed | Evening mentor | After each Lock the phone says Enough, or Close, not sure yet with the next peak to aim at | Done |
+| Make sure the camera is on the right summit | Evening mentor | Crosshair over the rear camera, the expected skyline toward the next peak, and a mismatch check that asks for the suspect card again | Done. Three wrong-order wall trials were each caught |
+| The person picks the destination. Pin it and make it hard to move by accident | Evening mentor | Where to? offers Rendezvous, Back to start, marks and a pin. Removing a pin takes two taps | Done |
+| A route across a lake makes no sense. Keep routes off water | Evening mentor | Routes never cross water, and a pin in a lake ends at the nearest reachable shore | Done, 7 automated route tests |
+| Do not mark enemies or fires, that turns it into battle management software | Evening mentor | No threat or fire markers | Done |
+| Places to hide | Special operations mentor | HIDE spots (folds in the ground seen by the fewest summits) and SIGNAL spots (open ground seen by the most), terrain only | Done. Trees and buildings are not modelled |
+| Does the map have to be loaded in advance? | Code Metal investor | Yes, like any mission planning. One 10.4 × 8.0 km area is about 600 KB and works offline | Done |
 
 ## Limits and path to deployment
 
@@ -158,10 +191,10 @@ Pre-existing libraries, frameworks, SDKs and datasets used across this repositor
 
 | Name | License | Used for |
 | --- | --- | --- |
-| Medić et al. 2024, Drones 8(3) 76 | CC BY 4.0 | Thermal contrast and altitude numbers for a person in water (`data/literature/`) |
-| Burke et al. 2019, Drones 3(4) 78 | CC BY 4.0 | Detection altitude versus contrast and pixel size (`data/literature/`) |
-| NOAA NDBC buoy 44013 | U.S. Government data, public domain | Snapshot of water temperature, wind and waves (`data/ndbc/`) |
-| SeaDronesSee Multi-Object Tracking (planned) | CC0 1.0 | Replay of real drone telemetry, kept out of the repo (`data/raw/`) |
+| Medić et al. 2024, Drones 8(3) 76 | CC BY 4.0 | Thermal contrast and altitude numbers for a person in water (`data/literature/`). From our first concept (maritime search), kept in data/ for reference, not used by RIDGELINE |
+| Burke et al. 2019, Drones 3(4) 78 | CC BY 4.0 | Detection altitude versus contrast and pixel size (`data/literature/`). From our first concept (maritime search), kept in data/ for reference, not used by RIDGELINE |
+| NOAA NDBC buoy 44013 | U.S. Government data, public domain | Snapshot of water temperature, wind and waves (`data/ndbc/`). From our first concept (maritime search), kept in data/ for reference, not used by RIDGELINE |
+| SeaDronesSee Multi-Object Tracking | CC0 1.0 | Planned for our first concept (maritime search). Never added to the repo (`data/raw/` stays local) and not used by RIDGELINE |
 | USGS 3DEP 1 m lidar (via OpenTopography) | U.S. Government data, public domain | Mount Moran terrain for the judge view (`terrain_viewer/data/moran/`) |
 | USGS 3DEP 1/3 arc-second DEM | U.S. Government data, public domain | Mount Washington terrain (`terrain_viewer/data/washington/`) |
 | Copernicus DEM GLO-30 | Copernicus DEM licence, free use with attribution (© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the EU and ESA) | Mount Fuji terrain (`terrain_viewer/data/fuji/`) |
