@@ -24,6 +24,15 @@ The event demo uses a real phone aimed by hand at three printed mountain cards. 
 
 **Measured on a real phone** on Nov 8, a hand-held three-Lock wall trial placed the fix 42 m from the known demo position inside a ±293 m circle. A second trial on the then-current build gave 90 m inside ±278 m. These are indoor wall-card trials with a simulated barometer, not outdoor field accuracy claims.
 
+## Screenshots
+
+| | |
+| --- | --- |
+| ![RIDGELINE fix in real ATAK-CIV](docs/screenshots/atak_ridgeline_fix.jpg) | **Real ATAK-CIV on our test phone, Nov 8, 8:59 EST.** RIDGELINE 1, its 95% circle (cyan), the route to the rendezvous (yellow) and the HIDE and SIGNAL marks, sent as Cursor on Target. ATAK's own corner still says NO GPS, because these are separate items. The status bar is cropped |
+| ![Judge view](docs/screenshots/judge_map.jpg) | **The judge view** (`/tv/`) at 1920 × 1080. The 3D Moran sheet in its 48 × 40 km ring of terrain, the 75.4 km² of land where the pilot could be before the first Lock, and the phone mirrored on the right |
+| ![Judge view with Noah's snow routes](docs/screenshots/judge_map_snow.jpg) | **Snow, Noah's planner, switched on.** Dry ground 2 h 49 min and 7.5 km, today's snow 3 h 20 min and 7.9 km, from the demo fix to the rendezvous. Precomputed at 9:00 EST from Open-Meteo, off by default |
+| ![Noah's dry and snow routes](docs/screenshots/noah_snow_routes.jpg) | **Noah's route planner** (`topological_navigation/`) on the real Moran terrain, dry route against today's snow route. The phone and the board do not use this planner yet |
+
 ## Team
 
 | Name | GitHub | Role |
