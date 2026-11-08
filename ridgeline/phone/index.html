@@ -145,6 +145,29 @@ h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em;font-weight:75
 .nb i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--faint);vertical-align:1px}
 .nb.ok{color:var(--muted)}.nb.ok i{background:var(--cyan)}
 .nb.warn{color:var(--amber)}.nb.warn i{background:var(--amber)}
+/* Night (red): black page, dim red text and lines, red tinted camera and map, to keep night vision */
+html.night{--bg:#000;--panel:#080101;--raise:#120303;--line:#2a0808;--line2:#3c0d0a;--text:#d9442f;--muted:#a2301f;--faint:#6b1d13;--cyan:#e5482f;--amber:#ff5236;--red:#ff3b28;--green:#f08a6a;--easy:#7a1a10;--mod:#b02a19;--steep:#ff3b28}
+html.night body{background:#000}
+html.night .brand path{stroke:var(--cyan)}
+html.night .chip.on{border-color:rgba(229,72,47,.5)}
+html.night .btn.primary,html.night .lock,html.night .dest[aria-pressed=true]{color:#000;background:#b8301c;border-color:#b8301c}
+html.night .lock[data-state=ready]{animation-name:halo-n}
+@keyframes halo-n{0%{box-shadow:0 0 0 0 rgba(255,82,54,.5)}70%{box-shadow:0 0 0 16px rgba(255,82,54,0)}100%{box-shadow:0 0 0 0 rgba(255,82,54,0)}}
+html.night .scope{background:#000;isolation:isolate}
+html.night .scope .ring,html.night .scope.cam .ring{stroke:#3c0d0a}
+html.night .scope .hair,html.night .scope.cam .hair{stroke:#6b1d13}
+html.night .scope .tick,html.night .scope.cam .tick{stroke:#8a2416}
+html.night .scope .tlab,html.night .scope.cam .tlab{fill:#a2301f}
+html.night .scope.cam .readout{color:var(--muted);text-shadow:none}
+html.night .scope video{filter:grayscale(1) brightness(.6) contrast(1.15)}
+html.night .scope.cam::after,html.night .map::after{content:'';position:absolute;inset:0;background:#ff1a0a;mix-blend-mode:multiply;pointer-events:none}
+html.night .map{background:#000;border-color:var(--line2);isolation:isolate}
+html.night .map canvas{filter:invert(1) grayscale(1) brightness(.8) contrast(1.1)}
+html.night .maplab{background:#000;color:var(--muted)}
+html.night .ripple{background:rgba(255,82,54,.45)}
+html.night .sweep{background:conic-gradient(from 0deg,rgba(255,59,40,0) 0deg,rgba(255,59,40,0) 290deg,rgba(255,59,40,.35) 360deg)}
+html.night .gps.good{background:rgba(240,138,106,.06)}
+html.night .gps.bad{background:rgba(255,59,40,.08)}
 @media (prefers-reduced-motion:reduce){.lock[data-state=ready]{animation:none;box-shadow:0 0 0 3px rgba(255,207,92,.6)}.ripple,.sweep{display:none}.meter .arc,.dots span{transition:none}}
 @media (min-height:860px){.scope{max-height:46svh}}
 </style>
@@ -166,6 +189,7 @@ h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em;font-weight:75
     <label>Orientation input<select id="source"><option value="sensor">Phone motion sensor</option><option value="keyboard">Keyboard (PC)</option></select></label>
     <p class="foot" id="sensor-debug">No motion data yet.</p>
     <label class="check"><input type="checkbox" id="camopt"> Rear camera behind the crosshair</label>
+    <label class="check"><input type="checkbox" id="nightopt"> Night (red)</label>
     <label>Aim error assumed (deg, 1 sigma)<input id="sigma" type="number" min="0.5" max="10" step="0.5" value="3"></label>
     <label>Test GPS<select id="gpsopt"><option value="off">Off</option><option value="spoof">Spoofed, 2.5 km NE of the demo spot</option><option value="honest">Honest, 40 m from the demo spot</option><option value="custom">Custom lat lon</option></select></label>
     <div class="pair" id="gps-custom" hidden><label>Lat<input id="gps-lat" type="number" step="0.00001" inputmode="decimal"></label><label>Lon<input id="gps-lon" type="number" step="0.00001" inputmode="decimal"></label></div>
@@ -799,6 +823,14 @@ function frame() {
 // ---------- settings and keys ----------
 function openSettings() { $('sheet').hidden = false; $('baro').value = Math.round(baro); $('camopt').checked = camWanted; }
 $('camopt').onchange = e => { camWanted = e.target.checked; store.set('cam', camWanted); if (camWanted) camStart(); else camStop(); };
+// Night (red), kept on this phone (store wraps localStorage in try/catch)
+function setNight(on) {
+  document.documentElement.classList.toggle('night', on);
+  const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.content = on ? '#000000' : '#0a1016';
+  $('nightopt').checked = on;
+}
+setNight(!!store.get('night', false));
+$('nightopt').onchange = e => { store.set('night', e.target.checked); setNight(e.target.checked); };
 $('open-settings').onclick = openSettings;
 $('close-settings').onclick = () => { $('sheet').hidden = true; };
 $('sheet').onclick = e => { if (e.target === $('sheet')) $('sheet').hidden = true; };
