@@ -2,19 +2,22 @@
 // No dependencies: Chrome is driven over the DevTools protocol with Node's built-in WebSocket (Node 22 or newer).
 //
 //   node tests/live_e2e.mjs                 (CHROME=<path to chrome.exe> if it is not in the usual place)
-//   PORT=8770 OUT=.local/e2e node tests/live_e2e.mjs
+//   PORT=8770 OUT=.local/e2e node tests/live_e2e.mjs   (default: free ports picked at run time)
 //
 // The phone is driven only with key presses (J, Enter, the arrow keys), steering by the phone's own "Turn right 12°"
 // text, the way a person would aim. Lock 3 is first aimed at the wrong peak on purpose, to see the re-aim message.
 // For every lock it measures how long the viewer takes to show it. Writes OUT/result.json and screenshots.
-import {spawn} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import {mkdirSync, writeFileSync, existsSync, mkdtempSync, rmSync} from 'node:fs';
+import {createServer} from 'node:net';
 import {tmpdir} from 'node:os';
 import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+// a port nobody listens on right now. Another copy of the server on a fixed port once answered this test with old files.
+const freePort = () => new Promise((ok, no) => { const s = createServer(); s.on('error', no); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => ok(p)); }); });
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = +(process.env.PORT || 8770), DPORT = +(process.env.DEVTOOLS_PORT || 9333);
+const PORT = +(process.env.PORT || await freePort()), DPORT = +(process.env.DEVTOOLS_PORT || 0);
 const OUT = process.env.OUT || join(ROOT, '.local', 'e2e');
 const BASE = `http://127.0.0.1:${PORT}`;
 const CHROME = process.env.CHROME || ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
@@ -137,13 +140,15 @@ async function main() {
   server.stdout.on('data', d => process.env.VERBOSE && process.stdout.write('[server] ' + d));
   try {
     await waitHttp(`${BASE}/health`, 10000);
-    const viewer = await openPage(`${BASE}/terrain_viewer/?area=moran`, 1600, 900, 'viewer', DPORT);
+    const health = await json(`${BASE}/health`);
+    if (health.pid !== server.pid) throw new Error(`port ${PORT} is answered by another server (pid ${health.pid}, ours ${server.pid}), set PORT`);
+    const viewer = await openPage(`${BASE}/terrain_viewer/?area=moran`, 1600, 900, 'viewer', DPORT || await freePort());
     res.browser = viewer.browser;
     pages.push(viewer);
     await viewer.until('!!(window.TEAM8_READY && window.TEAM8_DECK)', 60000, 200);
     log('viewer ready');
     // Chrome's fake camera (a test pattern) and auto-accepted permission, for the camera crosshair
-    const phone = await openPage(`${BASE}/mockups/phone_screen/`, 430, 932, 'phone', DPORT + 1, ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream']);
+    const phone = await openPage(`${BASE}/mockups/phone_screen/`, 430, 932, 'phone', DPORT ? DPORT + 1 : await freePort(), ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream']);
     pages.push(phone);
     await phone.until(`/Live solver ready/.test(document.getElementById('live-status').textContent)`, 20000);
     res.checks.phone_live_ready = await phone.eval(`document.getElementById('live-status').textContent`);
@@ -154,21 +159,33 @@ async function main() {
     await viewer.until(`window.TEAM8_LIVE && TEAM8_LIVE.on && document.getElementById('stepTitle').textContent === 'Phone ready'`, 5000);
     res.checks.viewer_phone_ready = true;
     await phone.shot('phone_0_aim.png'); await viewer.shot('viewer_0_ready.png');
-    // P1.3: camera behind a crosshair on the Lock screen. Headless Chrome's fake camera opens only once per process (a
-    // second getUserMedia gives NotFoundError, see .local/camprobe.mjs), so the Camera off button is checked first on a
-    // canvas stream, then the fake camera is opened once and stays on through the locks until Use this fix leaves the screen.
-    const camUp = `(() => { const v = document.getElementById('cam'); return !!(camOn && v && !v.hidden && v.videoWidth > 0 && document.getElementById('sky-wrap').classList.contains('cam-on')); })()`;
-    await phone.eval(`(() => { const c = document.createElement('canvas'); c.width = 64; c.height = 48; const x = c.getContext('2d'); x.fillStyle = '#486'; x.fillRect(0, 0, 64, 48);
-      camStream = c.captureStream(5); camOn = true; camApply(); window.__camTracks = camStream.getTracks(); document.getElementById('cam-toggle').click(); })()`);
-    const offEnds = await phone.eval(`!camOn && camStream === null && __camTracks.length > 0 && __camTracks.every(t => t.readyState === 'ended') && document.getElementById('cam').hidden && !document.getElementById('sky-wrap').classList.contains('cam-on')`);
+    // P1.3: camera behind a crosshair on the Lock screen, in three stages, because headless Chrome's fake camera opens only
+    // once per process (a second getUserMedia gives NotFoundError, see .local/camprobe.mjs), and in some runs its track
+    // ends by itself after a few seconds:
+    //  1. the real (fake) camera through getUserMedia and the permission prompt, then Camera off ends its track;
+    //  2. a track that ends by itself (an 'ended' event on a canvas track): the phone notices and says so;
+    //  3. an animated canvas stream stands in for the camera: it stays on through two locks, and Use this fix ends it.
+    const camUp = `(() => { const v = document.getElementById('cam'); return !!(camOn && camStream && v && !v.hidden && v.srcObject === camStream && camStream.getVideoTracks().length > 0 && camStream.getVideoTracks()[0].readyState === 'live' && document.getElementById('sky-wrap').classList.contains('cam-on')); })()`;   // headless Chrome does not always decode the fake frames into the element, so frames are not required
+    const camOff = `!camOn && camStream === null && document.getElementById('cam').hidden && !document.getElementById('sky-wrap').classList.contains('cam-on')`;
     await phone.eval(`document.getElementById('cam-toggle').click()`);
     await phone.until(camUp, 8000);
     res.checks.camera = {notice: await phone.eval(`document.getElementById('notice').textContent`), size: await phone.eval(`[document.getElementById('cam').videoWidth, document.getElementById('cam').videoHeight]`),
       track: await phone.eval(`camStream.getVideoTracks()[0].label`), settings: await phone.eval(`(({width, height, frameRate}) => ({width, height, frameRate}))(camStream.getVideoTracks()[0].getSettings())`),
-      focus_on_main: await phone.eval(`document.activeElement === document.getElementById('main')`), skyline_hidden: await phone.eval(`getComputedStyle(document.getElementById('sky')).visibility === 'hidden'`),
-      off_ends_tracks: offEnds};
-    log('  camera:', JSON.stringify(res.checks.camera));
+      focus_on_main: await phone.eval(`document.activeElement === document.getElementById('main')`), skyline_hidden: await phone.eval(`getComputedStyle(document.getElementById('sky')).visibility === 'hidden'`)};
     await phone.shot('phone_1_camera.png');
+    await phone.eval(`window.__camTracks = camStream.getTracks(); document.getElementById('cam-toggle').click()`);
+    res.checks.camera.off_ends_tracks = await phone.eval(`${camOff} && __camTracks.length > 0 && __camTracks.every(t => t.readyState === 'ended')`);
+    // from here getUserMedia hands out an animated canvas stream (frames keep coming, nothing ends by itself)
+    await phone.eval(`(() => { const c = document.createElement('canvas'); c.width = 160; c.height = 120; const x = c.getContext('2d'); let f = 0;
+      setInterval(() => { x.fillStyle = '#4a6b52'; x.fillRect(0, 0, 160, 120); x.fillStyle = '#d8d2c0'; x.fillRect((f++ * 3) % 160, 40, 30, 30); }, 100);
+      navigator.mediaDevices.getUserMedia = async () => c.captureStream(10); })()`);
+    await phone.eval(`document.getElementById('cam-toggle').click()`);
+    await phone.until(camUp, 4000);
+    await phone.eval(`camStream.getVideoTracks()[0].dispatchEvent(new Event('ended'))`);
+    res.checks.camera.ended_noticed = await phone.eval(`${camOff} && camLostAt > 0 && /camera stopped/i.test(document.getElementById('notice').textContent)`);
+    await phone.eval(`document.getElementById('cam-toggle').click()`);
+    await phone.until(camUp, 4000);
+    log('  camera:', JSON.stringify(res.checks.camera));
 
     const target = () => phone.eval('liveTarget().id');
     for (let n = 1; n <= 2; n++) {
@@ -176,7 +193,8 @@ async function main() {
       res.locks.push({...(await lockAndTime(phone, viewer, n, `lock ${n} ${id} (${presses} key presses)`)), peak: id, presses});
       await phone.shot(`phone_${n}.png`); await viewer.shot(`viewer_${n}.png`);
     }
-    res.checks.camera.on_after_two_locks = await phone.until(camUp, 4000).then(() => true, () => false);
+    res.checks.camera.on_after_two_locks = await phone.until(camUp, 3000).then(() => true, () => false);
+    if (!res.checks.camera.on_after_two_locks) res.checks.camera.after_state = await phone.eval(`(() => { const v = document.getElementById('cam'); return {camOn, stream: !!camStream, same: !!v && v.srcObject === camStream, hidden: v && v.hidden, cls: document.getElementById('sky-wrap').className, tracks: camStream ? camStream.getTracks().map(t => t.kind + ':' + t.readyState) : null, screen}; })()`);
     // lock 3 on purpose at the wrong peak: the phone asks for one peak, the person aims at an already locked one
     const want = await target(), wrongAt = (await phone.eval(`locks.map(l => l.peak_id)`))[1];
     const pw = await aim(phone, wrongAt);
@@ -204,6 +222,15 @@ async function main() {
     res.checks.reveal = await viewer.eval(`({title: document.getElementById('stepTitle').textContent, text: document.getElementById('stepText').textContent,
       err_m: TEAM8_LIVE.geometry.err, r95_m: TEAM8_LIVE.geometry.r95, inside: TEAM8_LIVE.geometry.inside, triangle_side_m: TEAM8_LIVE.geometry.triSide})`);
     await viewer.shot('viewer_5_reveal.png');
+    // P1.4: the first Reveal opens the trust card, built from solver_eval.json, with this fix's ±r95 and error on the chart
+    res.checks.trust = await viewer.eval(`(() => { const el = document.getElementById('trustCard'), r = el && el.getBoundingClientRect();
+      return el && {open: !el.hidden, title: el.querySelector('h3').textContent, caption: el.querySelector('.cap').textContent, curves: el.querySelectorAll('svg path[fill="none"]').length,
+        marks_this_fix: !!el.querySelector('svg circle[r="4.5"]') && /this fix/.test(el.querySelector('.key').textContent), rows: [...el.querySelectorAll('dt')].map((d, i) => d.textContent + ': ' + el.querySelectorAll('dd')[i].textContent),
+        box: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], button_pressed: document.querySelector('[data-live="trust"]').getAttribute('aria-pressed')}; })()`);
+    await viewer.eval(`document.querySelector('[data-live="trust"]').click()`);
+    res.checks.trust.closes = await viewer.eval(`document.getElementById('trustCard').hidden && document.querySelector('[data-live="trust"]').getAttribute('aria-pressed') === 'false'`);
+    log('  trust card:', JSON.stringify({title: res.checks.trust.title, caption: res.checks.trust.caption, box: res.checks.trust.box, closes: res.checks.trust.closes}));
+    await viewer.eval(`document.querySelector('[data-live="trust"]').click()`);   // open again for the screenshots that follow
     // Backspace undoes the last lock; then a wrong aim fixed the natural way: aim at the flagged peak and Lock again
     const s0 = await viewer.eval('TEAM8_LIVE_LAST.seq');
     await phone.key('Backspace');
@@ -300,7 +327,9 @@ async function main() {
       unlock_needs_two_actions: !!(res.checks.pin && res.checks.pin.unlock_after_one_action_still_locked === true && res.checks.pin.unlock_after_two_actions_locked === false),
       keyboard_pin: !!(res.checks.keyboard_pin && res.checks.keyboard_pin.moved_west && res.checks.keyboard_pin.dropped_unlocked && res.checks.keyboard_pin.locked_by_hold)};
     const cam = res.checks.camera;
-    res.summary.camera = !!(cam && cam.size[0] > 0 && cam.focus_on_main && cam.skyline_hidden && cam.off_ends_tracks && cam.on_after_two_locks && cam.stopped_off_aim);
+    res.summary.camera = !!(cam && /fake_device/.test(cam.track) && cam.focus_on_main && cam.skyline_hidden && cam.off_ends_tracks && cam.off_ends_tracks && cam.ended_noticed && cam.on_after_two_locks && cam.stopped_off_aim);
+    const tr = res.checks.trust;
+    res.summary.trust_card = !!(tr && tr.open && tr.curves >= 3 && tr.marks_this_fix && new RegExp('±' + res.checks.reveal.r95_m + ' m').test(tr.title) && /19 in 20/.test(tr.caption) && tr.closes);
     log('summary', JSON.stringify(res.summary));
   } catch (err) {
     res.error = String(err && err.stack || err);
@@ -310,20 +339,23 @@ async function main() {
         url: await p.eval('location.href').catch(() => null)};
       if (p.name === 'phone') res.debug.phone.state = await p.eval(`({screen, camOn, stream: !!camStream, tracks: camStream ? camStream.getTracks().map(t => t.readyState) : null, notice,
         video: (() => { const v = document.getElementById('cam'); return v && {hidden: v.hidden, w: v.videoWidth, h: v.videoHeight, rs: v.readyState, paused: v.paused, src: !!v.srcObject}; })()})`).catch(e => String(e));
+      if (p.name === 'viewer') res.debug.viewer.hint = await p.eval(`({html: document.getElementById('hint').innerHTML, key: document.getElementById('hint').dataset.html, on: TEAM8_LIVE.on, reveal: TEAM8_LIVE.reveal, trust: TEAM8_LIVE.trust})`).catch(e => String(e));
       await p.shot(`fail_${p.name}.png`).catch(() => null);
     }
     console.error(res.error, JSON.stringify(res.debug, null, 1));
   } finally {
     res.finished = new Date().toISOString();
     writeFileSync(join(OUT, 'result.json'), JSON.stringify(res, null, 2));
-    procs.forEach(p => p.kill()); server.kill();
+    // on Windows, killing chrome.exe leaves its renderer and GPU children running: take the whole tree
+    procs.forEach(p => { if (process.platform === 'win32' && p.pid) spawnSync('taskkill', ['/PID', String(p.pid), '/T', '/F'], {stdio: 'ignore'}); else p.kill(); });
+    server.kill();
     await sleep(500);
     profiles.forEach(prof => { try { rmSync(prof, {recursive: true, force: true}); } catch {} });
   }
   const s = res.summary;
   const ok = s && s.within_1s && s.wrong_aim_flagged && !s.page_errors && s.same_r95_phone_and_viewer && s.target_is_flagged_peak && s.second_wrong_flagged &&
     s.relock_replaced && s.phone_used_fix && s.route_shown_on_viewer_ms < 1500 && s.injured_stay_signal_wait && s.pin_locked_by_long_press &&
-    s.unlock_needs_two_actions && s.keyboard_pin && s.camera;
+    s.unlock_needs_two_actions && s.keyboard_pin && s.camera && s.trust_card;
   if (!ok) { console.error('E2E FAILED'); process.exitCode = 1; } else log('E2E PASSED, results in', OUT);
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });

@@ -59,8 +59,9 @@ python tools/live_server.py              # serves the repo on http://localhost:8
 1. Judge screen: open http://localhost:8768/terrain_viewer/?area=moran
 2. Phone screen: open http://localhost:8768/mockups/phone_screen/ (desktop Chrome with the keyboard works). Press **J** to turn GPS off and **Enter** on Find my position.
 3. Aim with the arrow keys (Shift for fine steps) until the hint says *On the summit*, then press **Enter** to Lock. Each Lock shows up on the judge screen within a second: a pencil line from the peak, the triangle of error once three lines cross, and the 95% bubble.
-   **Camera** (top right of the skyline box) shows the back camera behind a yellow crosshair: put the summit on it and Lock. The skyline drawing hides meanwhile, because a phone camera sees about 65° across and the drawing shows 120°. Heading and tilt still come from the motion sensors or the keyboard, nothing is recorded or sent, and the camera turns off when you leave the Lock screen. It needs https or localhost. Tested only with headless Chrome's fake camera, whose frames headless Chrome does not paint, so the live picture itself has not been seen.
+   **Camera** (top right of the skyline box) shows the back camera behind a yellow crosshair: put the summit on it and Lock. The skyline drawing hides meanwhile, because a phone camera sees about 65° across and the drawing shows 120°. Heading and tilt still come from the motion sensors or the keyboard, nothing is recorded or sent, and the camera turns off when you leave the Lock screen. If the camera stops by itself (another app takes it, permission is withdrawn) the phone says so and goes back to the skyline. It needs https or localhost. Tested only in headless Chrome, with its fake camera and a canvas stream; headless Chrome does not paint the camera frames, so the live picture itself has not been seen.
 4. After three peaks the phone says **Enough** and *You are here ± N m (95%)*. Click **Reveal** on the judge screen to see the error against the hidden demo spot. **Enter** on the phone uses the fix.
+   The first Reveal also opens the **Trust** card (the Trust button opens it any time). It shows what 200 simulated fixes say about this ± N m: how many test fixes came that close, how the error shrinks with each peak, wrong-aim and heading-frame results, solve time, and what the test leaves out. It reads `terrain_viewer/data/moran/solver_eval.json`, the file `tests/solver.test.mjs` writes.
 5. Wrong aim: lock while aiming at a different peak. The phone names the lock that does not fit and its line turns red on the judge screen. Aim again and Lock (it replaces that lock), or press Re-aim. **Backspace** removes the last lock.
 6. Where to go: after **Use this fix** the phone offers the home point (the first fix, the landing spot), the saved points, or a pin on its map. Tap the map to drop a pin, press and hold to lock it, unlock with **Unlock pin** and then **Unlock**. With the keyboard, focus the map, move the cursor with the arrow keys, Enter drops the pin, hold Enter to lock it. The route keeps off water and off ground steeper than 30° (Able) or 18° (Injured, half speed), is coloured easy, moderate and steep, and says why it goes that way in one sentence. If there is no safe way the phone says **Stay. Signal. Wait.** The judge screen draws the same route.
 
@@ -71,7 +72,7 @@ How it works. The phone sends headings in its own frame, so only the differences
 ```bash
 node --test tests/solver.test.mjs          # 200 noisy trials, wrong-aim test, speed; writes terrain_viewer/data/moran/solver_eval.json
 node --test tests/route.test.mjs           # routes to the saved points, able and injured, never through water or over the limit
-node tests/live_e2e.mjs                    # phone + server + viewer in headless Chrome, driven by key presses (CHROME=<path> if needed)
+node tests/live_e2e.mjs                    # phone + server + viewer in headless Chrome, driven by key presses, on free ports (CHROME=<path> if needed)
 node mockups/phone_screen/verify_ui.mjs    # phone UI logic checks
 cd terrain_viewer && python -I scripts/team8_solver_grid.py data/moran   # rebuild solver_grid.json (numpy, scipy, Pillow), about 20 s
 ```
@@ -82,10 +83,11 @@ Measured on the synthetic Mount Moran demo spot. The same 30 m DEM makes the loc
 | --- | --- | --- |
 | Position error, 3 locks | 200 trials, heading noise 3°, tilt 1.5°, barometer 10 m, unknown heading frame | median 60 m, p90 95 m, truth inside the 95% region in 98% |
 | Position error, 1 and 2 locks | same | median 153 m and 67 m |
+| What ± N m means | same 200 trials, 3 locks | ± N m is the radius of a circle with the 95% region's area. The region is not a circle around the fix, so a plain circle of that radius holds less: 83 m (the median) held the truth in 71% of trials, and 19 in 20 were within 124 m. The region itself held it in 98%. The Trust card says this. |
 | Wrong aim | one lock taken on another peak at least 15° away, 10 pairs × 20 trials | flagged 100%, right lock named 96%, false alarm without a swap 1.5% |
-| Solve time | Node 22, one thread, 600 solves | median 0.6 ms, max 55 ms |
+| Solve time | Node 22, one thread, 600 solves, 5 runs on the build laptop while it ran other work | median 0.6 to 1.5 ms, max 19 to 55 ms |
 | Solve time in the phone page | headless Chrome 156 on the build laptop | 1.5 to 41 ms per Lock |
-| Lock to judge screen | `tests/live_e2e.mjs`, Enter on the phone to the first viewer frame painted with it, same laptop, software WebGL, 6 locks × 2 runs | 153 to 642 ms |
+| Lock to judge screen | `tests/live_e2e.mjs`, Enter on the phone to the first viewer frame painted with it, same laptop, software WebGL, 6 locks × 7 runs | 110 to 898 ms, all under 1 s |
 | Safe route, able (30°) | demo spot to the 3 saved points | 4.9 to 11.8 km, 3 h 00 to 4 h 26 min, planned in 21 to 157 ms |
 | Safe route, injured (18°) | same | no safe route to any of them, so Stay. Signal. Wait. |
 
