@@ -249,6 +249,8 @@ class ServerToAtak(unittest.TestCase):
         self.assertAlmostEqual(float(p.get('hae')), DEMO['ground_m'] + 1.7 + cot.GEOID_M, delta=0.06)
         self.assertEqual(me.find('detail/contact').get('callsign'), 'RIDGELINE 1')
         self.assertIn(f'Terrain fix from 3 peaks, no GPS, 95% radius {R95} m', me.find('detail/remarks').text)
+        self.assertIn('Position as of ', me.find('detail/remarks').text)   # the server passes the fix time
+        self.assertIn('under 1 min ago', me.find('detail/remarks').text)
 
         # the 95% circle: ATAK's drawing circle, radius in meters on ellipse major and minor
         ring = ev['RIDGELINE-1.r95']
@@ -445,6 +447,34 @@ class CotEvents(unittest.TestCase):
         self.assertLess(len(x.encode('utf-8')), 48000)
         self.assertEqual(links[0].get('point'), f'{path[0][1]:.6f},{path[0][0]:.6f}')
         self.assertEqual(links[-1].get('point'), f'{path[-1][1]:.6f},{path[-1][0]:.6f}')
+
+    def test_remarks_say_how_old_the_position_is(self):
+        """Resends restamp time and stale, so a responder in ATAK reads the age in the remarks (Matt's point)."""
+        fix, now = cot.snapshot(self.state()), 1_762_600_000.0   # 2025-11-08 11:06:40 UTC
+
+        def remarks(fix_at):
+            return ET.fromstring(dict(cot.build(fix, now, fix_at=fix_at))['RIDGELINE-1']).find('detail/remarks').text
+
+        fresh = remarks(now - 30)
+        self.assertIn('Position as of 11:06Z, under 1 min ago.', fresh)
+        self.assertNotIn('may have moved', fresh)
+        self.assertIn('Position as of 11:02Z, 4 min ago.', remarks(now - 240))
+        old = remarks(now - 25 * 60)
+        self.assertIn('25 min ago.', old)
+        self.assertIn('Older than 10 min, the person may have moved since.', old)
+        self.assertIn('1 h 30 min ago.', remarks(now - 90 * 60))
+        self.assertNotIn('Position as of', remarks(None))   # callers without a fix time keep the old text
+
+    def test_a_new_route_keeps_the_fix_time_and_a_new_position_resets_it(self):
+        base = cot.snapshot(self.state())
+        st = self.state()
+        st['route']['say'] = 'A different way out'
+        st['phone']['marks'] = st['phone']['marks'][:1]
+        self.assertEqual(cot.position_key(cot.snapshot(st)), cot.position_key(base))
+        moved = self.state()
+        moved['phone']['r95_m'] = R95 + 40          # Auto-PACE widening the circle is a new position
+        self.assertNotEqual(cot.position_key(cot.snapshot(moved)), cot.position_key(base))
+        self.assertIsNone(cot.position_key(None))
 
     def test_no_terrain_means_unknown_height(self):
         far = cot.snapshot(dict(self.state(extras=False, route=False),
