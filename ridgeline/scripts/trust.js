@@ -2,7 +2,7 @@
 /*
  * Trust numbers for the board's trust view.
  *
- *   node ridgeline/scripts/trust.js        about 3.5 minutes, writes ridgeline/data/trust.json
+ *   node ridgeline/scripts/trust.js        2 to 3 minutes, writes ridgeline/data/trust.json
  *
  * For aim errors of 1, 3, 6 and 10 degrees it simulates Locks and solves them with the app's settings
  * (3 degree sigma), at the demo card wall and at random spots across the Moran tile. It reports how far off the
@@ -13,10 +13,12 @@
  * Barometer reference error. At the demo card wall with 3 degree aim error, the barometer altitude the solver gets
  * is the true eye height plus a fixed offset of -60, -30, 0, +30 or +60 m (a wrong reference pressure shifts every
  * reading the same way, no other barometer noise is added), and once more with the barometer band switched off.
- * Every offset solves the same spots and Locks, so only the barometer changes between rows.
+ * Every offset solves the same spots and Locks, so only the barometer changes between rows. This sweep runs in a
+ * worker thread while the aim error sweep runs in the main thread.
  */
 const fs = require('fs');
 const path = require('path');
+const { Worker, isMainThread, parentPort } = require('worker_threads');
 const S = require('../solver.js');
 
 const OUT = path.join(__dirname, '..', 'data', 'trust.json');
@@ -85,52 +87,66 @@ function run(cases, aim, compass) {
 
 // Barometer reference error at the demo wall. Its own random stream, so the aim error rows keep their numbers.
 // baro_noise_m 0 makes simulate() return the true eye height, the offset is added on top of it.
-const RB = rng(BARO_SEED);
-const baroCases = Array.from({ length: N_BARO }, () => {
-  const spot = { e_m: demo.e_m + (RB() - 0.5) * m.dx, n_m: demo.n_m + (RB() - 0.5) * m.dy };
-  const obs = S.simulate(m, spot, wall, { rng: RB, noise_deg: BARO_AIM, offset_deg: RB() * 360, baro_noise_m: 0 });
-  return { spot, ground_m: m.elev[S.cellAt(m, spot.e_m, spot.n_m)], true_baro_m: obs.baro_m, locks: obs.locks };
-});
-
-// offset null switches the barometer band off. ground_shift: how much higher the ground under the fix is than the truth.
-function runBaro(offset) {
-  const t = tally(), shift = [];
-  for (const c of baroCases) {
-    const baro_m = offset === null ? null : c.true_baro_m + offset;
-    const res = S.solve(m, { baro_m, locks: c.locks }, { candidates: wall, diagnose: false });
-    score(t, res, c.spot);
-    shift.push(res.estimate.ground_m - c.ground_m);
-  }
-  const row = Object.assign({ offset_m: offset }, summary(t), { ground_shift_median_m: Math.round(pct(shift, 0.5)) });
-  console.log(`baro ${offset === null ? 'band off' : (offset > 0 ? '+' : '') + offset + ' m'}: median ${row.median_m} m, p90 ${row.p90_m} m, inside ${(row.coverage * 100).toFixed(1)}%, plus-minus ${row.r95_median_m} m, fix ground ${row.ground_shift_median_m} m vs truth, re-aim ${(row.reaim_rate * 100).toFixed(1)}%`);
-  return row;
+function baroSweep() {
+  const tb = Date.now(), RB = rng(BARO_SEED);
+  const cases = Array.from({ length: N_BARO }, () => {
+    const spot = { e_m: demo.e_m + (RB() - 0.5) * m.dx, n_m: demo.n_m + (RB() - 0.5) * m.dy };
+    const obs = S.simulate(m, spot, wall, { rng: RB, noise_deg: BARO_AIM, offset_deg: RB() * 360, baro_noise_m: 0 });
+    return { spot, ground_m: m.elev[S.cellAt(m, spot.e_m, spot.n_m)], true_baro_m: obs.baro_m, locks: obs.locks };
+  });
+  // offset null switches the barometer band off. ground_shift: how much higher the ground under the fix is than the truth.
+  const runBaro = offset => {
+    const t = tally(), shift = [];
+    for (const c of cases) {
+      const baro_m = offset === null ? null : c.true_baro_m + offset;
+      const res = S.solve(m, { baro_m, locks: c.locks }, { candidates: wall, diagnose: false });
+      score(t, res, c.spot);
+      shift.push(res.estimate.ground_m - c.ground_m);
+    }
+    const row = Object.assign({ offset_m: offset }, summary(t), { ground_shift_median_m: Math.round(pct(shift, 0.5)) });
+    console.log(`baro ${offset === null ? 'band off' : (offset > 0 ? '+' : '') + offset + ' m'}: median ${row.median_m} m, p90 ${row.p90_m} m, inside ${(row.coverage * 100).toFixed(1)}%, plus-minus ${row.r95_median_m} m, fix ground ${row.ground_shift_median_m} m vs truth, re-aim ${(row.reaim_rate * 100).toFixed(1)}%`);
+    return row;
+  };
+  const rows = BARO_OFFSETS.map(o => runBaro(o)), off = runBaro(null);
+  return { rows, off, seconds: Math.round((Date.now() - tb) / 1000) };
 }
 
-const t0 = Date.now();
-const rows = [];
-for (const aim of LEVELS) {
-  const row = { aim_deg: aim };
-  for (const [name, cases] of [['demo', demoCases], ['random', randCases]]) {
-    row[name] = { angles: run(cases, aim, false), compass: run(cases, aim, true) };
-    const a = row[name].angles, c = row[name].compass;
-    console.log(`aim ${aim} deg ${name}: angles median ${a.median_m} m, inside ${(a.coverage * 100).toFixed(0)}%, re-aim ${(a.reaim_rate * 100).toFixed(0)}% | compass median ${c.median_m} m, inside ${(c.coverage * 100).toFixed(0)}%`);
+async function main() {
+  const t0 = Date.now();
+  // The barometer sweep runs in a second thread next to the aim error sweep (same numbers, about half the wait).
+  // If the thread cannot start, it runs here afterwards.
+  const baroThread = new Promise((ok, no) => {
+    const w = new Worker(__filename);
+    w.once('message', ok);
+    w.once('error', no);
+    w.once('exit', code => setImmediate(() => no(new Error('barometer thread stopped, code ' + code))));   // no-op once the results are in
+  }).catch(e => { console.log(`${e.message}, running the barometer sweep in the main thread`); return null; });
+  const rows = [];
+  for (const aim of LEVELS) {
+    const row = { aim_deg: aim };
+    for (const [name, cases] of [['demo', demoCases], ['random', randCases]]) {
+      row[name] = { angles: run(cases, aim, false), compass: run(cases, aim, true) };
+      const a = row[name].angles, c = row[name].compass;
+      console.log(`aim ${aim} deg ${name}: angles median ${a.median_m} m, inside ${(a.coverage * 100).toFixed(0)}%, re-aim ${(a.reaim_rate * 100).toFixed(0)}% | compass median ${c.median_m} m, inside ${(c.coverage * 100).toFixed(0)}%`);
+    }
+    rows.push(row);
   }
-  rows.push(row);
+  const baro = (await baroThread) || baroSweep();
+  const out = {
+    schema: 'ridgeline-trust/v1', made: new Date().toISOString(), seed: SEED, seconds: Math.round((Date.now() - t0) / 1000),
+    area: m.json.name, grid_m: Math.round(m.dx), solver_sigma_deg: S.DEFAULTS.bearing_sigma_deg, compass_bias_sd_deg: COMPASS_BIAS_SD,
+    demo_wall: demo.wall.map(w => w.name), n_demo: N_DEMO, n_random: randCases.length,
+    note: 'Simulated Locks with Gaussian aim error, solved with the app settings. Not a hand-held test.',
+    rows,
+    baro: {
+      where: 'demo', aim_deg: BARO_AIM, n: N_BARO, seed: BARO_SEED, solver_sigma_m: S.DEFAULTS.baro_sigma_m, seconds: baro.seconds,
+      note: 'Barometer altitude given to the solver is the true eye height plus a fixed offset, no other barometer noise. Same spots and Locks at every offset.',
+      rows: baro.rows, off: baro.off,
+    },
+  };
+  fs.writeFileSync(OUT, JSON.stringify(out, null, 1));
+  console.log(`wrote ${OUT} in ${out.seconds} s`);
 }
-const tb = Date.now();
-const baroRows = BARO_OFFSETS.map(runBaro), baroOff = runBaro(null);
-const out = {
-  schema: 'ridgeline-trust/v1', made: new Date().toISOString(), seed: SEED, seconds: Math.round((Date.now() - t0) / 1000),
-  area: m.json.name, grid_m: Math.round(m.dx), solver_sigma_deg: S.DEFAULTS.bearing_sigma_deg, compass_bias_sd_deg: COMPASS_BIAS_SD,
-  demo_wall: demo.wall.map(w => w.name), n_demo: N_DEMO, n_random: randCases.length,
-  note: 'Simulated Locks with Gaussian aim error, solved with the app settings. Not a hand-held test.',
-  rows,
-  baro: {
-    where: 'demo', aim_deg: BARO_AIM, n: N_BARO, seed: BARO_SEED, solver_sigma_m: S.DEFAULTS.baro_sigma_m,
-    seconds: Math.round((Date.now() - tb) / 1000),
-    note: 'Barometer altitude given to the solver is the true eye height plus a fixed offset, no other barometer noise. Same spots and Locks at every offset.',
-    rows: baroRows, off: baroOff,
-  },
-};
-fs.writeFileSync(OUT, JSON.stringify(out, null, 1));
-console.log(`wrote ${OUT} in ${out.seconds} s`);
+
+if (isMainThread) main();
+else parentPort.postMessage(baroSweep());
