@@ -26,8 +26,6 @@ The event demo uses a real phone aimed by hand at three printed mountain cards. 
 
 ## Screenshots
 
-[Browse the complete app screenshot gallery](docs/SCREENSHOTS.md), including phone, terrain viewer, ATAK and clearly labeled development captures.
-
 | | |
 | --- | --- |
 | ![RIDGELINE fix in real ATAK-CIV](docs/screenshots/atak_ridgeline_fix.jpg) | **Real ATAK-CIV on our test phone, Nov 8, 8:59 EST.** RIDGELINE 1, its 95% circle (cyan), the route to the rendezvous (yellow) and the HIDE and SIGNAL marks, sent as Cursor on Target. ATAK's own corner still says NO GPS, because these are separate items. The status bar is cropped |
