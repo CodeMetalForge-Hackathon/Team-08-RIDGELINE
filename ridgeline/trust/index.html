@@ -56,6 +56,12 @@ th { text-align: right; font-size: 12px; letter-spacing: .06em; color: var(--ink
 th:first-child, td:first-child { text-align: left; }
 td { padding: 6px 8px; border-bottom: 1px solid var(--rule); text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .fine { font-size: 12px; color: var(--ink2); line-height: 1.5; margin: 0; }
+.two p.say { color: var(--ink); font-size: 16px; font-weight: 600; line-height: 1.5; }
+#baro .fine { font-size: 12px; line-height: 1.5; margin-top: 12px; }
+#baro table { margin-top: 0; }
+#baro td { white-space: nowrap; }
+tr.ref td { border-top: 1.5px solid var(--ink); }
+@media (max-width: 760px) { #baro th, #baro td { padding: 6px 4px; } }
 @media (max-width: 760px) { .two { grid-template-columns: 1fr; } h1 { font-size: 30px; } }
 @media (prefers-reduced-motion: reduce) { .prog span { transition: none; } }
 </style>
@@ -78,6 +84,15 @@ td { padding: 6px 8px; border-bottom: 1px solid var(--rule); text-align: right; 
   <section class="charts">
     <figure><figcaption>Median distance from the truth<small>Lower is better. Same Locks for both methods at each aim error.</small></figcaption><svg class="chart" id="c-err" viewBox="0 0 560 260" role="img" aria-label="Median error by aim error"></svg></figure>
     <figure><figcaption>Truth inside the 95% bubble<small>Should sit near the dashed 95% line. Far below it means the bubble claims more than it knows.</small></figcaption><svg class="chart" id="c-cov" viewBox="0 0 560 260" role="img" aria-label="Coverage by aim error"></svg></figure>
+  </section>
+  <section class="two" id="baro" aria-label="Barometer reference error">
+    <div>
+      <h2>What if the barometer reference is wrong?</h2>
+      <p class="say" id="baro-say"></p>
+      <div id="baro-table" style="overflow-x:auto"></div>
+      <p class="fine" id="baro-method"></p>
+    </div>
+    <figure><figcaption>Truth inside the 95% bubble, by barometer error<small>Demo card wall, 3° aim error, the same Locks in every bar. Under each bar, the median ± the app shows.</small></figcaption><svg class="chart" id="c-baro" viewBox="0 0 560 260" role="img" aria-label="Coverage by barometer error"></svg></figure>
   </section>
   <section class="two" aria-label="Two solvers">
     <div>
@@ -146,6 +161,54 @@ function render() {
   chart($('c-err'), 'median_m', { tick: v => v >= 1000 ? (v / 1000) + ' km' : v + ' m' });
   chart($('c-cov'), 'coverage', { max: 1, ref: 0.95, tick: v => Math.round(v * 100) + '%' });
   $('table').innerHTML = `<table><thead><tr><th>Aim error</th><th>Method</th><th>Median</th><th>90th pct</th><th>Inside 95%</th><th>Median ±</th><th>Re-aim asked</th></tr></thead><tbody>${T.rows.map(r => ['angles', 'compass'].map(m => { const d = r[set][m]; return `<tr><td>${r.aim_deg}°</td><td style="text-align:left;font-family:var(--font)">${m === 'angles' ? 'Angles between peaks' : 'Compass, 7° bias'}</td><td>${fmtM(d.median_m)}</td><td>${fmtM(d.p90_m)}</td><td>${pc(d.coverage)}</td><td>${fmtM(d.r95_median_m)}</td><td>${m === 'angles' ? pc(d.reaim_rate) : 'n/a'}</td></tr>`; }).join('')).join('')}</tbody></table>`;
+  wireTips();
+}
+
+// ---------- barometer reference error, demo wall ----------
+const offName = o => o === null ? 'Band off' : o === 0 ? '0 m' : (o > 0 ? '+' : '−') + Math.abs(o) + ' m';
+const signed = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + ' m';
+const pcb = v => Math.round(v * 1000) / 10 + '%';   // 199 of 200 reads 99.5%, not 100%
+
+function baroChart(svg, B, all) {
+  const W = 560, H = 260, L = 44, R = 12, TOP = 20, BOT = 52;
+  const gw = (W - L - R) / (all.length + 0.5), bw = Math.min(44, gw - 22);   // half a slot of air before Band off
+  const y = v => TOP + (H - TOP - BOT) * (1 - v), base = y(0);
+  let s = '';
+  for (let k = 0; k <= 4; k++) {
+    const yy = y(k / 4);
+    s += `<path d="M${L} ${yy}H${W - R}" stroke="${k ? 'var(--grid)' : 'var(--ink)'}" stroke-width="${k ? 1 : 1.5}"/>`;
+    s += `<text class="axis" x="${L - 8}" y="${yy + 4}" text-anchor="end">${k * 25}%</text>`;
+  }
+  s += `<path d="M${L} ${y(0.95)}H${W - R}" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="5 4"/><text class="axis" x="${L + 6}" y="${y(0.95) + 15}">95% target</text>`;
+  all.forEach((r, g) => {
+    const off = r.offset_m === null, cx = L + (g + (off ? 0.5 : 0)) * gw + gw / 2, top = y(r.coverage);
+    const tip = `<b>Barometer ${off ? 'band switched off' : offName(r.offset_m) + ' from the truth'}</b><br>${r.n} fixes, ${B.aim_deg}° aim error<br>median ${fmtM(r.median_m)}, 90th percentile ${fmtM(r.p90_m)}<br>truth inside the bubble ${pcb(r.coverage)}<br>median ± ${fmtM(r.r95_median_m)}<br>ground under the fix ${signed(r.ground_shift_median_m)} against the truth`;
+    s += `<path class="bar" d="${barPath(cx - bw / 2, top, bw, base)}" fill="${off ? 'var(--ink2)' : 'var(--s1)'}" data-tip="${tip.replace(/"/g, '&quot;')}"/>`;
+    s += `<text class="dl" x="${cx}" y="${top - 6}" text-anchor="middle">${pcb(r.coverage)}</text>`;
+    s += `<text class="axis" x="${cx}" y="${H - BOT + 17}" text-anchor="middle">${offName(r.offset_m)}</text>`;
+    s += `<text class="axis" x="${cx}" y="${H - BOT + 32}" text-anchor="middle">±${fmtM(r.r95_median_m)}</text>`;
+  });
+  s += `<text class="axis" x="${(L + W - R) / 2}" y="${H - 2}" text-anchor="middle">barometer reading minus the true height</text>`;
+  svg.innerHTML = s;
+}
+
+function renderBaro() {
+  const B = T.baro;
+  if (!B) { $('baro').style.display = 'none'; return; }
+  const rows = B.rows.slice().sort((a, b) => a.offset_m - b.offset_m), all = [...rows, B.off];
+  // how far the reference can drift while the bubble still holds the truth (90% or more on both sides)
+  let hold = null, fail = null;
+  for (const d of [...new Set(rows.map(r => Math.abs(r.offset_m)))].filter(d => d > 0).sort((a, b) => a - b)) {
+    const cov = Math.min(...rows.filter(r => Math.abs(r.offset_m) === d).map(r => r.coverage));
+    if (cov >= 0.9) hold = { d, cov }; else { fail = { d, cov }; break; }
+  }
+  $('baro-say').textContent = hold && fail ? `The barometer can be off by up to ${hold.d} m and the 95% bubble still holds the truth in at least ${pcb(hold.cov)} of fixes, but at ${fail.d} m off that drops to ${pcb(fail.cov)}.`
+    : hold ? `Even ${hold.d} m off, the 95% bubble still holds the truth in at least ${pcb(hold.cov)} of fixes.`
+    : fail ? `Already ${fail.d} m off, the 95% bubble holds the truth in only ${pcb(fail.cov)} of fixes.` : '';
+  baroChart($('c-baro'), B, all);
+  $('baro-table').innerHTML = `<table><thead><tr><th>Barometer error</th><th>Median</th><th>90th pct</th><th>Inside 95%</th><th>Median ±</th></tr></thead><tbody>${all.map(r => `<tr${r.offset_m === null ? ' class="ref"' : ''}><td${r.offset_m === null ? ' style="font-family:var(--font)"' : ''}>${offName(r.offset_m)}</td><td>${fmtM(r.median_m)}</td><td>${fmtM(r.p90_m)}</td><td>${pcb(r.coverage)}</td><td>${fmtM(r.r95_median_m)}</td></tr>`).join('')}</tbody></table>`;
+  const hi = rows[rows.length - 1], reaim = Math.max(...all.map(r => r.reaim_rate));
+  $('baro-method').textContent = `${B.n} fixes at the demo card wall with ${B.aim_deg}° aim error, the same Locks in every row. The solver gets the true eye height plus the offset and keeps its usual ${B.solver_sigma_m} m barometer band. A wrong barometer slides the fix along the slope until the ground matches the wrong height (${signed(hi.ground_shift_median_m)} at ${offName(hi.offset_m)}), and the re-aim check ${reaim ? `fired in up to ${pcb(reaim)} of runs` : 'did not fire in any run'}. Band off uses no barometer, which keeps the truth inside but grows the bubble to ±${fmtM(B.off.r95_median_m)}. Seed ${B.seed}, ${B.seconds} s.`;
   wireTips();
 }
 
@@ -218,6 +281,7 @@ fetch('/data/trust.json', { cache: 'no-store' }).then(r => { if (!r.ok) throw ne
   T = j;
   $('lead').textContent = `Simulated Locks at the demo card wall (${j.n_demo} fixes) and at ${j.n_random} random spots on ${j.area} that see three peaks, solved with the app's own settings (${j.solver_sigma_deg}° assumed aim error). This is not a hand-held test.`;
   $('method').textContent = `Each fix has three Locks with Gaussian aim error and a random phone heading. The compass rows solve the same Locks as absolute bearings with a ${j.compass_bias_sd_deg}° compass bias per fix, so the bias moves the whole answer. RIDGELINE fits the heading out and only uses the angles between peaks. Made ${j.made.slice(0, 16).replace('T', ' ')} UTC, seed ${j.seed}, ${j.seconds} s, scripts/trust.js.`;
+  try { renderBaro(); } catch (e) { $('baro').style.display = 'none'; }   // never let this section break the rest
   render();
 }).catch(e => { $('lead').textContent = e.message; });
 </script>
