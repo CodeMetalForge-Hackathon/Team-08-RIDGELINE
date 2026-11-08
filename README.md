@@ -31,7 +31,16 @@ The event demo uses a real phone aimed by hand at three printed mountain cards. 
 | Douglas Lilly | @theDclilly | Simulated accelerometer processing and inertial path reconstruction prototype |
 | Seika Karamatsu | @sese0318 | Phone experience, live demo integration, operator feedback, measurement record and demo story |
 
-The inertial navigation work in `accelerometer/` is a separate prototype and is not an input to the demonstrated three-peak fix.
+Where each person's work lives, and whether the live demo uses it.
+
+| Work | Who | Where | In the live demo |
+| --- | --- | --- | --- |
+| Peak selection (`find_true_peaks`), topography and localization prototype | Rohan | `topological_navigation/sprint1_topography.py` and `sprint2_localization.py` on main | Yes. The 23 peaks the phone aims at were picked with Rohan's `find_true_peaks` rule, converted to meters in `ridgeline/scripts/export_grid.py` |
+| Relief colours of the topo map | Noah | `terrain_viewer/scripts/team8_relief.py`, painted like his route plots | Yes. The same map image is used by the phone, the board and the judge view |
+| Terrain route planner with water handling and snapping (`hiker_router.py`, `destination.py`, `water.py`) | Noah | Branch `Sprint2-NavAlgorithm` | No. It runs on the same USGS 1 m Moran tile and is not merged into main at the time of writing |
+| Base-layer COP map (`cop.py`, `sim_feed.py`) | Noah | Branch `Base-Layer-Map` | No, an earlier map concept |
+| Simulated accelerometer processing and inertial path reconstruction | Douglas | `accelerometer/` on main | No. A separate prototype, not an input to the three-peak fix |
+| Phone app, solver, board, CoT hand-off, terrain viewer and measurement record | Seika | `ridgeline/`, `terrain_viewer/`, `docs/` | Yes |
 
 ## Hardware used
 
@@ -158,10 +167,10 @@ Pre-existing libraries, frameworks, SDKs and datasets used across this repositor
 
 | Name | License | Used for |
 | --- | --- | --- |
-| Medić et al. 2024, Drones 8(3) 76 | CC BY 4.0 | Thermal contrast and altitude numbers for a person in water (`data/literature/`) |
-| Burke et al. 2019, Drones 3(4) 78 | CC BY 4.0 | Detection altitude versus contrast and pixel size (`data/literature/`) |
-| NOAA NDBC buoy 44013 | U.S. Government data, public domain | Snapshot of water temperature, wind and waves (`data/ndbc/`) |
-| SeaDronesSee Multi-Object Tracking (planned) | CC0 1.0 | Replay of real drone telemetry, kept out of the repo (`data/raw/`) |
+| Medić et al. 2024, Drones 8(3) 76 | CC BY 4.0 | Thermal contrast and altitude numbers for a person in water (`data/literature/`). From our first concept (maritime search), kept in data/ for reference, not used by RIDGELINE |
+| Burke et al. 2019, Drones 3(4) 78 | CC BY 4.0 | Detection altitude versus contrast and pixel size (`data/literature/`). From our first concept (maritime search), kept in data/ for reference, not used by RIDGELINE |
+| NOAA NDBC buoy 44013 | U.S. Government data, public domain | Snapshot of water temperature, wind and waves (`data/ndbc/`). From our first concept (maritime search), kept in data/ for reference, not used by RIDGELINE |
+| SeaDronesSee Multi-Object Tracking | CC0 1.0 | Planned for our first concept (maritime search). Never added to the repo (`data/raw/` stays local) and not used by RIDGELINE |
 | USGS 3DEP 1 m lidar (via OpenTopography) | U.S. Government data, public domain | Mount Moran terrain for the judge view (`terrain_viewer/data/moran/`) |
 | USGS 3DEP 1/3 arc-second DEM | U.S. Government data, public domain | Mount Washington terrain (`terrain_viewer/data/washington/`) |
 | Copernicus DEM GLO-30 | Copernicus DEM licence, free use with attribution (© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the EU and ESA) | Mount Fuji terrain (`terrain_viewer/data/fuji/`) |
