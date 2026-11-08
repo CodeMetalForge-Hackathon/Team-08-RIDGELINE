@@ -60,6 +60,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
   if (req.headers.has('range')) return;
+  if (req.cache === 'only-if-cached' && req.mode !== 'same-origin') return;   // DevTools quirk, fetch() would throw
 
   let stored = null;
   const network = fetch(req).then(res => {
