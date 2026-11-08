@@ -930,11 +930,13 @@ function start() {
 // From the moment a Lock is accepted until it is solved and drawn, another tap, click or Enter is the same
 // tap again. target and the mismatch suspect are only updated by that solve, so it would record the peak twice.
 let lockBusy = false;
+let lockAt = -1e9;   // time of the last Lock. A second press within 600 ms (double tap, glove bounce, key repeat) is ignored, so the same card is never Locked twice before the next card is up
 function doLock(ev) {
-  if (lockBusy) return;
+  const now = performance.now();
+  if (lockBusy || now - lockAt < 600) return;
   const v = meanVec(300);
   if (!v || v.flat || !target) return;
-  lockBusy = true;
+  lockAt = now; lockBusy = true;
   if (navigator.vibrate) navigator.vibrate(v.steady ? 40 : [20, 40, 20]);
   const sus = result && result.status === 'mismatch' ? result.suspect : null;
   if (sus) locks.splice(sus.lock_index, 1);

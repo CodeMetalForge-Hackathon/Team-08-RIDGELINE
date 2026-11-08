@@ -21,7 +21,8 @@ function phone({ solve } = {}) {
   vm.runInContext(`
     let locks = [], skip = 3, reduce = false, source = 'keyboard', orientMode = 'relative';
     let target = 'pk_8', result = null, aim = { h: 254.2, t: 1.5, steady: true, fresh: true, spread: 0 };
-    let solves = 0, renders = 0, posts = 0, vibrations = 0, timers = [], solveImpl = null;
+    let solves = 0, renders = 0, posts = 0, vibrations = 0, timers = [], solveImpl = null, clock = 5000;
+    const performance = { now: () => clock };
     const navigator = { vibrate: () => { vibrations++; return true; } };
     const setTimeout = (fn, ms) => { timers.push({ fn, ms }); return timers.length; };
     const meanVec = () => aim;
@@ -31,7 +32,8 @@ function phone({ solve } = {}) {
     ${lockSrc}
     globalThis.api = {
       tap: () => doLock(),
-      flush() { const t = timers; timers = []; for (const x of t) x.fn(); return t.map(x => x.ms); },
+      flush() { const t = timers; timers = []; for (const x of t) { clock += x.ms; x.fn(); } return t.map(x => x.ms); },
+      wait(ms) { clock += ms; },
       get locks() { return locks; }, get target() { return target; }, get result() { return result; },
       set result(v) { result = v; }, set target(v) { target = v; }, set aim(v) { aim = v; }, set solveImpl(f) { solveImpl = f; },
       get counts() { return { solves, renders, posts, vibrations, pending: timers.length }; },
@@ -64,9 +66,9 @@ test('taps during the solve after an accepted Lock record one Lock only', () => 
 
 test('the Lock control works again once the solve and screen update are done', () => {
   const p = phone();
-  p.tap(); p.tap(); p.flush();
+  p.tap(); p.tap(); p.flush(); p.wait(1000);
   p.aim = { h: 230.0, t: 1.2, steady: true, fresh: true, spread: 0 };
-  p.tap(); p.tap(); p.flush();
+  p.tap(); p.tap(); p.flush(); p.wait(1000);
   p.aim = { h: 310.3, t: 2.0, steady: true, fresh: true, spread: 0 };
   p.tap(); p.tap(); p.tap(); p.flush();
   assert.deepStrictEqual(plain(p.locks.map(l => [l.peak_id, l.heading_deg])), [['pk_8', 254.2], ['pk_20', 230], ['pk_13', 310.3]]);
@@ -76,9 +78,9 @@ test('the Lock control works again once the solve and screen update are done', (
 
 test('a real bad aim still replaces the suspect Lock, and a double tap does not remove a second Lock', () => {
   const p = phone();
-  p.tap(); p.flush();
+  p.tap(); p.flush(); p.wait(1000);
   p.aim = { h: 230.0, t: 1.2, steady: true, fresh: true, spread: 0 };
-  p.tap(); p.flush();
+  p.tap(); p.flush(); p.wait(1000);
   // the solver flags Lock 2 and asks for pk_20 again
   p.result = { status: 'mismatch', suspect: { lock_index: 1, peak_id: 'pk_20', was_peak_id: 'pk_20' } };
   p.target = 'pk_20';
@@ -88,6 +90,16 @@ test('a real bad aim still replaces the suspect Lock, and a double tap does not 
   p.flush();
   assert.deepStrictEqual(plain(p.locks.map(l => [l.peak_id, l.heading_deg])), [['pk_8', 254.2], ['pk_20', 231.5]]);
   assert.strictEqual(p.target, 'pk_13');
+});
+
+test('a press within 600 ms of the last Lock is still ignored after the solve', () => {
+  const p = phone();
+  p.tap(); p.flush();
+  p.aim = { h: 230.0, t: 1.2, steady: true, fresh: true, spread: 0 };
+  p.wait(200); p.tap();
+  assert.strictEqual(p.locks.length, 1);
+  p.wait(400); p.tap(); p.flush();
+  assert.deepStrictEqual(plain(p.locks.map(l => l.peak_id)), ['pk_8', 'pk_20']);
 });
 
 test('a Lock that is not accepted does not hold the control', () => {
