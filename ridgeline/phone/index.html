@@ -851,7 +851,7 @@ function paceHtml(sm) {
   if (!pace) return '';
   const mins = sm.minutes < 1 ? 'under 1 min ago' : `${Math.round(sm.minutes)} min ago`;
   const head = sm.heading === 'sim' ? 'heading simulated' : sm.heading === 'unknown' ? 'heading unknown, spread every way' : 'heading from the peaks';
-  const baroT = sm.baro === 'off' ? 'no barometer' : `barometer band (sim)${sm.baro_used ? ' ×' + sm.baro_used : ''}`;
+  const baroT = sm.baro === 'off' ? 'no barometer' : `barometer band (sim)${sm.baro_used ? `, used ${sm.baro_used === 1 ? 'once' : sm.baro_used + ' times'}` : ''}`;
   const g = sm.gps;
   const rows = [
     { k: 'P', n: 'GPS', on: sm.basis === 'gps', bad: g === 'REJECTED', t: g === 'OFF' ? 'Off' : g === 'AGREE' ? `Agrees, ${fmtM(sm.gps_dist_m)} off${sm.gps_used ? ', in use' : ''}` : `Disagrees, ${fmtM(sm.gps_dist_m)} off, not used` },

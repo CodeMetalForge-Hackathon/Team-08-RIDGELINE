@@ -158,7 +158,7 @@ function paceBox(pc) {
   const p = pc.p, num = v => Number.isFinite(+v) ? +v : 0, g = String(p.gps || 'OFF').toUpperCase();
   const mins = num(p.minutes) < 1 ? 'under 1 min ago' : `${Math.round(num(p.minutes))} min ago`;
   const head = p.heading === 'sim' ? 'heading simulated' : p.heading === 'unknown' ? 'heading unknown, spread every way' : 'heading from the peaks';
-  const baroT = p.baro === 'off' ? 'no barometer' : `barometer band${p.sim ? ' (sim)' : ''}${num(p.baro_used) ? ' ×' + num(p.baro_used) : ''}`;
+  const baroT = p.baro === 'off' ? 'no barometer' : `barometer band${p.sim ? ' (sim)' : ''}${num(p.baro_used) ? `, used ${num(p.baro_used) === 1 ? 'once' : num(p.baro_used) + ' times'}` : ''}`;
   const rows = [
     { k: 'P', n: 'GPS', on: p.basis === 'gps', bad: g === 'REJECTED', t: g === 'OFF' ? 'Off' : g === 'AGREE' ? `Agrees, ${fmtM(num(p.gps_dist_m))} off${p.gps_used ? ', in use' : ''}` : `Disagrees, ${fmtM(num(p.gps_dist_m))} off, not used` },
     { k: 'A', n: 'Terrain fix', on: p.basis === 'fix' || p.basis === 'refix', t: `${mins} · ${fmtM(num(p.walked_fix_m))} walked${num(p.assumed_m) ? `, ${fmtM(num(p.assumed_m))} of it assumed` : ''}` },
