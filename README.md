@@ -70,6 +70,9 @@ Pre-existing open-source libraries, frameworks, SDKs, and datasets used in this 
 | Burke et al. 2019, Drones 3(4) 78 | CC BY 4.0 | Detection altitude versus contrast and pixel size (`data/literature/`) |
 | NOAA NDBC buoy 44013 | U.S. Government data, public domain | Snapshot of water temperature, wind and waves (`data/ndbc/`) |
 | SeaDronesSee Multi-Object Tracking (planned) | CC0 1.0 | Replay of real drone telemetry, kept out of the repo (`data/raw/`) |
+| USGS 3DEP 1 m lidar (via OpenTopography) | U.S. Government data, public domain | Grand Teton terrain for the judge view (`terrain_viewer/data/`) |
+| deck.gl 9.3.11 | MIT | 3D terrain rendering in `terrain_viewer/`, shipped locally in `terrain_viewer/lib/` |
+| Noto Sans JP, B612 Mono (via Fontsource) | SIL OFL 1.1 | Fonts in `terrain_viewer/`, license texts in `terrain_viewer/lib/fonts/` |
 
 ## Submission checklist
 
