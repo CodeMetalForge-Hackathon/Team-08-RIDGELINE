@@ -9,7 +9,7 @@ The demonstration entry point is [the RIDGELINE technical README](ridgeline/READ
 
 ## What it does
 
-RIDGELINE estimates a person's position from the angles between known mountain peaks and a preloaded terrain map when GPS is unavailable. Aim a phone at each of three peaks you can identify and tap Lock. The phone shows the estimate, an MGRS grid reference, its modelled 95% uncertainty radius and terrain-constrained route options, so the person and a responder can see both the estimate and its limits. After the fix, **Auto-PACE** keeps the estimate alive as the person walks. The circle grows with each step, a barometer band and the lakes pull it back in, a GPS reading is used only when it falls inside the circle, and at its limit the phone vibrates and asks for a new three-peak fix.
+RIDGELINE estimates a person's position from the angles between known mountain peaks and a preloaded terrain map when GPS is unavailable. Aim a phone at each of three peaks you can identify and tap Lock. The phone shows the estimate, an MGRS grid reference, its modelled 95% uncertainty radius and terrain-constrained route options, so the person and a responder can see both the estimate and its limits. After the fix, **Auto-PACE** keeps the estimate alive as the person walks. The circle grows with each step, a barometer band and the lakes pull it back in, a GPS reading is used only when it falls inside the circle, and at its limit the phone vibrates and asks for a new three-peak fix. **Follow** turns a locked route into one instruction at a time, an arrow that turns with the phone (heading calibrated by the peaks), the next point, the time left and the 95% radius. It never reroutes by itself, and off the route it offers Re-route from here.
 
 The event demo uses a real phone aimed by hand at three printed mountain cards. Their positions on a wall reproduce the angles from one location near Mount Moran. The height input is simulated. This demonstrates the phone-to-estimate workflow in a controlled setting, and does not establish accuracy in real mountains.
 
@@ -20,7 +20,7 @@ The event demo uses a real phone aimed by hand at three printed mountain cards. 
 | What breaks today | GPS can be unavailable or misleading, and cellular service may be absent. A useful position must include its uncertainty and work from local data |
 | Operating assumptions | The terrain tile is loaded in advance, the landmarks are identified correctly and useful sightlines are available |
 | What we show working | Hand-held phone observations of three wall cards, a terrain estimate with a probability region on the phone and board, a route display, and an offline reload followed by reconnection to the board, all recorded on a real phone. A simulated GPS comparison and CoT output are implemented, with verification limits below |
-| Still to establish | Real-mountain accuracy, reliable height input, use under poor visibility, battery endurance, display in a real ATAK client, and Auto-PACE on a real walk (step counting, walking heading, a real barometer) |
+| Still to establish | Real-mountain accuracy, reliable height input, use under poor visibility, battery endurance, display in a real ATAK client, and Auto-PACE and Follow on a real walk (step counting, walking heading, a real barometer) |
 
 **Measured on a real phone** on Nov 8, a hand-held three-Lock wall trial placed the fix 42 m from the known demo position inside a ±293 m circle. A second trial on the then-current build gave 90 m inside ±278 m. These are indoor wall-card trials with a simulated barometer, not outdoor field accuracy claims.
 
@@ -124,7 +124,7 @@ Open [the phone page](http://localhost:8768) in Chrome **on the phone**, and [th
 ④ Run the checks from the repository root.
 
 ```bash
-node --test ridgeline/test/solver.test.js ridgeline/test/hide.test.js ridgeline/test/skyline.test.js ridgeline/test/lock.test.js ridgeline/test/pace.test.js terrain_viewer/tests/nav_water.test.mjs
+node --test ridgeline/test/solver.test.js ridgeline/test/hide.test.js ridgeline/test/skyline.test.js ridgeline/test/lock.test.js ridgeline/test/pace.test.js ridgeline/test/follow.test.js terrain_viewer/tests/nav_water.test.mjs
 python -I -m unittest discover -s ridgeline/test -p "test_*.py"
 ```
 
@@ -161,7 +161,8 @@ For a laptop dry run, arrows aim and Enter Locks. **A** is keyboard-only demo as
 | Misidentified wall cards | Three earlier hand-held trials with cards in the wrong order | Each flagged a mismatch and requested another observation of the last card |
 | Solver simulation | 200 fixes at the demo position with Gaussian 3° aim error and random constant heading offset | Median error 98 m, 90th percentile 184 m, truth inside the 95% bubble in 99.0%, slowest solve 156 ms |
 | Solver simulation across the tile | 120 random positions with three visible peaks | Median error 132 m, 90th percentile 540 m, truth inside the bubble in 99.2% |
-| JavaScript checks, rerun after merging Auto-PACE on Nov 8 | Solver, visibility suggestions, walkable start, expected skyline, Lock input, Auto-PACE and route water checks | 44 of 44 passing, comprising 6 solver, 9 hide, 6 skyline, 6 Lock input, 10 Auto-PACE and 7 route tests |
+| JavaScript checks, rerun after merging Follow on Nov 8 | Solver, visibility suggestions, walkable start, expected skyline, Lock input, Auto-PACE, Follow and route water checks | 54 of 54 passing, comprising 6 solver, 9 hide, 6 skyline, 6 Lock input, 10 Auto-PACE, 10 Follow and 7 route tests |
+| Follow in a desktop browser at phone size, Nov 8 | Locked Rendezvous route and a simulated walk | The next point advanced from 1 to 15 and the phone said Arrived. Re-route and the two-tap Unlock worked. Not yet on the real phone |
 | Auto-PACE in a desktop browser at phone size and on the board, Nov 8 | Simulated walks and Test GPS points, labelled SIMULATED on screen | ±269 m at the fix grew to ±747 m after 3.31 km and asked for a re-aim, with the walker inside the circle throughout. A simulated re-aim brought it back to ±279 m. Near Test GPS took ±269 m to ±64 m, the far point 2.54 km off was rejected. Not a real walk |
 | Python checks, rerun on Nov 8 after merging Auto-PACE | Stand-in TAK client, local push listener and the trial capture script | 32 of 32 passing. The 13 CoT tests cover fix, uncertainty, route, marks, the disagreeing GPS test point, reconnect, reset deletes, the age of the position and the Auto-PACE wording in the remarks. 9 tests cover the pre-demo check, two of them against a real server on a free port. Previously recorded Lock relay under 0.25 s with the test client connected |
 
@@ -181,7 +182,7 @@ Feedback from mentors during the event, and where the build answers it.
 | Can the phone say how confident its own position is? | Evening mentor | ±m (95%) radius, the 95% and 50% bubble on the map, and MGRS digits limited by the radius | Done |
 | Take the peaks one at a time and say whether that is enough or one more is needed | Evening mentor | After each Lock the phone says Enough, or Close, not sure yet with the next peak to aim at | Done |
 | Make sure the camera is on the right summit | Evening mentor | Crosshair over the rear camera, the expected skyline toward the next peak, and a mismatch check that asks for the suspect card again | Done. Three wrong-order wall trials were each caught |
-| The person picks the destination. Pin it and make it hard to move by accident | Evening mentor | Where to? offers Rendezvous, Back to start, marks and a pin. Removing a pin takes two taps | Done |
+| The person picks the destination. Pin it and make it hard to move by accident | Evening mentor | Where to? offers Rendezvous, Back to start, marks and a pin. Removing a pin takes two taps. Follow never reroutes by itself, it offers Re-route from here and waits for a tap | Done |
 | A route across a lake makes no sense. Keep routes off water | Evening mentor | Routes never cross water, and a pin in a lake ends at the nearest reachable shore | Done, 7 automated route tests |
 | Do not mark enemies or fires, that turns it into battle management software | Evening mentor | No threat or fire markers | Done |
 | Places to hide | Special operations mentor | HIDE spots (folds in the ground seen by the fewest summits) and SIGNAL spots (open ground seen by the most), terrain only | Done. Trees and buildings are not modelled |
@@ -198,7 +199,7 @@ Feedback from mentors during the event, and where the build answers it.
 | CoT passed stand-in client tests, but real ATAK-CIV is untested | Verify connection, coordinates, uncertainty, route display and deletion in actual ATAK. Replace the local unencrypted demo link with suitable field transport |
 | Route and visibility results describe terrain data. Water avoidance passes merged automated tests but awaits phone verification, and a candidate start is not a verified walk from the estimate | Verify route origin, planner and map masks, blocked destinations and unreachable routes. Trees, weather, buildings and current hazards are not a full part of this model |
 | Offline reload is recorded for one phone setup. Night mode, Lock vibration and airplane mode with the cable are unverified on the phone | Repeat with airplane mode, cold reload and reconnection, and complete a device acceptance pass including camera, offline startup, setup time and use by an unfamiliar operator |
-| Auto-PACE has run only on simulated walks and synthetic motion. The barometer is simulated and the stride assumed | Walk with the phone outdoors against ground truth, calibrate the stride per person, read a real barometer, and measure how often the walked circle holds the truth |
+| Auto-PACE and Follow have run only on simulated walks and synthetic motion. The barometer is simulated and the stride assumed | Walk with the phone outdoors against ground truth, calibrate the stride per person, read a real barometer, and measure how often the walked circle holds the truth |
 | No field endurance, size, weight or cost measurements | Profile battery and storage on target hardware. Porting the dependency-free solver to an embedded runtime is a next step, not a demonstrated result |
 
 ATAK already provides mapping and resection capabilities. RIDGELINE explores a guided observation and uncertainty workflow that can supply an estimate to existing tools. We do not claim that resection is new or that RIDGELINE replaces ATAK. See [the comparison boundary](docs/JUDGING_EVIDENCE.md#relationship-to-atak).

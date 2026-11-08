@@ -44,15 +44,15 @@ The judges score these four. Both runs say each line word for word at least once
 | 2:15 to 3:15 | Teammate, Judge | The phone names the peak to aim at. Put the crosshair on it and press Lock. The small outline is the skyline you should see toward the next peak, so you can check you have the right summit. If you Lock the wrong card, it notices and asks for that card again. | The judge Locks the cards one by one. A teammate points at the lines appearing on the board. |
 | 3:15 to 3:45 | Teammate | After two Locks it says Close, not sure yet, one more peak. After three it says Enough, three peaks agree. You get an MGRS grid, a plus or minus radius that holds the truth 95% of the time, and the bubble on the map. | Point at the phone screen, then the board. |
 | 3:45 to 4:30 | Seika | Now the answer. On this real phone our wall tests landed 42 meters off inside a 293 meter circle, and 90 meters off inside 278. With the cable pulled and the page reloaded from the phone's own copy, it still solved, 212 meters off inside 298. | Press R on the board to reveal the true spot and today's error. |
-| 4:30 to 5:00 | Teammate | Where to offers Rendezvous, Back to start, your marks, or a pin. Removing a pin takes two taps, so it does not move by accident. Routes stay off water and slopes over 30 degrees. | Tap Where to and pick Rendezvous. |
+| 4:30 to 5:00 | Teammate | Where to offers Rendezvous, Back to start, your marks, or a pin. Removing a pin takes two taps, so it does not move by accident. Routes stay off water and slopes over 30 degrees. [Lock route, and Follow gives one arrow at a time, turned by the peaks, with the time left. It never reroutes by itself.] | Tap Where to and pick Rendezvous. [Tap Lock route, show the arrow, then go back to the map.] |
 | 5:00 to 5:30 | Teammate | Switch to Injured and the limit drops to 18 degrees, with one sentence on why. If there is no safe way, it says Stay, Signal, Wait. Hide spots are folds in the ground that few summits can see. Signal spots are open ground that many can see. Terrain only, no trees or buildings. | Switch to Injured. Show the Hide and Signal spots. |
 | 5:30 to 6:00 | Seika | We never trust one source. Terrain checks GPS, and the phone tells you when its own answer is getting old. A test reading 2.48 kilometers away fell outside our circle, so the phone said GPS disagrees and did not use it. One 61 meters away was consistent. We do not know why a reading disagrees, so we call it a disagreement, not a spoofing detector. | Settings, Test GPS, far point, then near point. |
 | 6:00 to 6:30 | Seika | In 200 simulated fixes with 3 degrees of aim error, the truth was inside the circle 99% of the time. Read the same Locks as compass bearings with a 7 degree compass bias and you get 204 meters and 54%. We get 103 meters and 98%. | Press T on the board for the Trust view. Say that these are simulations. |
 | 6:30 to 7:30 | Teammate | Mentor Brendan asked for Auto-PACE. After the fix the phone keeps its probability map. Walk, and the circle grows. The barometer and the lakes pull it back in. GPS inside the circle is used, outside it is not. The screen shows the PACE tier it relies on. This walk is simulated, at 30 times speed. At the limit the phone buzzes and says Confidence low, aim at 3 peaks again. | Tap Simulated walk and let the circle grow until the prompt. If Auto-PACE was switched off for the demo, say instead that the phone keeps the last fix and says how old it is. |
 | 7:30 to 8:00 | Seika | Mentor Logan told us not to build another drone or another command and control tool, and to feed the tools people already use. So the fix, its 95% circle, the route and the marks go out as Cursor on Target for ATAK. | Open `localhost:8768/api/cot` on the PC. |
 | 8:00 to 8:30 | Seika | We tested that feed with a stand-in TAK client. Real ATAK display is not verified yet. [We showed it in ATAK on this phone this morning.] Mentor Matt said confidence should always show and drop when the fix may be drifting. The phone always shows its radius, and ATAK reads how old the fix is. | Point at the remarks line, Position as of, minutes ago. |
-| 8:30 to 9:15 | Teammate | Four of us built this. Rohan, the peak selection rule and the topography and localization prototype. Noah, the terrain data, the map colours on every screen and a route planner prototype. Douglas, the simulated accelerometer and inertial path prototype. Seika, the phone app, the live demo and the measurement record. | Each person raises a hand. |
-| 9:15 to 10:00 | Seika | Our honest limits. Cards stand in for mountains, the height is simulated, we have not tested outdoors, real ATAK is unverified, and battery life is not measured. Next come outdoor trials with real ground truth, a real barometer, real ATAK, weather and voice guidance. GPS is the first thing jammed or spoofed. It runs on the phone you already carry, with no signal, and sends the fix to ATAK. We never trust one source. Thank you. | Hand the phone back and take questions. |
+| 8:30 to 9:15 | Teammate | Four of us built this. Rohan, the peak selection rule and the topography and localization prototype. Noah, the terrain data, the map colours on every screen and a route planner that already weighs snow depth from Open-Meteo, with a cached copy for no signal. Douglas, the simulated accelerometer and inertial path prototype. Seika, the phone app, the live demo and the measurement record. | Each person raises a hand. |
+| 9:15 to 10:00 | Seika | Our honest limits. Cards stand in for mountains, the height is simulated, we have not tested outdoors, real ATAK is unverified, and battery life is not measured. Next come outdoor trials with real ground truth, a real barometer, real ATAK, Noah's snow routes on the phone, and the one-file solver moved onto embedded hardware, the kind of port Code Metal builds. GPS is the first thing jammed or spoofed. It runs on the phone you already carry, with no signal, and sends the fix to ATAK. We never trust one source. Thank you. | Hand the phone back and take questions. |
 
 ## If asked
 
@@ -74,9 +74,11 @@ The judges score these four. Both runs say each line word for word at least once
 
 ⑨ Battery. "One fix is under a second of compute. We have not measured battery life yet."
 
-⑩ Weather. "That is our next step. Forecast grids loaded before the mission can recolor the routes."
+⑩ Weather. "Noah's planner on main already weighs snow depth from Open-Meteo, and uses a cached copy when there is no signal. Putting it into the phone's routes is our next step."
 
 ⑪ How old is the fix in ATAK. "Every update says when the position was made and how many minutes ago, and after 10 minutes it says the person may have moved."
+
+⑫ Beyond a phone. "The solver is one file with no dependencies, and the same tests run it on the phone, the board and in Node. That makes it a clean candidate to move onto a radio or a wrist computer, which is the kind of port Code Metal builds. We have not done that port yet."
 
 ## Do not say
 
@@ -88,6 +90,6 @@ The judges score these four. Both runs say each line word for word at least once
 
 ④ That the phone never uses the magnetometer. Say the fix only depends on the angles between Locks.
 
-⑤ That Auto-PACE was tested on a real walk. The walks on screen are simulated and labelled SIMULATED, unless the team walked with the phone before judging.
+⑤ That Auto-PACE or Follow was tested on a real walk. The walks on screen are simulated and labelled SIMULATED, unless the team walked with the phone before judging.
 
 ⑥ Any number that is not in this script or the README.
