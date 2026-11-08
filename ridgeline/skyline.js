@@ -29,14 +29,14 @@
  *   line   the horizon alone (stroke it)
  *   peakX, peakY  the summit marker, null when the peak is outside the window
  *   vex    vertical exaggeration used (1 = true shape)
- *   opts   pad_top 8, pad_bottom 6, max_vex 3, min_vex 0.5. The frame always shows the top of the skyline
- *          and the summit; ground lower than the middle half of the window may be cut at the bottom.
+ *   opts   pad_top 8, pad_bottom 6, max_vex 3, min_vex 0.4. The whole skyline is fitted in the box; only when
+ *          that would squash it below min_vex is the low ground cut at the bottom (the top always shows).
  *
  * Model, the same as solver.js and the wall cards: eye 1.7 m above the bilinear ground, earth curvature
  * with refraction (drop d^2 / 2 rEff, k 0.13), one ray every step_deg marched every 15 m from 45 m out to
  * the tile edge on the 30 m grid. The 30 m grid is a block mean of the 5 m terrain, which flattens sharp
  * summits by up to about 20 m (0.45 deg low at Bivouac Peak from the demo spot), so the 23 known summits
- * are put back as cones, true height at the top, down to the grid level 45 m out.
+ * are put back: the missing height is added at the summit and fades to nothing 45 m out, capped at the summit.
  * Terrain beyond the tile edge is not in the data, so a ray that leaves the tile early can draw too low.
  */
 (function (root, factory) {
@@ -138,8 +138,9 @@
       if (along < ctx.rMin || along > rMax) continue;
       const side = Math.abs(q.de * ce - q.dn * se);
       if (side >= R) continue;
-      // Cone from the true summit down to the grid level at R. Where the grid is higher the march has it.
-      const t = (q.top - q.slope * side - z0 - along * along * c) / along;
+      // The summit lift fades out over R on top of the local grid (so a cliff stays a cliff), never above the summit.
+      const h = Math.min(q.top, groundAt(m, ctx.e0 + se * along, ctx.n0 + ce * along) + q.lift * (1 - side / R));
+      const t = (h - z0 - along * along * c) / along;
       if (t > best) { best = t; bestR = along; }
     }
     out.t = best; out.r = bestR;
@@ -177,7 +178,7 @@
         const room = half + Math.atan2(coneR, dq) * R2D + 0.5;
         if (Math.abs(wrap180(Math.atan2(de, dn) * R2D - azc)) > room) continue;
         const lift = q.elev_m - groundAt(m, q.e_m, q.n_m);
-        if (lift > 0) cones.push({ de, dn, top: q.elev_m, slope: lift / coneR });
+        if (lift > 0) cones.push({ de, dn, top: q.elev_m, lift });
       }
     }
     const ctx = {
@@ -220,13 +221,13 @@
   }
 
   function svgPath(prof, w, h, opts) {
-    const o = Object.assign({ pad_top: 8, pad_bottom: 6, max_vex: 3, min_vex: 0.5 }, opts || {});
+    const o = Object.assign({ pad_top: 8, pad_bottom: 6, max_vex: 3, min_vex: 0.4 }, opts || {});
     const s = prof.samples, half = prof.fov_deg / 2, pk = prof.peak;
     const inside = !!pk && Math.abs(pk.daz) <= half + 1e-9;
     let hi = -Infinity, lo = Infinity;
     for (const q of s) {
       if (q.elev_deg > hi) hi = q.elev_deg;
-      if (Math.abs(q.daz) <= half / 2 && q.elev_deg < lo) lo = q.elev_deg;
+      if (q.elev_deg < lo) lo = q.elev_deg;
     }
     if (inside) { hi = Math.max(hi, pk.elev_deg); lo = Math.min(lo, pk.elev_deg); }
     if (!Number.isFinite(lo)) lo = hi - 1;
