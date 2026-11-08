@@ -20,7 +20,7 @@ The event demo uses a real phone aimed by hand at three printed mountain cards. 
 | What breaks today | GPS can be unavailable or misleading, and cellular service may be absent. A useful position must include its uncertainty and work from local data |
 | Operating assumptions | The terrain tile is loaded in advance, the landmarks are identified correctly and useful sightlines are available |
 | What we show working | Hand-held phone observations of three wall cards, a terrain estimate with a probability region on the phone and board, a route display, and an offline reload followed by reconnection to the board, all recorded on a real phone. A simulated GPS comparison and CoT output are implemented, with verification limits below |
-| Still to establish | Real-mountain accuracy, reliable height input, use under poor visibility, battery endurance, display in a real ATAK client, and Auto-PACE and Follow on a real walk (step counting, walking heading, a real barometer) |
+| Still to establish | Real-mountain accuracy, reliable height input, use under poor visibility, battery endurance, how ATAK clears old items after a Reset, and Auto-PACE and Follow on a real walk (step counting, walking heading, a real barometer) |
 
 **Measured on a real phone** on Nov 8, a hand-held three-Lock wall trial placed the fix 42 m from the known demo position inside a ±293 m circle. A second trial on the then-current build gave 90 m inside ±278 m. These are indoor wall-card trials with a simulated barometer, not outdoor field accuracy claims.
 
@@ -68,7 +68,7 @@ flowchart LR
     D --> P[Auto-PACE keeps it live, steps widen it, barometer and lakes narrow it, GPS used only inside it]
     P --> F[Local PC relay over USB]
     F --> G[Judge board with truth reveal]
-    F --> H[CoT feed tested with a stand-in TAK client, real ATAK display unverified]
+    F --> H[Fix, 95% circle and route shown in real ATAK-CIV on the phone, Nov 8]
 ```
 
 The solver scores a 30 m grid covering 10.4 × 8.0 km near Mount Moran. Each candidate position fits its own constant heading offset, so the angles **between** the Locks matter, rather than absolute compass north. A height band and precomputed peak visibility narrow the result. The same [solver.js](ridgeline/solver.js) runs on the phone, board and in Node tests without third-party JavaScript dependencies.
@@ -128,7 +128,7 @@ node --test ridgeline/test/solver.test.js ridgeline/test/hide.test.js ridgeline/
 python -I -m unittest discover -s ridgeline/test -p "test_*.py"
 ```
 
-For optional ATAK setup and CoT details, see [Hand-off to ATAK](ridgeline/README.md#hand-off-to-atak). A real ATAK-CIV session has not yet been verified.
+For optional ATAK setup and CoT details, see [Hand-off to ATAK](ridgeline/README.md#hand-off-to-atak). On Nov 8 at 8:59 EST, real ATAK-CIV on our test phone (Galaxy S24 Ultra) showed RIDGELINE 1 as a friendly ground marker, RIDGELINE 1 95% as a circle, RIDGELINE 1 ROUTE to Rendezvous, HIDE 1 to 3 and SIGNAL 1 to 3, in MGRS 12T WP. ATAK's own corner still said NO GPS, because these are separate items, not ATAK's own position.
 
 ## How to run the demo
 
@@ -168,7 +168,7 @@ For a laptop dry run, arrows aim and Enter Locks. **A** is keyboard-only demo as
 
 Source is [the detailed test log](ridgeline/README.md#test-results-gate-a), dated Nov 8, 2026. The phone rows are historical observations, not new measurements of this merged revision, and they are not a five-trial series or a field-accuracy estimate. Earlier mismatches and a less accurate wall setup are retained in [the evidence document](docs/JUDGING_EVIDENCE.md#recorded-phone-observations). Simulation results are a separate evidence class, conditional on the simulation inputs, and are not hand-held accuracy or human performance measurements. The 42 m result is one wall trial, not guaranteed accuracy. No outdoor trial, battery test or real RF spoofing test is recorded.
 
-Run the checks in Setup step ④ again on the exact revision used in the demo. The CoT tests use a stand-in client. A passing result does not establish how the objects appear in ATAK.
+Run the checks in Setup step ④ again on the exact revision used in the demo. The CoT tests use a stand-in client. How the objects look in real ATAK was checked by eye once, on Nov 8.
 
 ## Mentor feedback and what we changed
 
@@ -176,7 +176,7 @@ Feedback from mentors during the event, and where the build answers it.
 
 | Feedback | From | What we did | Status |
 | --- | --- | --- | --- |
-| Skip the drone and do not rebuild C2, there are plenty. Add something new and hand it to the tools people already use | Logan | No C2 of our own. The fix, its 95% circle, the route and marks go out as Cursor on Target for ATAK | Done with a stand-in TAK client. Real ATAK display not yet verified |
+| Skip the drone and do not rebuild C2, there are plenty. Add something new and hand it to the tools people already use | Logan | No C2 of our own. The fix, its 95% circle, the route and marks go out as Cursor on Target for ATAK | Done. Shown in real ATAK-CIV on the phone on Nov 8 (fix, 95% circle, route, marks) |
 | Auto-PACE. Work out which sensors can be trusted, drop the ones that cannot and move the user to the best source available | Brendan | Terrain checks GPS. A GPS reading outside the terrain circle shows GPS DISAGREES and is not used, one inside shows GPS CONSISTENT. Auto-PACE keeps the probability map after the fix and shows the PACE tier it rests on, GPS, terrain fix, steps or re-aim | Done. Verified with simulated walks, a real walk is not yet tested |
 | Always show how confident the position is, and lower that confidence when it may be drifting | Matt, as relayed by the team | Every fix shows a ±m radius (95%) and a confidence meter. After the fix the radius grows with every step, and with time when steps cannot be counted. At its limit the phone vibrates and asks for a re-aim, and ATAK reads how old the fix is | Done. Verified with simulated walks, a real walk is not yet tested |
 | Can the phone say how confident its own position is? | Evening mentor | ±m (95%) radius, the 95% and 50% bubble on the map, and MGRS digits limited by the radius | Done |
@@ -196,7 +196,7 @@ Feedback from mentors during the event, and where the build answers it.
 | Height is simulated, and the nominal 95% radius depends on the error model | Integrate and calibrate a pressure sensor, measure drift, and widen or remove the height constraint when it is unreliable. In the recorded simulation, a 60 m barometer reference error reduced coverage to about 70% without a mismatch warning |
 | Solver assumes 3° aim error and a constant heading offset | Measure coverage under real aiming errors and sensor streams. At 10° simulated aim error, the nominal 95% area held truth only about half the time |
 | Test GPS is a manually supplied comparison point. GPS REJECTED, the label at the time, was observed on the real phone and confirmed by Seika on Nov 8, with the exact build and input not recorded | Repeat with the GPS DISAGREES label in the final merged build. Treat disagreement as a reason to cross-check both estimates, not proof of spoofing, then evaluate independent real positioning inputs and failure cases |
-| CoT passed stand-in client tests, but real ATAK-CIV is untested | Verify connection, coordinates, uncertainty, route display and deletion in actual ATAK. Replace the local unencrypted demo link with suitable field transport |
+| CoT showed in real ATAK-CIV once, on one phone, over a local unencrypted USB link. Deletion after a Reset and other ATAK versions are untested | Verify deletion and repeated fixes in ATAK. Replace the local unencrypted demo link with suitable field transport |
 | Route and visibility results describe terrain data. Water avoidance passes merged automated tests but awaits phone verification, and a candidate start is not a verified walk from the estimate | Verify route origin, planner and map masks, blocked destinations and unreachable routes. Trees, weather, buildings and current hazards are not a full part of this model |
 | Offline reload is recorded for one phone setup. Night mode, Lock vibration and airplane mode with the cable are unverified on the phone | Repeat with airplane mode, cold reload and reconnection, and complete a device acceptance pass including camera, offline startup, setup time and use by an unfamiliar operator |
 | Auto-PACE and Follow have run only on simulated walks and synthetic motion. The barometer is simulated and the stride assumed | Walk with the phone outdoors against ground truth, calibrate the stride per person, read a real barometer, and measure how often the walked circle holds the truth |
