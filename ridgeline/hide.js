@@ -37,6 +37,22 @@
  * water blocked, cells steeper than cap_deg blocked, no diagonal step between two blocked cells.
  * Slope is the central difference slope of the 30 m grid (as in scripts/pick_demo.js). The fix cell is always
  * the start, even when it is steeper than the limit, but it is only offered as a candidate when it is not.
+ *
+ *   RidgelineHide.walkableStart(grid, fix, {cap_deg, r_m, alts})
+ *     A hand-held fix is often a few hundred metres off, so its cell can be a cliff. When the fix cell is steeper
+ *     than cap_deg, water, or boxed in (its walkable patch is under open_cells cells), this returns the nearest
+ *     cell within r_m of the fix (default the fix's r95_m) that is under the cap, on land and part of a walkable
+ *     patch of at least open_cells cells, with the same step rule as the reach. The fix itself never changes.
+ *     -> {ok, moved, reason, cap_deg, r_m, fix_index, index, lat, lon, e_m, n_m, dist_m, dir, bearing_deg,
+ *         slope_deg, alts}
+ *     ok        false when nothing walkable is inside r_m (index -1, then STAY as before)
+ *     moved     false when the fix cell itself is fine (dist_m 0)
+ *     reason    null, 'steep', 'water', 'boxed' or 'off_map' (why the fix cell is not the start)
+ *     dist_m, dir   distance (m) and 8-point compass direction from the fix to the start
+ *     alts      the next nearest walkable cells inside r_m, each at least alt_spacing_m from the start and from
+ *               each other, as {index, lat, lon, e_m, n_m, dist_m, dir, bearing_deg, slope_deg}, for a planner
+ *               with its own grid to try when the first start does not work there
+ *   The result works as the `fix` of candidates(), so HIDE and SIGNAL are counted from the walkable start.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -56,7 +72,12 @@
     spacing_m: 250,
     count: 3,
     snap_cells: 3,            // a fix on water starts from the nearest land cell within this many cells
+    start_r_m: 300,           // walkableStart search radius when neither r_m nor the fix's r95_m is given
+    open_cells: 60,           // a walkable patch of at least this many 30 m cells (5.4 ha) counts as open ground
+    alts: 4,                  // walkableStart alternatives
+    alt_spacing_m: 75,
   });
+  const DIR8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
   const now = () => (typeof performance !== 'undefined' ? performance : Date).now();
   const cache = typeof WeakMap === 'function' ? new WeakMap() : null;
@@ -182,6 +203,104 @@
     return { T, done };
   }
 
+  // Connected walkable patches (land, slope <= cap), with the step rule of walk(). Once per grid and cap.
+  const partCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+  function parts(g, L, cap) {
+    let byCap = partCache ? partCache.get(g) : g._hideParts;
+    if (!byCap) { byCap = new Map(); if (partCache) partCache.set(g, byCap); else g._hideParts = byCap; }
+    if (byCap.has(cap)) return byCap.get(cap);
+    const { nx, ny, n, land } = g, slope = L.slope;
+    const ok = j => land[j] && slope[j] <= cap;
+    const lab = new Int32Array(n).fill(-1), size = [], stack = new Int32Array(n);
+    for (let s = 0; s < n; s++) {
+      if (lab[s] >= 0 || !ok(s)) continue;
+      const id = size.length;
+      let sp = 0, cnt = 0;
+      lab[s] = id; stack[sp++] = s;
+      while (sp) {
+        const i = stack[--sp], r = (i / nx) | 0, c = i - r * nx;
+        cnt++;
+        for (let dr = -1; dr <= 1; dr++) {
+          const rr = r + dr;
+          if (rr < 0 || rr >= ny) continue;
+          for (let dc = -1; dc <= 1; dc++) {
+            const cc = c + dc;
+            if ((!dr && !dc) || cc < 0 || cc >= nx) continue;
+            const j = rr * nx + cc;
+            if (lab[j] >= 0 || !ok(j)) continue;
+            if (dr && dc && !ok(r * nx + cc) && !ok(rr * nx + c)) continue;
+            lab[j] = id; stack[sp++] = j;
+          }
+        }
+      }
+      size.push(cnt);
+    }
+    const P = { lab, size };
+    byCap.set(cap, P);
+    return P;
+  }
+
+  // The fix point in grid metres, from {lat, lon}, {e_m, n_m}, an index or a solver result. null when unknown.
+  function fixEN(g, fix) {
+    if (!fix) return null;
+    const f = fix.estimate || fix;
+    if (Number.isFinite(f.e_m) && Number.isFinite(f.n_m)) return { e: f.e_m, n: f.n_m };
+    if (Number.isFinite(f.lat) && Number.isFinite(f.lon)) {
+      const [w, s, ea, no] = g.bounds;
+      return { e: ((f.lon - w) / (ea - w)) * g.nx * g.dx, n: ((f.lat - s) / (no - s)) * g.ny * g.dy };
+    }
+    if (Number.isInteger(f.index) && f.index >= 0 && f.index < g.n) return { e: g.E[f.index], n: g.N[f.index] };
+    return null;
+  }
+
+  function walkableStart(grid, fix, opts) {
+    const op = opts || {};
+    const o = Object.assign({}, DEFAULTS, op);
+    const cap = Number.isFinite(+op.cap_deg) ? +op.cap_deg : o.injured ? o.injured_cap_deg : o.cap_deg;
+    const r95 = fix && Number.isFinite(fix.r95_m) ? fix.r95_m : null;
+    const r_m = Number.isFinite(+op.r_m) && +op.r_m > 0 ? +op.r_m : r95 > 0 ? r95 : o.start_r_m;
+    const L = layers(grid), slope = L.slope;
+    const fi = fixCell(grid, fix), at = fixEN(grid, fix);
+    const out = { ok: false, moved: false, reason: null, cap_deg: cap, r_m: Math.round(r_m), fix_index: fi, index: -1,
+      lat: null, lon: null, e_m: null, n_m: null, dist_m: null, dir: null, bearing_deg: null, slope_deg: null, alts: [] };
+    if (fi < 0 || !at) { out.reason = 'off_map'; return out; }
+    const P = parts(grid, L, cap), minCells = Math.max(1, +o.open_cells || 1);
+    const good = i => grid.land[i] && slope[i] <= cap && P.size[P.lab[i]] >= minCells;
+    out.reason = !grid.land[fi] ? 'water' : slope[fi] > cap ? 'steep' : good(fi) ? null : 'boxed';
+    const cell = (i, d) => {
+      const ll = lonLat(grid, grid.E[i], grid.N[i]);
+      const b = (Math.atan2(grid.E[i] - at.e, grid.N[i] - at.n) * R2D + 360) % 360;
+      return { index: i, lat: +ll.lat.toFixed(6), lon: +ll.lon.toFixed(6), e_m: grid.E[i], n_m: grid.N[i],
+        dist_m: Math.round(d), dir: d > 0 ? DIR8[Math.round(b / 45) % 8] : null, bearing_deg: d > 0 ? Math.round(b) : null,
+        slope_deg: Math.round(slope[i] * 10) / 10 };
+    };
+    // every open, walkable cell inside the circle, nearest first
+    const r0 = Math.floor(fi / grid.nx), c0 = fi % grid.nx, k = Math.ceil(r_m / Math.min(grid.dx, grid.dy)) + 1;
+    const near = [];
+    for (let r = Math.max(0, r0 - k); r <= Math.min(grid.ny - 1, r0 + k); r++) {
+      for (let c = Math.max(0, c0 - k); c <= Math.min(grid.nx - 1, c0 + k); c++) {
+        const i = r * grid.nx + c;
+        if (i === fi || !good(i)) continue;
+        const d = Math.hypot(grid.E[i] - at.e, grid.N[i] - at.n);
+        if (d <= r_m) near.push([d, i]);
+      }
+    }
+    near.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    let first;
+    if (out.reason === null) first = cell(fi, 0);
+    else if (near.length) first = cell(near[0][1], near[0][0]);
+    else return out;
+    Object.assign(out, first, { ok: true, moved: out.reason !== null });
+    const got = [first];
+    for (const [d, i] of near) {
+      if (got.length > o.alts) break;
+      if (got.some(q => Math.hypot(grid.E[i] - q.e_m, grid.N[i] - q.n_m) < o.alt_spacing_m)) continue;
+      got.push(cell(i, d));
+    }
+    out.alts = got.slice(1);
+    return out;
+  }
+
   function walkText(s) {
     return s < 30 ? 'Under 1 min walk.' : `${Math.round(s / 60)} min walk.`;
   }
@@ -240,5 +359,5 @@
     })) : [];
   }
 
-  return Object.freeze({ DEFAULTS, candidates, marks, layers });
+  return Object.freeze({ DEFAULTS, candidates, marks, layers, walkableStart });
 });

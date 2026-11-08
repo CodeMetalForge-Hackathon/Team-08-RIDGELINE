@@ -51,7 +51,7 @@ function bruteReach(start, cap, speed, limitS) {
   return T;
 }
 
-function checkList(list, kind, out) {
+function checkList(list, kind, out, from = demo) {
   assert.equal(list.length, 3, kind + ' count');
   list.forEach((c, k) => {
     assert.equal(c.kind, kind);
@@ -65,7 +65,7 @@ function checkList(list, kind, out) {
     const q = S.toEN(m, c.lon, c.lat);
     assert.equal(S.cellAt(m, q.e, q.n), c.index, 'lat and lon land in the same cell');
     // nobody walks faster than Tobler's best speed in a straight line
-    assert.ok(c.walk_min * 60 + 30 >= sep(c, demo) / (VK * (out.injured ? 0.5 : 1)), 'walk time is physical');
+    assert.ok(c.walk_min * 60 + 30 >= sep(c, from) / (VK * (out.injured ? 0.5 : 1)), 'walk time is physical');
     assert.ok(!/safe/i.test(c.why), 'never says safe');
     assert.ok(!/[\u2014\u2013;:]/.test(c.why), 'no dash, semicolon or colon');
     assert.match(c.why, kind === 'HIDE' ? /^Out of sight of .* summits\. .*min walk\.$/ : /^Seen from .* summits on .* ground\. .*min walk\.$/);
@@ -174,4 +174,134 @@ test('timing: under 300 ms on a fresh grid, including the one-time slope and sum
   assert.deepEqual(cold.hide, warm.hide);
   assert.ok(t1 - t0 < 300, 'cold ' + (t1 - t0));
   assert.ok(t2 - t1 < 100, 'warm ' + (t2 - t1));
+});
+
+// ---------- walkableStart: a hand-held fix on a cliff starts from the nearest open, walkable cell ----------
+// Independent patch size: plain flood fill with the same step rule as the reach, stopped at `limit` cells.
+function patchSize(i0, cap, limit) {
+  const ok = j => m.land[j] && slopeAt(j) <= cap;
+  if (!ok(i0)) return 0;
+  const seen = new Set([i0]), todo = [i0];
+  while (todo.length && seen.size < limit) {
+    const i = todo.pop(), r = Math.floor(i / m.nx), c = i % m.nx;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      const rr = r + dr, cc = c + dc, j = rr * m.nx + cc;
+      if ((!dr && !dc) || rr < 0 || cc < 0 || rr >= m.ny || cc >= m.nx || seen.has(j) || !ok(j)) continue;
+      if (dr && dc && !ok(r * m.nx + cc) && !ok(rr * m.nx + c)) continue;
+      seen.add(j); todo.push(j);
+    }
+  }
+  return seen.size;
+}
+const OPEN = H.DEFAULTS.open_cells;
+const DIR8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+
+function checkStart(ws, at, cap, r_m) {
+  assert.ok(ws.ok, 'a start was found');
+  assert.equal(ws.cap_deg, cap);
+  assert.ok(m.land[ws.index], 'start on land');
+  assert.ok(slopeAt(ws.index) <= cap, `start slope ${slopeAt(ws.index).toFixed(1)} under ${cap}`);
+  assert.ok(Math.abs(ws.slope_deg - slopeAt(ws.index)) < 0.06, 'start slope recount');
+  assert.ok(patchSize(ws.index, cap, OPEN) >= OPEN, 'start is on open ground, not a boxed-in ledge');
+  const d = Math.hypot(m.E[ws.index] - at.e_m, m.N[ws.index] - at.n_m);
+  assert.ok(Math.abs(ws.dist_m - d) <= 0.5 && d <= r_m, `start ${d.toFixed(0)} m from the fix, inside ${r_m.toFixed(0)} m`);
+  const b = (Math.atan2(m.E[ws.index] - at.e_m, m.N[ws.index] - at.n_m) * 180 / Math.PI + 360) % 360;
+  assert.equal(ws.dir, DIR8[Math.round(b / 45) % 8], 'compass direction from the fix');
+  const q = S.toEN(m, ws.lon, ws.lat);
+  assert.equal(S.cellAt(m, q.e, q.n), ws.index, 'start lat and lon land in the same cell');
+  // nothing nearer is open walkable ground
+  const r0 = Math.floor(ws.index / m.nx), c0 = ws.index % m.nx, k = 2 * Math.ceil(d / 29) + 2;
+  for (let r = r0 - k; r <= r0 + k; r++) for (let c = c0 - k; c <= c0 + k; c++) {
+    if (r < 0 || c < 0 || r >= m.ny || c >= m.nx) continue;
+    const i = r * m.nx + c;
+    if (i === ws.index || Math.hypot(m.E[i] - at.e_m, m.N[i] - at.n_m) >= d - 1e-6) continue;
+    assert.ok(!m.land[i] || slopeAt(i) > cap || patchSize(i, cap, OPEN) < OPEN, `cell ${i} is nearer and walkable`);
+  }
+  // the alternatives: nearest first, inside the circle, spaced out, all open walkable ground
+  let last = ws.dist_m;
+  for (const a of ws.alts) {
+    assert.ok(a.dist_m >= last - 0.5 && a.dist_m <= r_m + 0.5, 'alternatives nearest first, inside the circle');
+    last = a.dist_m;
+    assert.ok(m.land[a.index] && slopeAt(a.index) <= cap && patchSize(a.index, cap, OPEN) >= OPEN, 'alternative walkable');
+  }
+  const all = [ws].concat(ws.alts);
+  for (let x = 0; x < all.length; x++) for (let y = x + 1; y < all.length; y++) assert.ok(sep(all[x], all[y]) >= H.DEFAULTS.alt_spacing_m, 'alternatives spaced');
+}
+
+test('walkableStart: the Gate B hand-held fix (cell over 30 deg) gets a start inside its 363 m circle with Hide and Signal spots', () => {
+  // Locks from the real phone, Nov 8 4:28 EST
+  const locks = [{ peak_id: 'pk_8', heading_deg: 355.4 }, { peak_id: 'pk_20', heading_deg: 323.4 }, { peak_id: 'pk_13', heading_deg: 55.0 }];
+  const res = S.solve(m, { baro_m: 2446.1, locks }, { candidates: demo.wall.map(w => w.peak_id) });
+  assert.ok(Math.abs(res.estimate.lat - 43.85221) < 2e-5 && Math.abs(res.estimate.lon + 110.78681) < 2e-5, 'the Gate B estimate');
+  assert.equal(Math.round(res.r95_m), 363);
+  const before = JSON.stringify(res.estimate), fi = res.estimate.index;
+  assert.ok(slopeAt(fi) > 30, `the estimate cell is ${slopeAt(fi).toFixed(1)} deg`);
+  assert.equal(H.candidates(m, res, {}).note, 'STAY', 'from the fix cell itself nothing is reachable (what the phone showed)');
+  for (const cap of [30, 18]) {
+    const injured = cap === 18;
+    const ws = H.walkableStart(m, res, { cap_deg: cap });   // r_m defaults to the fix's r95
+    console.log(`  Gate B ${cap} deg: start ${ws.dist_m} m ${ws.dir} (${ws.reason}), slope ${ws.slope_deg}, alternatives ${ws.alts.map(a => a.dist_m + ' m ' + a.dir).join(', ')}`);
+    assert.equal(ws.r_m, 363);
+    assert.ok(ws.moved && ws.reason === 'steep' && ws.fix_index === fi);
+    checkStart(ws, res.estimate, cap, res.r95_m);
+    assert.ok(ws.alts.length >= 1, 'alternatives for the route planner');
+    const out = H.candidates(m, ws, { cap_deg: cap, injured });
+    const show = c => `${c.kind[0]}${c.rank} ${c.seen_by}/${c.of} ${c.walk_min} min`;
+    console.log(`  reach ${out.reach_cells} cells, ${out.hide.concat(out.signal).map(show).join(', ')}`);
+    assert.equal(out.note, 'OK');
+    checkList(out.hide, 'HIDE', out, ws);
+    checkList(out.signal, 'SIGNAL', out, ws);
+    const T = bruteReach(ws.index, cap, injured ? 0.5 : 1, 30 * 60);
+    assert.ok(Math.abs(T.size - out.reach_cells) <= 3, `reach ${out.reach_cells} vs ${T.size}`);
+    for (const c of out.hide.concat(out.signal)) assert.ok(T.has(c.index), `${c.kind} ${c.rank} reachable from the start`);
+  }
+  assert.equal(JSON.stringify(res.estimate), before, 'the fix itself does not change');
+});
+
+test('walkableStart: the demo truth start is unchanged, injured moves off the 19.4 deg cell', () => {
+  const ws = H.walkableStart(m, fix, { cap_deg: 30, r_m: 363 });
+  assert.deepEqual([ws.ok, ws.moved, ws.reason, ws.index, ws.dist_m, ws.dir], [true, false, null, fixCell, 0, null]);
+  const a = H.candidates(m, fix, { cap_deg: 30 }), b = H.candidates(m, ws, { cap_deg: 30 });
+  assert.deepEqual([b.hide, b.signal, b.reach_cells], [a.hide, a.signal, a.reach_cells], 'same spots as from the fix');
+  const wi = H.walkableStart(m, fix, { cap_deg: 18, r_m: 363 });
+  console.log(`  demo injured: start ${wi.dist_m} m ${wi.dir}, slope ${wi.slope_deg}`);
+  assert.ok(wi.moved && wi.reason === 'steep');
+  const q = S.toEN(m, demo.lon, demo.lat);
+  checkStart(wi, { e_m: q.e, n_m: q.n }, 18, 363);
+  const out = H.candidates(m, wi, { injured: true });
+  assert.equal(out.note, 'OK');
+  for (const c of out.hide.concat(out.signal)) assert.ok(c.slope_deg <= 18 && c.walk_min <= 30);
+});
+
+test('walkableStart: water, a boxed-in ledge, nothing walkable inside the circle, off the map', () => {
+  let lake = -1;
+  for (let i = 0; i < m.n && lake < 0; i++) {
+    const r = Math.floor(i / m.nx), c = i % m.nx;
+    if (r < 6 || c < 6 || r >= m.ny - 6 || c >= m.nx - 6) continue;
+    let wet = true;
+    for (let a2 = -5; a2 <= 5 && wet; a2++) for (let b2 = -5; b2 <= 5; b2++) if (m.land[i + a2 * m.nx + b2]) { wet = false; break; }
+    if (wet) lake = i;
+  }
+  const onLake = { e_m: m.E[lake], n_m: m.N[lake] };
+  const none = H.walkableStart(m, onLake, { r_m: 100 });
+  assert.deepEqual([none.ok, none.reason, none.index, none.alts.length], [false, 'water', -1, 0], 'nothing walkable inside 100 m');
+  assert.equal(H.candidates(m, none, {}).note, 'STAY', 'no start, STAY as before');
+  const shore = H.walkableStart(m, onLake, { r_m: 3000 });
+  assert.ok(shore.moved && shore.reason === 'water');
+  checkStart(shore, onLake, 30, 3000);
+  // a cell under the cap whose walkable patch is tiny
+  let ledge = -1;
+  for (let i = 0; i < m.n && ledge < 0; i++) {
+    const r = Math.floor(i / m.nx), c = i % m.nx;
+    if (r < 12 || c < 12 || r >= m.ny - 12 || c >= m.nx - 12 || !m.land[i] || slopeAt(i) > 30 || patchSize(i, 30, OPEN) >= OPEN) continue;
+    ledge = i;
+  }
+  assert.ok(ledge >= 0, 'a boxed-in ledge exists');
+  const at = { e_m: m.E[ledge], n_m: m.N[ledge] };
+  const wl = H.walkableStart(m, at, { cap_deg: 30, r_m: 600 });
+  console.log(`  ledge of ${patchSize(ledge, 30, OPEN)} cells: start ${wl.ok ? wl.dist_m + ' m ' + wl.dir : 'none'}`);
+  assert.equal(wl.reason, 'boxed');
+  if (wl.ok) checkStart(wl, at, 30, 600);
+  const off = H.walkableStart(m, { lat: 0, lon: 0 }, {});
+  assert.deepEqual([off.ok, off.reason], [false, 'off_map']);
 });

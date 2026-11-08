@@ -136,6 +136,7 @@ h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em;font-weight:75
 .say{font-size:16px;line-height:1.45;margin:0}
 .leg{font-size:14px;line-height:1.45;color:var(--muted);margin:0}
 .leg b{color:var(--text);font-weight:600}
+.start-ln{border-left:3px solid var(--amber);padding-left:10px}
 .stay{border:2px solid var(--red);border-radius:var(--r);padding:16px;text-align:center;background:rgba(255,140,137,.06)}
 .stay b{display:block;font:850 30px/1.15 var(--font);letter-spacing:.16em;color:var(--red)}
 .stay p{margin:8px 0 0;color:var(--muted);font-size:14px;line-height:1.45}
@@ -211,7 +212,8 @@ html.night .gps.bad{background:rgba(255,59,40,.08)}
     <p class="foot">A pretend GPS reading, checked against the terrain fix to show spoofing. The phone GPS is never read.</p>
     <label>Barometer altitude (m, simulated)<input id="baro" type="number" step="1"></label>
     <button class="btn" id="assist">Demo assist: aim at the current card (keyboard only)</button>
-    <button class="btn" id="reset">Start a new fix</button>
+    <button class="btn" id="reset">Start a new fix and clear marks</button>
+    <button class="btn" id="clear-marks">Clear marks</button>
     <pre id="locks-json">No Locks yet.</pre>
     <p class="foot">Locks are posted to this PC only (localhost over USB). Nothing is sent to a network. The barometer value is simulated because browsers do not expose the pressure sensor.</p>
   </div>
@@ -281,6 +283,8 @@ function solveNow() {
   else if (result.status === 'enough') target = null;
   else target = result.next_peak_id || wallIds.find(id => !locks.some(l => l.peak_id === id)) || null;
   overlay = buildOverlay(result);
+  // every new fix starts with Rendezvous selected, saved marks stay in the list but are never preselected
+  nav.dest = rvDest(); nav.picking = false; nav.unpin = false;
   if (locks.length >= 2 && !NAV) setTimeout(loadNav, 1500);   // the route planner loads while the last card is aimed
 }
 function predictedHeading(id) {
@@ -421,17 +425,20 @@ function loadNav() {
   add('/tv/team8_nav.js').then(() => add('/tv/data/moran/bundle.js')).then(() => window.TEAM8_NAV.init(window.TEAM8))
     .then(n => {
       NAV = n; nav.loading = false;
-      if (!nav.dest) nav.dest = destList().find(d => d.id === 'rv') || null;
+      if (!nav.dest) nav.dest = rvDest();
       computeRoute();
       if (screen === 'fix') { render(); post(); }
     })
     .catch(e => { nav.err = e.message || String(e); nav.loading = false; if (screen === 'fix') render(); });
 }
 function fixLL() { return result && result.n_locks ? [result.estimate.lon, result.estimate.lat] : null; }
-function destList() {
-  const out = [], here = fixLL();
+function rvDest() {
   const rv = window.TEAM8 && window.TEAM8.sim && window.TEAM8.sim.rendezvous;
-  if (rv) out.push({ id: 'rv', lon: rv.lon, lat: rv.lat, label: 'Rendezvous', note: 'flat lakeshore' });
+  return rv ? { id: 'rv', lon: rv.lon, lat: rv.lat, label: 'Rendezvous', note: 'flat lakeshore' } : null;
+}
+function destList() {
+  const out = [], here = fixLL(), rv = rvDest();
+  if (rv) out.push(rv);
   const far = p => !here || Math.hypot((p.lon - here[0]) * 80300, (p.lat - here[1]) * 111200) > 60;
   if (home && far(home)) out.push({ id: 'home', lon: home.lon, lat: home.lat, label: 'Back to start' });
   marks.forEach((m, i) => { if (far(m)) out.push({ id: 'mark' + i, lon: m.lon, lat: m.lat, label: m.label }); });
@@ -439,14 +446,59 @@ function destList() {
   return out.concat(spotDests());
 }
 
+// ---------- walkable start (ridgeline/hide.js walkableStart) ----------
+// A hand-held fix is often a few hundred metres off, so its cell can be a cliff, water or a ledge boxed in by cliffs.
+// Routes and the Hide and Signal reach then start from the nearest walkable cell inside the 95% circle that the
+// route planner (its own 20 m grid) can really leave toward Rendezvous. The fix itself never moves.
+const wstart = { key: '', ws: null, pick: null, rt: null, rtKey: '' };
+const startKeyOf = p => `${p.lon.toFixed(6)},${p.lat.toFixed(6)}|${nav.health}`;
+function startNow() {
+  const here = fixLL();
+  if (!here || !result || result.n_locks < 2 || result.status === 'mismatch') return null;
+  const key = `${here[0].toFixed(6)},${here[1].toFixed(6)},${Math.round(result.r95_m)}|${nav.health}|${NAV ? 1 : 0}`;
+  if (wstart.key === key) return wstart.pick;
+  wstart.key = key; wstart.rt = null; wstart.rtKey = '';
+  let ws = null;
+  try { if (window.RidgelineHide && window.RidgelineHide.walkableStart) ws = window.RidgelineHide.walkableStart(model, result, { cap_deg: CAP[nav.health], r_m: result.r95_m }); }
+  catch (e) { ws = null; }
+  wstart.ws = ws;
+  const atFix = { lon: here[0], lat: here[1], moved: false, cell: null };
+  if (!ws || !ws.ok) { wstart.pick = atFix; return atFix; }   // nothing walkable inside the circle: from the fix, as before
+  const opts = [ws].concat(ws.alts || []).slice(0, 5).map(c => c === ws && !ws.moved ? Object.assign({}, atFix, { cell: ws })
+    : { lon: c.lon, lat: c.lat, moved: true, cell: c, dist_m: c.dist_m, dir: c.dir });
+  wstart.pick = opts[0];
+  const rv = rvDest();
+  if (NAV && rv) {
+    let first = null;
+    for (const p of opts) {
+      const rt = NAV.reach(p.lon, p.lat, CAP[nav.health], SPEED[nav.health], 9 * 3600);
+      if (!first) first = rt;
+      const pp = NAV.pathTo(rt, rv.lon, rv.lat), r = pp && NAV.buildRoute(pp, rt);
+      if (r && !(r.length_m < 25 && !r.reached)) { wstart.pick = p; wstart.rt = rt; break; }
+    }
+    if (!wstart.rt) wstart.rt = first;   // no start leaves under the limit, the route says STAY from the first one
+    wstart.rtKey = startKeyOf(wstart.pick);
+  }
+  return wstart.pick;
+}
+function startHtml() {
+  const s = screen === 'fix' ? startNow() : null;
+  if (!s || !s.moved) return '';
+  const ws = wstart.ws, why = ws && ws.moved
+    ? { steep: `The fix is on ground over ${CAP[nav.health]}°.`, water: 'The fix is on water.', boxed: 'The fix is boxed in by steep ground.' }[ws.reason] || ''
+    : 'No route leaves the fix cell.';
+  return `<p class="leg start-ln">${why ? `<b>${why}</b> ` : ''}Start from walkable ground ${fmtM(Math.max(10, Math.round(s.dist_m / 10) * 10))} ${s.dir} of the fix, inside the 95% circle.</p>`;
+}
+
 // ---------- HIDE and SIGNAL (ridgeline/hide.js). Terrain only, never a promise of cover ----------
 let spotOut = null, spotKey = '';
 function spotsNow() {
   if (!window.RidgelineHide || !result || result.n_locks < 2 || result.status === 'mismatch') return null;
-  const key = `${result.estimate.lat.toFixed(6)},${result.estimate.lon.toFixed(6)}|${nav.health}`;
+  const s = startNow(), from = s && s.cell ? s.cell : result;   // counted from the walkable start
+  const key = `${result.estimate.lat.toFixed(6)},${result.estimate.lon.toFixed(6)}|${nav.health}|${from === result ? 'fix' : from.index}`;
   if (key !== spotKey) {
     spotKey = key;
-    try { spotOut = window.RidgelineHide.candidates(model, result, { cap_deg: CAP[nav.health], injured: nav.health === 'injured', minutes: 30 }); }
+    try { spotOut = window.RidgelineHide.candidates(model, from, { cap_deg: CAP[nav.health], injured: nav.health === 'injured', minutes: 30 }); }
     catch (e) { spotOut = null; }
   }
   return spotOut;
@@ -467,8 +519,8 @@ function computeRoute() {
   if (nav.dest && nav.dest.kind) nav.dest = spotDests().find(d => d.id === nav.dest.id) || null;   // the spots move with the fix and the walking ability
   const here = fixLL();
   if (!NAV || !nav.dest || !here) return;
-  const key = `${here[0].toFixed(6)},${here[1].toFixed(6)}|${nav.health}`;
-  if (nav.rtKey !== key) { nav.rt = NAV.reach(here[0], here[1], CAP[nav.health], SPEED[nav.health], 9 * 3600); nav.rtKey = key; }
+  const s = startNow() || { lon: here[0], lat: here[1] }, key = startKeyOf(s);   // from the walkable start
+  if (nav.rtKey !== key) { nav.rt = wstart.rt && wstart.rtKey === key ? wstart.rt : NAV.reach(s.lon, s.lat, CAP[nav.health], SPEED[nav.health], 9 * 3600); nav.rtKey = key; }
   const pp = NAV.pathTo(nav.rt, nav.dest.lon, nav.dest.lat);
   const r = pp && NAV.buildRoute(pp, nav.rt);
   if (r && !(r.length_m < 25 && !r.reached)) { r.say = NAV.describe(r); nav.route = r; } else nav.stay = true;
@@ -556,6 +608,14 @@ function drawMap(canvas, zoom) {
     ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.strokeStyle = 'rgba(35,28,18,.9)'; ctx.lineWidth = 7.5 * dpr; line(nav.route.path);
     for (const q of nav.route.runs) { ctx.strokeStyle = col[q.cls]; ctx.lineWidth = 4.5 * dpr; line(q.path); }
+    ctx.restore();
+  }
+  const ws0 = screen === 'fix' ? startNow() : null;
+  if (ws0 && ws0.moved) {   // the walkable start: a dashed line from the fix and a white dot
+    const q = S.toEN(model, ws0.lon, ws0.lat), x = X(q.e), y = Y(q.n), s = dpr;
+    ctx.save(); ctx.lineCap = 'round'; ctx.setLineDash([4 * s, 4 * s]); ctx.strokeStyle = '#2b2418'; ctx.lineWidth = 2 * s;
+    ctx.beginPath(); ctx.moveTo(X(result.estimate.e_m), Y(result.estimate.n_m)); ctx.lineTo(x, y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(x, y, 5 * s, 0, Math.PI * 2); ctx.fillStyle = '#f5f1e6'; ctx.fill(); ctx.lineWidth = 2.2 * s; ctx.stroke();
     ctx.restore();
   }
   if (screen === 'fix') {   // HIDE ring and SIGNAL flag, as on the board
@@ -758,6 +818,7 @@ function goHtml() {
   return `<section class="go" aria-label="Route out">
     <div class="go-head"><h2>Where to?</h2><div class="seg" role="group" aria-label="How well can you walk"><button data-h="healthy" aria-pressed="${nav.health === 'healthy'}">Healthy · ${CAP.healthy}°</button><button data-h="injured" aria-pressed="${nav.health === 'injured'}">Injured · ${CAP.injured}°</button></div></div>
     <div class="dests">${dl.filter(d => !d.kind).map(d => `<button class="dest" data-d="${d.id}" aria-pressed="${!!(nav.dest && nav.dest.id === d.id)}">${d.label}</button>`).join('')}<button class="dest pick" id="pick" aria-pressed="${nav.picking}">${nav.picking ? 'Tap the map…' : pin ? 'Move pin' : 'Pick on map'}</button></div>
+    ${startHtml()}
     ${spotsHtml(dl)}
     <div class="rt" aria-live="polite">${routeHtml()}</div>
     <div class="pair"><button class="btn ghost" id="mark">Mark here</button>${pin ? `<button class="btn ghost" id="unpin">${nav.unpin ? 'Tap again to remove' : 'Remove pin'}</button>` : ''}</div>
@@ -942,7 +1003,17 @@ function frame() {
 }
 
 // ---------- settings and keys ----------
-function openSettings() { $('sheet').hidden = false; $('baro').value = Math.round(baro); $('camopt').checked = camWanted; }
+function openSettings() { $('sheet').hidden = false; $('baro').value = Math.round(baro); $('camopt').checked = camWanted; showClearMarks(); }
+function showClearMarks() {
+  const b = $('clear-marks');
+  if (b) { b.textContent = marks.length ? `Clear marks (${marks.length})` : 'No marks saved'; b.disabled = !marks.length; }
+}
+// saved marks are deleted from this phone. A selected mark falls back to Rendezvous
+function clearMarks() {
+  marks = []; store.set('marks', null);
+  if (nav.dest && /^mark/.test(nav.dest.id)) { nav.dest = rvDest(); computeRoute(); }
+  showClearMarks();
+}
 $('camopt').onchange = e => { camWanted = e.target.checked; store.set('cam', camWanted); if (camWanted) camStart(); else camStop(); };
 // Night (red), kept on this phone (store wraps localStorage in try/catch)
 function setNight(on) {
@@ -958,7 +1029,8 @@ $('sheet').onclick = e => { if (e.target === $('sheet')) $('sheet').hidden = tru
 $('source').onchange = e => { source = e.target.value; samples = []; render(); };
 $('sigma').onchange = e => { const v = Number(e.target.value); if (v >= 0.5 && v <= 10) { sigma = v; if (locks.length) { solveNow(); render(); post(); } } };
 $('baro').onchange = e => { const v = Number(e.target.value); if (Number.isFinite(v)) { baro = v; if (locks.length) { solveNow(); render(); post(); } } };
-$('reset').onclick = () => { $('sheet').hidden = true; resetFix(); };
+$('reset').onclick = () => { $('sheet').hidden = true; clearMarks(); resetFix(); };   // the demo reset: a new fix and no saved marks
+$('clear-marks').onclick = () => { clearMarks(); if (screen === 'fix') { render(); post(); } };
 function gpsChanged() {
   $('chip-gps').textContent = gpsMode === 'off' ? 'GPS OFF' : 'GPS TEST';
   if (screen === 'fix') render();
