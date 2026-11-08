@@ -339,7 +339,9 @@ html.still *{transition:none!important;animation:none!important}
   AREAS.forEach(a => { const o = document.createElement('option'); o.value = a.id; o.textContent = a.name; o.selected = !!pick && a.id === pick.id; sel.appendChild(o); });
   sel.onchange = () => { const q = new URLSearchParams(); q.set('area', sel.value); location.search = q.toString(); };
   if (!pick || !window.deck) { TEAM8_MAIN(); return; }
-  const sc = document.createElement('script'); sc.src = `data/${pick.id}/bundle.js`; sc.onload = sc.onerror = TEAM8_MAIN; document.body.appendChild(sc);
+  const add = (src, next) => { const sc = document.createElement('script'); sc.src = src; sc.onload = sc.onerror = next; document.body.appendChild(sc); };
+  // then the lower-detail ring around the tile (data/<id>_context/), drawn only: the solver never reads it
+  add(`data/${pick.id}/bundle.js`, pick.context ? () => add(`data/${pick.context}/bundle.js`, TEAM8_MAIN) : TEAM8_MAIN);
 })();
 function TEAM8_MAIN() {
 'use strict';
@@ -372,6 +374,9 @@ const SIDE = new Map(M.peaks.map(p => {
 const NAMED = M.peaks.filter(p => p.verified);
 const DECODER = M.elevation_decoder;   // constant references, so the mesh is built once
 const BOUNDS = B;
+// the ring of lower-detail terrain around the sheet (scripts/team8_context.py): drawn under the tile so the sheet has no
+// cliff at its edge, fading into the paper far out. Clicks, the fix and the routes stay on the tile
+const CTX = window.TEAM8_CONTEXT && window.TEAM8_CONTEXT.meta.tile === M.id ? window.TEAM8_CONTEXT : null;
 const $ = id => document.getElementById(id);
 const UI_FONT = '"Noto Sans JP", "Segoe UI", sans-serif', NUM_FONT = '"B612 Mono", Consolas, monospace';
 const REDUCED = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -489,6 +494,27 @@ async function prepImages() {
   COLOR = await loadImg(D.img.color);
   const sl = await loadImg(D.img.slope), slc = canvas(sl.width, sl.height), slx = slc.getContext('2d', {willReadFrequently: true});
   slx.drawImage(sl, 0, 0); SLOPE = {w: sl.width, h: sl.height, d: slx.getImageData(0, 0, sl.width, sl.height).data};
+  if (CTX) CTX_TEX = fadeRing(await loadImg(CTX.img.color));
+}
+// the ring melts into the paper far from the sheet (a rounded-rectangle vignette in the texture's alpha), so its own
+// edge never shows: alpha = 1 - smoothstep(start, end, r), r = (|dx/hx|^p + |dy/hy|^p)^(1/p) from the sheet's centre
+let CTX_TEX = null;
+function fadeRing(im) {
+  const f = CTX.meta.fade, [x0, y0, x1, y1] = CTX.meta.bounds, w = im.width, h = im.height, c = canvas(w, h), x = c.getContext('2d');
+  x.drawImage(im, 0, 0);
+  const id = x.getImageData(0, 0, w, h), d = id.data, p = f.power;
+  const cx = (f.center[0] - x0) / (x1 - x0) * w, cy = (y1 - f.center[1]) / (y1 - y0) * h;
+  const sx = (x1 - x0) / w * MPLON / f.half_m[0], sy = (y1 - y0) / h * MPLAT / f.half_m[1];
+  const ax = new Float64Array(w).map((_, i) => Math.pow(Math.abs((i + 0.5 - cx) * sx), p));
+  for (let j = 0; j < h; j++) {
+    const ay = Math.pow(Math.abs((j + 0.5 - cy) * sy), p);
+    for (let i = 0; i < w; i++) {
+      const t = Math.min(1, Math.max(0, (Math.pow(ax[i] + ay, 1 / p) - f.start) / (f.end - f.start)));
+      d[4 * (j * w + i) + 3] = Math.round(255 * (1 - t * t * (3 - 2 * t)));
+    }
+  }
+  x.putImageData(id, 0, 0);
+  return c;
 }
 const trace = (ctx, pts, close) => { pts.forEach((p, i) => { const [x, y] = px(p[0], p[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); if (close) ctx.closePath(); };
 function strokePath(ctx, pts, color, width, casing, dash) {
@@ -625,7 +651,7 @@ const GridTerrainLoader = {
       const a = j * w + i, b = a + 1, cc = a + w, d = cc + 1;
       idx[n++] = a; idx[n++] = cc; idx[n++] = b; idx[n++] = b; idx[n++] = cc; idx[n++] = d;
     }
-    window.TEAM8_MESH = {vertices: w * h, triangles: idx.length / 3, ms: Math.round(performance.now() - t0)};
+    window[o.bounds && o.bounds !== BOUNDS ? 'TEAM8_CTX_MESH' : 'TEAM8_MESH'] = {vertices: w * h, triangles: idx.length / 3, ms: Math.round(performance.now() - t0)};
     return {loaderData: {header: {}}, header: {vertexCount: idx.length, boundingBox: [[x0, y0, zmin], [x1, y1, zmax]]}, mode: 4,
       indices: {value: idx, size: 1}, attributes: {POSITION: {value: pos, size: 3}, TEXCOORD_0: {value: uv, size: 2}}};
   }
@@ -658,7 +684,25 @@ function fitBox(w, s, e, n, pitch, bearing, zc) {
   let v;
   try { v = new WebMercatorViewport({width: W, height: H}).fitBounds([[w, s], [e, n]], {padding: padding(), maxZoom: 16}); }
   catch (err) { v = {longitude: (w + e) / 2, latitude: (s + n) / 2, zoom: 12.3}; }
-  return {longitude: v.longitude, latitude: v.latitude, zoom: v.zoom - (pitch ? 0.25 : 0), pitch, bearing, position: [0, 0, zc || 0], maxPitch: 80, minZoom: 9, maxZoom: 17};
+  return limits({longitude: v.longitude, latitude: v.latitude, zoom: v.zoom - (pitch ? 0.25 : 0), pitch, bearing, position: [0, 0, zc || 0], maxPitch: 80, minZoom: 9, maxZoom: 17});
+}
+// with the ring, the judge cannot tilt past 60° or zoom out past the point where the screen edge reaches the ring's
+// faded rim, and the centre stays over the sheet (1 km slack), so the end of the terrain never comes into view
+const MAXP = CTX ? 60 : 80, SLACK_M = 1000;
+function minZoomRing() {
+  const f = CTX.meta.fade, reach = (f.start + 0.9 * (f.end - f.start)), lat = (B[1] + B[3]) / 2;
+  const mx = f.half_m[0] * reach - (B[2] - B[0]) / 2 * MPLON - SLACK_M, my = f.half_m[1] * reach - (B[3] - B[1]) / 2 * MPLAT - SLACK_M;
+  const mpp = Math.min(mx / (Math.max(400, window.innerWidth) / 2), my / (Math.max(400, window.innerHeight) / 2));
+  return Math.log2(40075016.686 * Math.cos(lat * Math.PI / 180) / (512 * mpp));
+}
+function limits(v) {
+  if (!CTX) return v;
+  return {...v, pitch: Math.min(v.pitch, MAXP), maxPitch: MAXP, minZoom: Math.min(minZoomRing(), v.zoom)};   // a framed step may sit a little further out
+}
+function clampCentre(v) {
+  if (!CTX) return v;
+  const lon = Math.min(B[2] + SLACK_M / MPLON, Math.max(B[0] - SLACK_M / MPLON, v.longitude)), lat = Math.min(B[3] + SLACK_M / MPLAT, Math.max(B[1] - SLACK_M / MPLAT, v.latitude));
+  return lon === v.longitude && lat === v.latitude ? v : {...v, longitude: lon, latitude: lat};
 }
 // what each step is about, where the camera should look from (you, toward the peaks; the start, toward the goal),
 // and the spot that must not hide behind a ridge
@@ -728,7 +772,7 @@ function targetView() {
   w -= dl; e += dl; s -= dt; n += dt;
   const bearing = flat ? 0 : f.key ? NAV.bestBearing(f.key[0], f.key[1], pitch, angd(f.look, 0)) : f.look;
   const v = fitBox(w, s, e, n, pitch, bearing, zc);
-  return fit3D(v, f.pts);   // the flat map too: labels and the panels decide the fit, not the bare box
+  return limits(fit3D(v, f.pts));   // the flat map too: labels and the panels decide the fit, not the bare box
 }
 function eyeVS() {
   const sc = state.scen, p = state.step <= 4 || !sc.est ? sc.truth : sc.est;
@@ -769,8 +813,10 @@ function layers() {
   const eye = state.view === 'eye', flat = state.view === '2d', step = state.step, top = eye ? {} : ON_TOP, sc = state.scen;
   // unlit: the shading is already painted into the map. In deck.gl 9, material: false still lit the mesh with the
   // default material and lights, which darkened the map to about 0.72 and shaded it twice
-  const out = [new TerrainLayer({id: 'terrain', elevationData: D.img.terrain, texture: texture(texKey()), bounds: BOUNDS,
-    elevationDecoder: DECODER, meshMaxError: 2.0, material: {unlit: true}, loaders: [GridTerrainLoader], pickable: !eye})];
+  const out = CTX ? [new TerrainLayer({id: 'terrain-context', elevationData: CTX.img.terrain, texture: CTX_TEX, bounds: CTX.meta.bounds,
+    elevationDecoder: CTX.meta.elevation_decoder, meshMaxError: 2.0, material: {unlit: true}, loaders: [GridTerrainLoader], pickable: false})] : [];
+  out.push(new TerrainLayer({id: 'terrain', elevationData: D.img.terrain, texture: texture(texKey()), bounds: BOUNDS,
+    elevationDecoder: DECODER, meshMaxError: 2.0, material: {unlit: true}, loaders: [GridTerrainLoader], pickable: !eye}));
   const aimedN = aimedAt(step), aimed = sc.sg.peaks.slice(0, aimedN).map((p, i) => ({...p, letter: 'ABC'[i]}));
   const aimedNames = new Set(aimed.map(p => p.name)), nextP = step <= 4 && aimedN < sc.np ? sc.sg.peaks[aimedN] : null;
   const big = p => aimedNames.has(p.name) || (nextP && p.name === nextP.name);
@@ -1151,7 +1197,7 @@ function initStatic() {
   $('tintRange').textContent = tm ? NB(`${r10(tm[0])} to ${r10(tm[1])} m`) : '';
   const dem = {cop30: 'Copernicus DEM GLO-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the EU and ESA',
     '3dep10': 'USGS 3DEP 1/3 arc-second DEM, public domain', file: 'USGS 3DEP 1 m lidar via OpenTopography, public domain'}[M.dem.source] || M.dem.label;
-  $('credit').textContent = `${dem}. ESA WorldCover 2021 (CC BY 4.0). Names from Wikidata (CC0). Declination WMM2025. deck.gl 9.3.11 (MIT), Noto Sans JP and B612 Mono (OFL). Synthetic landing spots, no real person or position. Runs offline.`;
+  $('credit').textContent = `${dem}${CTX ? `. Around the sheet, ${CTX.meta.dem.label.replace(/ \(.*\)$/, '')}, public domain` : ''}. ESA WorldCover 2021 (CC BY 4.0). Names from Wikidata (CC0). Declination WMM2025. deck.gl 9.3.11 (MIT), Noto Sans JP and B612 Mono (OFL). Synthetic landing spots, no real person or position. Runs offline.`;
 }
 let collarKey = '';
 function updateCollar() {
@@ -1281,6 +1327,7 @@ function lockNow(on) {
     parent: $('stage'), views: [mapView], viewState: fitBox(B[0], B[1], B[2], B[3], 55, -62), layers: [], useDevicePixels: true,
     getCursor: ({isDragging}) => isDragging ? 'grabbing' : (state.view === 'eye' ? 'grab' : 'crosshair'),
     onViewStateChange: ({viewState}) => {
+      viewState = clampCentre(viewState);
       state.vs = viewState;
       if (state.view === 'eye') { state.heading = wrap(viewState.bearing); updatePhone(performance.now()); }
       deckgl.setProps({viewState});
@@ -1289,13 +1336,15 @@ function lockNow(on) {
     onClick: (info, ev) => {
       if (state.view === 'eye') { toast('Switch to Map or 3D to pick a spot.'); return; }
       const p = deckgl.pickObject({x: info.x, y: info.y, radius: 2, layerIds: ['terrain'], unproject3D: true});
+      // off the sheet, on the ring: the sea-level guess of a tilted view would land somewhere else on the sheet
+      if (!p && CTX && state.vs && state.vs.pitch > 0) { toast('That is outside the pre-loaded map. Pick a spot on the sheet.'); return; }
       const c = (p && p.coordinate) || info.coordinate;
       if (c) mapClick(c[0], c[1], !!(ev && ev.srcEvent && ev.srcEvent.shiftKey));
     },
     onAfterRender: () => {
       if (state.loaded) return;
-      const t = deckgl.layerManager && deckgl.layerManager.getLayers({layerIds: ['terrain']})[0];
-      if (t && t.isLoaded) { state.loaded = true; $('loading').style.display = 'none'; window.TEAM8_READY = performance.now(); }
+      const lm = deckgl.layerManager, t = lm && lm.getLayers({layerIds: ['terrain']})[0], r = !CTX || (lm && lm.getLayers({layerIds: ['terrain-context']})[0]);
+      if (t && t.isLoaded && r && (r === true || r.isLoaded)) { state.loaded = true; $('loading').style.display = 'none'; window.TEAM8_READY = performance.now(); }
     }
   });
   window.TEAM8_DECK = deckgl; window.TEAM8_STATE = state;

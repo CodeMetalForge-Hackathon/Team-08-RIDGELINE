@@ -1,0 +1,92 @@
+{
+ "schema": "team8-context/v1",
+ "id": "moran_context",
+ "tile": "moran",
+ "name": "Around Mount Moran",
+ "region": "Teton Range, Wyoming",
+ "bounds": [
+  -111.081231006,
+  43.67294383,
+  -110.484174494,
+  44.03283047
+ ],
+ "mesh": {
+  "width": 1202,
+  "height": 1000,
+  "node_m": [
+   39.94,
+   39.99
+  ],
+  "drop_m": 80.0,
+  "note": "nodes on pixel centres; the tile's edge vertices lie on nodes; inside the tile lowered by drop_m"
+ },
+ "texture": {
+  "width": 2000,
+  "height": 1666,
+  "cell_m": [
+   24.0,
+   24.0
+  ]
+ },
+ "size_km": [
+  48.0,
+  40.0
+ ],
+ "elevation_decoder": {
+  "rScaler": 6553.6,
+  "gScaler": 25.6,
+  "bScaler": 0.1,
+  "offset": -10000
+ },
+ "fade": {
+  "center": [
+   -110.7827027,
+   43.8528872
+  ],
+  "half_m": [
+   24003,
+   19993
+  ],
+  "power": 4,
+  "start": 0.5,
+  "end": 0.94,
+  "note": "alpha = 1 - smoothstep(start, end, r), r = (|dx/hx|^p + |dy/hy|^p)^(1/p) from the tile centre"
+ },
+ "map_style": {
+  "name": "team relief",
+  "source": "Noah's plotting.py, Sprint2-NavAlgorithm",
+  "tint_m": [
+   2055,
+   3418
+  ],
+  "tint": [
+   "#3f7d3a",
+   "#8fba62",
+   "#cfba78",
+   "#9a7550",
+   "#5b5550"
+  ],
+  "water": "#3b8ed0",
+  "saturation": 0.72,
+  "contours": null,
+  "grid": null,
+  "shade_stretch": [
+   -0.70846,
+   1.0
+  ],
+  "note": "tint and shading stretch of the tile"
+ },
+ "dem": {
+  "source": "3dep10",
+  "label": "USGS 3DEP 1/3 arc-second (about 10 m)",
+  "credit": "USGS 3D Elevation Program 1/3 arc-second DEM, public domain"
+ },
+ "credits": [
+  "USGS 3D Elevation Program 1/3 arc-second DEM, public domain",
+  "ESA WorldCover 10 m 2021 v200 (© ESA WorldCover project 2021, contains modified Copernicus Sentinel data processed by the ESA WorldCover consortium), CC BY 4.0"
+ ],
+ "files": {
+  "mesh": "context_mesh.png",
+  "topo": "context_topo.jpg"
+ }
+}

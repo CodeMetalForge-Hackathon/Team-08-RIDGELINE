@@ -6,7 +6,9 @@ window.TEAM8_AREAS = [
   "region": "Grand Teton National Park, Wyoming",
   "dem": "USGS 3DEP 1 m lidar",
   "km2": 82.49,
-  "mb": 3.5
+  "mb": 3.5,
+  "context": "moran_context",
+  "context_mb": 2.9
  },
  {
   "id": "fuji",

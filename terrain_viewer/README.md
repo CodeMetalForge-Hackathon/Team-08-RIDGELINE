@@ -13,11 +13,18 @@ The map is painted in the team's relief style, the same as Noah's route plots (e
 contours, a 1 km UTM grid), with the collar of a printed sheet (scale bar and declination), and any mountain on Earth
 can be added with five commands.
 
+Around Mount Moran the sheet sits in a 48 x 40 km ring of lower-detail terrain (USGS 3DEP 1/3 arc-second as a 40 m mesh
+and a 24 m picture, in the same relief colours with a little less saturation), so the 3D view has no cliff where the
+tile ends. The ring fades into the paper far out, and the camera stops at 60° of tilt and before the screen edge
+reaches the faded rim. The ring is only drawn. The fix, the routes and every number in this README come from the
+10.4 x 8.0 km tile, summits on the ring (the Grand Teton among them) are never aimed at, and a click on the ring says
+it is off the pre-loaded map.
+
 ![Three peaks, Mount Moran, step 4](screenshots/01_fix_3d.png)
 
 ## Open it
 
-* Double-click `index.html`. It reads `team8_nav.js`, `data/areas.js` and `data/<area>/bundle.js` (images as data URLs), so it works from `file://` offline.
+* Double-click `index.html`. It reads `team8_nav.js`, `data/areas.js` and `data/<area>/bundle.js` (plus `data/<area>_context/bundle.js` for a ring, with images as data URLs), so it works from `file://` offline.
 * Or serve the folder with `python -m http.server 8792` in this folder, then open http://localhost:8792/.
 * Pick the mountain in the sidebar title, or open `?area=moran`, `?area=washington`, `?area=fuji`.
 * Any window size works. The panels are one layout designed at 1440 x 760 and zoom down together. Under 760 px wide
@@ -40,6 +47,19 @@ The magnetic declination for the tile is computed offline with WMM2025 (`scripts
 against the NOAA test values). Simulate takes about a minute (`TEAM8_MC=50` makes it faster). Masks writes
 `nogo.png` (water and cliffs) for the route planner in the browser. Bundle rewrites `data/areas.js`, so the new tile
 appears in the picker. Needs rasterio, numpy, scipy, contourpy and Pillow. Downloads are cached in `.cache/`, which git ignores.
+
+The ring around a tile is optional. Fetch a wider box around the same centre, paint it in the tile's colours, and
+bundle the tile again (its own `bundle.js` stays byte for byte the same, the ring gets `data/<area>_context/bundle.js`).
+
+```
+python -I scripts/team8_fetch_area.py --id moran_context --name "Mount Moran context" --region "Teton Range, Wyoming" --center 43.85289 -110.78270 --size-km 48 40 --dem 3dep10
+python -I scripts/team8_context.py .cache/moran_context data/moran data/moran_context
+python -I scripts/team8_bundle.py data/moran
+```
+
+The ring's mesh nodes run along the tile mesh's edge vertices and take their heights from the tile there, so the two
+surfaces meet; the nodes under the tile are lowered 80 m out of sight. The tint range and the shading stretch are the
+tile's own (`map_style` in `terrain_meta.json`), so the colours carry on across the edge.
 
 ## What the judge sees
 
@@ -114,7 +134,8 @@ summits outside the tile.
   100 km square, and a declination diagram that turns with the map.
 * Plotting follows the paper habit of land navigation. A pencil line from each aimed summit, the fix as a circle with a dot.
 * The camera is fitted with the real 3D projection, so the aimed summits, the whole 95% area and the landing stay
-  between the panels, and it turns around a point at terrain height, not sea level.
+  between the panels, and it turns around a point at terrain height, not sea level. With a ring, the tilt stops at 60°,
+  the zoom stops before the screen edge reaches the ring's faded rim, and the centre stays within 1 km of the sheet.
 * The phone stays a dark phone, because that is what the person in the field holds.
 * One button style, `aria-pressed` on toggles, `aria-current` on the active step, visible focus rings, a label on
   the walk slider, and `prefers-reduced-motion` turns off the camera flights, the count-down and the auto walk.
@@ -132,8 +153,9 @@ summits outside the tile.
 | `data/<area>/terrain_rgb.png`, `terrain_rgb_mesh.png` | Mapbox terrain-RGB, h = -10000 + (R*65536 + G*256 + B) * 0.1, EPSG:4326 grid, edges = `bounds` |
 | `data/<area>/topo.jpg` | the map texture in the team's relief style (elevation tint, relief shading, water, contours, 1 km grid), from `scripts/team8_relief.py`; the tint range is in `terrain_meta.json` as `map_style` |
 | `data/<area>/slope.png` | slope in degrees x 2 on a 30 m smoothed surface. The route planner and the red hatching read the same file |
+| `data/<area>_context/` | the optional ring around a tile, from `scripts/team8_context.py`, with `context_mesh.png` (terrain-RGB, 40 m nodes), `context_topo.jpg`, `context_meta.json` (bounds, the fade, credits) and `bundle.js` (`window.TEAM8_CONTEXT`). Drawn only. The solver, the route planner and the phone never read it |
 | `data/<area>/sim.json` | the demo spot (truth), the Python run of the first version, the Monte Carlo test of that version |
-| `scripts/` | fetch, prep, relief (prep calls it; run it alone to repaint a prepared tile), simulate, masks, bundle, the WMM2025 model and its coefficients, the font packer |
+| `scripts/` | fetch, prep, relief (prep calls it; run it alone to repaint a prepared tile), simulate, masks, bundle, the context ring, the WMM2025 model and its coefficients, the font packer |
 | `lib/deck.gl@9.3.11/` | deck.gl standalone bundle and its MIT license |
 | `lib/fonts/fonts.css` | Noto Sans JP and B612 Mono as data URLs, because Chrome blocks font files on `file://` |
 | `screenshots/` | 1600 x 900 headless captures |
@@ -161,7 +183,7 @@ makes it work offline.
 ## Credits
 
 * Mount Moran elevation, USGS 3DEP 1 m lidar via OpenTopography (WY_GrandTetonElkRefuge_2014, WY_GrandTetonNP_D22,
-  WY_North_Converse_2020_D20), public domain.
+  WY_North_Converse_2020_D20), public domain. The 48 x 40 km ring around it, USGS 3DEP 1/3 arc-second DEM, public domain.
 * Mount Washington elevation, USGS 3DEP 1/3 arc-second DEM, public domain.
 * Mount Fuji elevation, Copernicus DEM GLO-30, © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018,
   provided under COPERNICUS by the European Union and ESA, all rights reserved.
