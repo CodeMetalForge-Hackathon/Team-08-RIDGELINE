@@ -10,7 +10,7 @@ The [organizer's GitHub rules](https://github.com/CodeMetalForge-Hackathon/.gith
 | --- | --- | --- | --- |
 | Real-world relevance | Named-peak observations, visible uncertainty, re-aim requests, terrain-constrained routes and MGRS output | The phone and board implement a complete observation-to-estimate flow. Route tests exercise water constraints | Usability with an unfamiliar operator, field outcomes and evidence that the suggested action is useful under real visibility and injury constraints |
 | Working Live Demonstration | Phone solver, live board relay, service worker and route display | Three recorded phone trials below, including an offline reload and reconnect | A consecutive five-trial record on the final revision, a full airplane-mode trial and a repeatable demonstration by someone other than the builder |
-| Deployability | Local data, phone computation, Python standard-library server and CoT output | Committed assets and executable setup commands. CoT tests use a stand-in client | Real ATAK display, a real height source, outdoor sensor behavior, power use and route feasibility |
+| Deployability | Local data, phone computation, Python standard-library server and CoT output | Committed assets and executable setup commands. CoT tests use a stand-in client, and real ATAK-CIV showed the fix, circle and route on Nov 8 | ATAK deletion after a Reset, a real height source, outdoor sensor behavior, power use and route feasibility |
 | Ideation | Relative-angle estimation with a fitted heading offset, model uncertainty and mismatch handling | Solver and simulation tests demonstrate the approach under their stated assumptions | A measured comparison with an established workflow using the same observations and task conditions |
 
 The primary mission is OBJ.01, locating an isolated person without reliable GPS. CoT provides a route toward OBJ.04 when communications are available. The current prototype does not establish independent operation for every rescue environment.
@@ -57,7 +57,7 @@ ATAK already offers mapping, information sharing and a resection workflow for es
 
 RIDGELINE's contribution to test is the guided sequence of landmark observations, fitting a constant heading offset, displaying the model uncertainty, detecting some inconsistent observations and passing an estimate into an existing responder workflow. Resection itself is established. No head-to-head ATAK performance test has been recorded, and we do not claim that ATAK lacks uncertainty features or must always use one particular sensor.
 
-CoT messages are generated and tested against a stand-in client. Connection and display inside a real ATAK client are unverified. A disagreement between a supplied GPS point and the terrain estimate indicates a cross-check is needed, not which source is wrong and not proof of spoofing. The browser's absolute-orientation fallback also prevents a blanket claim that the hardware is magnetometer-free.
+CoT messages are generated and tested against a stand-in client. On Nov 8 real ATAK-CIV on our test phone connected and showed the fix, its 95% circle, the route and the marks. Deletion after a Reset is unverified. A disagreement between a supplied GPS point and the terrain estimate indicates a cross-check is needed, not which source is wrong and not proof of spoofing. The browser's absolute-orientation fallback also prevents a blanket claim that the hardware is magnetometer-free.
 
 ## Five-trial repeatability record
 
