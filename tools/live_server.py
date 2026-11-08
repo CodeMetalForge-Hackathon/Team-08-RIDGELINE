@@ -52,6 +52,10 @@ def _store(body, event=None):
 
 
 class Handler(SimpleHTTPRequestHandler):
+    # keep-alive: the viewer polls twice a second, and a new connection for every poll can wait in the browser's
+    # queue for a free socket (measured up to 0.4 s before connecting). Every response here sends Content-Length.
+    protocol_version = "HTTP/1.1"
+    timeout = 60   # close a connection nobody has used for a minute, so its thread ends
     # Windows can map .js to text/plain from the registry, which breaks ES modules, so pin the types we serve
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".js": "text/javascript", ".mjs": "text/javascript",
                       ".json": "application/json", ".webmanifest": "application/manifest+json", ".svg": "image/svg+xml",
@@ -115,6 +119,16 @@ class Handler(SimpleHTTPRequestHandler):
             super().log_message(fmt, *args)
 
 
+class Server(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        # the browser closed the connection mid-response (a cancelled download, a reload): nothing to fix or print
+        if isinstance(sys.exc_info()[1], (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, TimeoutError)):
+            return
+        super().handle_error(request, client_address)
+
+
 def main():
     ap = argparse.ArgumentParser(description="RIDGELINE live demo server (standard library only)")
     ap.add_argument("--port", type=int, default=8768)
@@ -125,9 +139,9 @@ def main():
     host = "0.0.0.0" if a.lan else "127.0.0.1"
     if os.name == "nt":
         # on Windows SO_REUSEADDR lets a second server bind the same port and steal requests, so refuse instead
-        ThreadingHTTPServer.allow_reuse_address = False
+        Server.allow_reuse_address = False
     try:
-        httpd = ThreadingHTTPServer((host, a.port), Handler)
+        httpd = Server((host, a.port), Handler)
     except OSError as e:
         print(f"Cannot listen on port {a.port}: {e}. Is another server running? Try --port 8769.", file=sys.stderr)
         return 2
