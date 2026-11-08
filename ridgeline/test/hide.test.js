@@ -90,7 +90,8 @@ test('demo spot, healthy: 3 HIDE and 3 SIGNAL, 250 m apart, inside 30 min and 30
     assert.ok(h0.seen_by < h1.seen_by || (h0.seen_by === h1.seen_by && h0.walk_min <= h1.walk_min), 'HIDE order');
     assert.ok(s0.seen_by > s1.seen_by || (s0.seen_by === s1.seen_by && s0.walk_min <= s1.walk_min), 'SIGNAL order');
   }
-  assert.deepEqual(H.marks(out).map(x => Object.keys(x).join()), Array(6).fill('kind,rank,lat,lon,why'));
+  assert.deepEqual(H.marks(out).map(x => Object.keys(x).join()), Array(6).fill('kind,rank,lat,lon,why,seen_by,of,walk_min,slope_deg'));
+  assert.deepEqual(H.marks(out).map(x => x.why), out.hide.concat(out.signal).map(c => c.why));
 });
 
 test('the reach agrees with an independent search, and H1 and S1 are the best cells in it', () => {

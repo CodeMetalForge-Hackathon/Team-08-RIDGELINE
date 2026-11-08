@@ -27,7 +27,8 @@
  *   reach_cells  how many 30 m cells (the fix cell included) can be walked to within `minutes`
  *   note         'OK', or 'STAY' with empty lists when no other cell can be reached under the slope limit
  *
- *   RidgelineHide.marks(out) -> [{kind, rank, lat, lon, why}]   the small list the phone posts as summary.marks
+ *   RidgelineHide.marks(out) -> [{kind, rank, lat, lon, why, seen_by, of, walk_min, slope_deg}]
+ *          the small list the phone posts as summary.marks (the board draws the numbers as a table)
  *   RidgelineHide.layers(grid) -> {slope, seen, of}   per cell slope (deg) and summit count, cached. Call it once
  *          after loading to move the one-time cost (about 40 ms in Node) out of the first fix.
  *
@@ -233,7 +234,10 @@
 
   // The small list the phone posts as summary.marks for the board.
   function marks(out) {
-    return out ? [].concat(out.hide || [], out.signal || []).map(c => ({ kind: c.kind, rank: c.rank, lat: c.lat, lon: c.lon, why: c.why })) : [];
+    return out ? [].concat(out.hide || [], out.signal || []).map(c => ({
+      kind: c.kind, rank: c.rank, lat: c.lat, lon: c.lon, why: c.why,
+      seen_by: c.seen_by, of: c.of, walk_min: c.walk_min, slope_deg: c.slope_deg,
+    })) : [];
   }
 
   return Object.freeze({ DEFAULTS, candidates, marks, layers });
