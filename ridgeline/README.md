@@ -144,3 +144,7 @@ A reference up to 30 m off still leaves the truth inside the bubble in at least 
 ## Credits
 
 USGS 3DEP 1 m lidar DEM via OpenTopography (public domain). ESA WorldCover 10 m 2021 v200, CC BY 4.0. Place names from Wikidata, CC0. Magnetic declination from the World Magnetic Model 2025 (public domain). Topo map image from `terrain_viewer/`.
+
+## Real-phone GPS rejection, 2026-11-08
+
+Seika confirmed that GPS REJECTED was displayed on the real phone. The exact build, input and rejection distance were not recorded in this confirmation. This records the phone UI result, not a live RF spoofing trial. Repeat the complete demo on the final merged display before submission.

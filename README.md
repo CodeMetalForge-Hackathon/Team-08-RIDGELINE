@@ -105,7 +105,7 @@ For optional ATAK setup and CoT details, see [Hand-off to ATAK](ridgeline/README
 
 ⑤ Remove the USB cable after caching, reload the phone page and obtain another fix. Reconnect to update the board. This cable-disconnected reload and fix was recorded at 05:03 EST on Nov 8.
 
-⑥ Optional, pending a real-phone rehearsal, choose the spoofed **Test GPS** reading in Settings to show **GPS REJECTED**. This uses synthetic GPS data, not a live spoofing experiment. Inspect the CoT feed at [the local endpoint](http://localhost:8768/api/cot), without claiming it has been displayed in real ATAK.
+⑥ Choose the spoofed **Test GPS** reading in Settings to show **GPS REJECTED**. Seika confirmed seeing REJECTED on the real phone on Nov 8; the exact build and test input were not recorded. This uses synthetic GPS data, not a live spoofing experiment. Inspect the CoT feed at [the local endpoint](http://localhost:8768/api/cot), without claiming it has been displayed in real ATAK.
 
 For a laptop dry run, arrows aim and Enter Locks. **A** is keyboard-only demo assist that aims at the current card. After Enter, wait for the target name to change before pressing A for the next observation. Rapid Locks within the 120 ms update window can record the same target more than once; this known input issue is not fixed by the visual redesign. A board map click generates a simulated three-Lock trial. Clearly label either fallback as simulation.
 
@@ -116,6 +116,7 @@ For a laptop dry run, arrows aim and Enter Locks. **A** is keyboard-only demo as
 | Hand-held wall trial, Nov 8 04:56 EST | Galaxy S24 Ultra, Chrome 156, measured paper marks, three Locks, simulated barometer | Actual error 42 m, estimated radius ±293 m, Enough. Relative angles within 2° of the layout |
 | Hand-held wall trial, Nov 8 05:01 EST | Then-current phone build, same wall setup | Actual error 90 m, estimated radius ±278 m, Enough. Rendezvous selected automatically, 3.40 km route displayed |
 | Cached phone reload, Nov 8 05:03 EST | USB cable removed, page reloaded, three hand-held Locks | Actual error 212 m, estimated radius ±298 m, Enough. Board received the fix about 1 s after reconnection |
+| Real-phone GPS rejection, Nov 8 | User confirmation from Seika; exact build and input not recorded | GPS REJECTED was observed on the phone. This is not evidence of a live RF spoofing trial |
 | Misidentified wall cards | Three earlier hand-held trials with cards in the wrong order | Each flagged a mismatch and requested another observation of the last card |
 | Solver simulation | 200 fixes at the demo position with Gaussian 3° aim error and random constant heading offset | Median error 98 m, 90th percentile 184 m, truth inside the 95% bubble in 99.0%, slowest solve 156 ms |
 | Solver simulation across the tile | 120 random positions with three visible peaks | Median error 132 m, 90th percentile 540 m, truth inside the bubble in 99.2% |
@@ -131,7 +132,7 @@ Source is [the detailed test log](ridgeline/README.md#test-results-gate-a), date
 | Indoor cards replace mountains, and operators must identify the peaks | Repeat outdoor trials across users and visibility conditions with independent ground truth |
 | Height is simulated, and the nominal 95% radius depends on the error model | Integrate a calibrated pressure sensor. In the recorded simulation, a 60 m barometer reference error reduced coverage to about 70% without a mismatch warning |
 | Solver assumes 3° aim error and a constant heading offset | Characterize real sensor streams and handling. At 10° simulated aim error, the nominal 95% area held truth only about half the time |
-| GPS REJECTED uses synthetic data and is unverified on the real phone | Rehearse the phone flow, then evaluate independent real positioning inputs and failure cases |
+| GPS REJECTED was observed on the real phone, confirmed by Seika on Nov 8; exact build and input not recorded | Repeat in the final merged build, then evaluate independent real positioning inputs and failure cases |
 | CoT passed stand-in client tests, but real ATAK-CIV is untested | Verify connection, rendering and deletion in actual ATAK. Replace the local unencrypted demo link with suitable field transport |
 | Water avoidance passes merged automated tests but awaits phone verification | Validate planner and map masks, blocked destinations and unreachable routes. Terrain visibility does not model trees, buildings or current hazards |
 | Night mode, Lock vibration and airplane mode with the cable are unverified on the phone | Complete a device acceptance pass including camera, offline startup and the entire demo |
