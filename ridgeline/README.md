@@ -143,7 +143,7 @@ A reference up to 30 m off still leaves the truth inside the bubble in at least 
 | `skyline.js`, `test/skyline.test.js` | Expected horizon toward the next peak. |
 | `cot.py`, `test/test_cot.py` | Cursor on Target events and the ATAK link (server mode on 8087, push mode). |
 | `phone/sw.js`, `phone/manifest.webmanifest` | Offline copy and home-screen install. |
-| `scripts/preflight.py`, `test/test_preflight.py` | Read-only pre-demo check (server, `adb reverse`, ATAK link, airplane mode, battery, a run left on the board). Exit code 1 when something must be fixed. |
+| `scripts/preflight.py`, `test/test_preflight.py` | Read-only pre-demo check (server, whether it runs the code in this folder via `GET /api/build`, `adb reverse`, ATAK link, airplane mode, battery, a run left on the board). Exit code 1 when something must be fixed. |
 
 ## Credits
 

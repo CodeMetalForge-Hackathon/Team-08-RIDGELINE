@@ -12,14 +12,18 @@ without it.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import shutil
 import subprocess
 import sys
 import time
 import urllib.request
+from pathlib import Path
 
 PASS, WARN, FAIL, INFO = 'PASS', 'WARN', 'FAIL', 'INFO'
+RIDGELINE = Path(__file__).resolve().parents[1]
+RESTART = 'stop it (Ctrl+C in its window) and start it again from the repo root: python -I ridgeline/server.py'
 
 
 # ---------- parsers (pure, tested in test/test_preflight.py) ----------
@@ -76,6 +80,31 @@ def ago(s: float | None) -> str:
     return f'{s / 3600:.1f} h ago'
 
 
+def check_build(build: dict | None, code_now: str | None, now: float) -> tuple[str, str]:
+    """Is the running server on the Python in this folder? build is /api/build (None when the server
+    is too old to have it), code_now is server.code_id() on the files on disk."""
+    if not isinstance(build, dict):
+        return FAIL, f'the server is older than this check, so it runs old code. To use the final build, {RESTART}'
+    started = ago(now - build['started']) if isinstance(build.get('started'), (int, float)) else 'at an unknown time'
+    if code_now is None:
+        return WARN, f'could not read server.py in this folder to compare (server started {started})'
+    if build.get('code') == code_now:
+        return PASS, f'the server runs the code in this folder (started {started})'
+    where = f' It was started from {build["folder"]}.' if build.get('folder') else ''
+    return FAIL, f'the server runs different code than this folder (started {started}).{where} To fix it, {RESTART}'
+
+
+def repo_code_id() -> str | None:
+    """server.code_id() for the files on disk, by loading server.py without starting it."""
+    try:
+        spec = importlib.util.spec_from_file_location('ridgeline_server_on_disk', RIDGELINE / 'server.py')
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.code_id()
+    except Exception:   # a broken server.py is reported as "could not read", never a crash of the check
+        return None
+
+
 # ---------- probes ----------
 
 def get(url: str, timeout: float = 3.0) -> tuple[int, bytes]:
@@ -95,6 +124,10 @@ def adb(*args: str, timeout: float = 8.0) -> str | None:
 
 
 def run(port: int, cot_port: int) -> list[tuple[str, str, str]]:
+    return server_checks(port) + phone_checks(port, cot_port)
+
+
+def server_checks(port: int) -> list[tuple[str, str, str]]:
     rows = []
 
     def add(level, what, say):
@@ -111,6 +144,9 @@ def run(port: int, cot_port: int) -> list[tuple[str, str, str]]:
             add(FAIL, 'server', f'{base} answers, but {", ".join(missing)} came back empty. Run it from the repo root')
         else:
             add(PASS, 'server', f'{base} serves the phone, the board and the terrain ({sizes["/data/moran.json"] // 1024} KB)')
+        code, body = get(base + '/api/build')
+        level, say = check_build(json.loads(body.decode('utf-8')) if code == 200 else None, repo_code_id(), time.time())
+        add(level, 'code', say)
     else:
         add(FAIL, 'server', f'nothing on {base}. Start it from the repo root with: python -I ridgeline/server.py')
 
@@ -133,6 +169,14 @@ def run(port: int, cot_port: int) -> list[tuple[str, str, str]]:
                 'Clear it before the judge starts (C on the board, or reset on the phone)')
         else:
             add(PASS, 'last run', 'the board is clear')
+    return rows
+
+
+def phone_checks(port: int, cot_port: int) -> list[tuple[str, str, str]]:
+    rows = []
+
+    def add(level, what, say):
+        rows.append((level, what, say))
 
     if not shutil.which('adb'):
         add(WARN, 'adb', 'adb is not on PATH, phone checks skipped. Install Android platform-tools')

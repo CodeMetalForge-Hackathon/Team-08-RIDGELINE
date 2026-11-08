@@ -116,7 +116,7 @@ For optional ATAK setup and CoT details, see [Hand-off to ATAK](ridgeline/README
 
 ## How to run the demo
 
-⓪ Ten minutes before the judges arrive, run `python -I ridgeline/scripts/preflight.py`. It only reads, and lists anything to fix with the command to fix it. It checks the server, the USB link (`adb reverse`), the ATAK link, airplane mode, the phone battery and a previous run still on the board.
+⓪ Ten minutes before the judges arrive, run `python -I ridgeline/scripts/preflight.py`. It only reads, and lists anything to fix with the command to fix it. It checks the server, whether the server runs the code in this folder (Python is read once at start, so a server started before a pull shows the old build), the USB link (`adb reverse`), the ATAK link, airplane mode, the phone battery and a previous run still on the board.
 
 ① Open the phone app and board. Explain the test boundary before starting. These are real phone observations of wall cards that reproduce known outdoor geometry, with a simulated height, simulated GPS test readings and a known terrain location for answer checking. Keep the phone connected until the app and terrain have been cached.
 
@@ -146,7 +146,7 @@ For a laptop dry run, arrows aim and Enter Locks. **A** is keyboard-only demo as
 | Solver simulation | 200 fixes at the demo position with Gaussian 3° aim error and random constant heading offset | Median error 98 m, 90th percentile 184 m, truth inside the 95% bubble in 99.0%, slowest solve 156 ms |
 | Solver simulation across the tile | 120 random positions with three visible peaks | Median error 132 m, 90th percentile 540 m, truth inside the bubble in 99.2% |
 | JavaScript checks, rerun after merging the judging review on Nov 8 | Solver, visibility suggestions, walkable start, expected skyline, Lock input and route water checks | 34 of 34 passing, comprising 6 solver, 9 hide, 6 skyline, 6 Lock input and 7 route tests |
-| Python checks, rerun on Nov 8 after adding the fix age to CoT | Stand-in TAK client, local push listener and the trial capture script | 27 of 27 passing. The 12 CoT tests cover fix, uncertainty, route, marks, the disagreeing GPS test point, reconnect, reset deletes and the age of the position in the remarks. 5 tests cover the pre-demo check. Previously recorded Lock relay under 0.25 s with the test client connected |
+| Python checks, rerun on Nov 8 after adding the server code check | Stand-in TAK client, local push listener and the trial capture script | 31 of 31 passing. The 12 CoT tests cover fix, uncertainty, route, marks, the disagreeing GPS test point, reconnect, reset deletes and the age of the position in the remarks. 9 tests cover the pre-demo check, two of them against a real server on a free port. Previously recorded Lock relay under 0.25 s with the test client connected |
 
 Source is [the detailed test log](ridgeline/README.md#test-results-gate-a), dated Nov 8, 2026. The phone rows are historical observations, not new measurements of this merged revision, and they are not a five-trial series or a field-accuracy estimate. Earlier mismatches and a less accurate wall setup are retained in [the evidence document](docs/JUDGING_EVIDENCE.md#recorded-phone-observations). Simulation results are a separate evidence class, conditional on the simulation inputs, and are not hand-held accuracy or human performance measurements. The 42 m result is one wall trial, not guaranteed accuracy. No outdoor trial, battery test or real RF spoofing test is recorded.
 

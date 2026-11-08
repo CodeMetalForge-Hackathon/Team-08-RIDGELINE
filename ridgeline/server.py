@@ -17,11 +17,15 @@ ATAK (Cursor on Target, events built by cot.py)
     connection per event to an ATAK TCP input, on every change and every 15 s.
   GET /api/cot   the current events, one per line
   GET /api/atak  {mode, clients, connected, sent, last_sent, last_error, ...}
+GET /api/build  {code, started, folder}: which server.py and cot.py this process runs.
+  Python reads them once at start, so after a pull the server keeps the old code until restarted.
+  scripts/preflight.py compares code with the files on disk.
 """
 from __future__ import annotations
 
 import argparse
 import errno
+import hashlib
 import importlib.util
 import itertools
 import json
@@ -61,6 +65,18 @@ DIRS = {'/phone/': HERE / 'phone', '/board/': HERE / 'board', '/cards/': HERE / 
 TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json',
          '.jpg': 'image/jpeg', '.png': 'image/png', '.svg': 'image/svg+xml', '.css': 'text/css; charset=utf-8',
          '.webmanifest': 'application/manifest+json'}
+CODE = (HERE / 'server.py', HERE / 'cot.py')   # read once at start
+
+
+def code_id(paths=CODE) -> str:
+    """Short id of the Python this server runs. Line endings are ignored, so a CRLF checkout matches."""
+    h = hashlib.sha256()
+    for path in paths:
+        h.update(path.name.encode('utf-8') + b'\0' + path.read_bytes().replace(b'\r\n', b'\n') + b'\0')
+    return h.hexdigest()[:12]
+
+
+BUILD = {'code': code_id(), 'started': time.time(), 'folder': str(REPO)}
 STATE = {'version': 0, 'updated': None, 'source': None, 'obs': {'baro_m': None, 'locks': []}, 'phone': None, 'route': None}
 GUARD = threading.Lock()
 CHANGED = threading.Condition(GUARD)
@@ -398,6 +414,9 @@ class Handler(SimpleHTTPRequestHandler):
         if path == '/api/cot':
             # the CoT events ATAK should hold now, one per line (empty when there is no fix)
             self._send(200, (ATAK.cot_text() if ATAK else '').encode('utf-8'), 'text/plain; charset=utf-8')
+            return
+        if path == '/api/build':
+            self._json(BUILD)
             return
         if path == '/api/atak':
             self._json(ATAK.status() if ATAK else {'mode': 'off', 'clients': 0, 'connected': False, 'sent': 0,
