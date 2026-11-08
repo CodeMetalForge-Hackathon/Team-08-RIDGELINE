@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#0b0e10">
 <title>RIDGELINE</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/phone/icon-192.png">
@@ -190,6 +190,7 @@ h1,h2,.target{text-wrap:balance}
 .chip.off{border-color:var(--red)}
 .chip.on{border-color:var(--line2);color:var(--text)}
 .icon-btn{width:44px;height:44px;flex-shrink:0}
+@media(max-width:400px){.top{gap:6px}.brand{font-size:13px;gap:6px;letter-spacing:.10em}}
 .eyebrow{font-size:13px;font-weight:600;letter-spacing:.015em}
 h1{font-size:32px;line-height:1.13;letter-spacing:-.025em}
 .row .v{font-family:var(--mono);font-size:14px}
@@ -229,55 +230,7 @@ html.night .lock[data-state=ready]{animation:none;border-color:var(--amber);box-
 @media (max-width:370px){.brand{font-size:13px;letter-spacing:.08em;gap:5px}.brand svg{width:20px}.top{gap:5px}.chip{font-size:9px;padding:4px}.coords{font-size:22px}.mgrs{font-size:18px}}
 
 </style>
-<style id="theme-black-gold">
-/* Black and gold, Nov 8. The team read the black ground with a yellow target as clearer and stronger than paper.
-   True black ground, one gold accent kept for what to aim at and what to press, square controls,
-   B612 Mono for every readout. Night (red) still wins, because html.night outranks :root. */
-:root{color-scheme:dark;--bg:#000;--panel:#0d0d0d;--raise:#171717;--line:#242424;--line2:#3a3a3a;--text:#f3f2ee;--muted:#a6a59f;--faint:#73726d;--cyan:#f3f2ee;--amber:#ffc000;--red:#ff453a;--green:#30d158;--action:#ffc000;--on-action:#000;--action-press:#d9a300;--r:0px}
-html.night{--action-press:#7f2012}
-html,body{background:var(--bg)}
-button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
-.top{border-bottom-color:var(--line2)}
-.brand{letter-spacing:.2em}
-.brand path{stroke:var(--amber)}
-.chip{background:var(--bg)}
-.chip.on{color:var(--muted)}
-.eyebrow,.target-label{font:600 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-h1{font-size:34px;letter-spacing:-.03em}
-.pace{border-left-color:var(--amber)}
-.btn{background:var(--raise);border-color:var(--line2);color:var(--text)}
-.btn:active:not(:disabled){background:var(--line)}
-.btn.primary{background:var(--action);border-color:var(--action);color:var(--on-action);font-weight:750;letter-spacing:.02em}
-.btn.primary:active:not(:disabled){background:var(--action-press)}
-.target{color:var(--amber);font-size:36px;letter-spacing:-.02em}
-.scope{--tick:rgba(255,255,255,.55);background:radial-gradient(circle at 50% 50%,#151515 0%,#080808 62%,#000 100%);border-color:var(--line2)}
-.scope::before{content:'';position:absolute;inset:4px;z-index:2;pointer-events:none;background:
- linear-gradient(var(--tick),var(--tick)) left top/14px 2px no-repeat,linear-gradient(var(--tick),var(--tick)) left top/2px 14px no-repeat,
- linear-gradient(var(--tick),var(--tick)) right top/14px 2px no-repeat,linear-gradient(var(--tick),var(--tick)) right top/2px 14px no-repeat,
- linear-gradient(var(--tick),var(--tick)) left bottom/14px 2px no-repeat,linear-gradient(var(--tick),var(--tick)) left bottom/2px 14px no-repeat,
- linear-gradient(var(--tick),var(--tick)) right bottom/14px 2px no-repeat,linear-gradient(var(--tick),var(--tick)) right bottom/2px 14px no-repeat}
-html.night .scope{--tick:var(--line2)}
-.scope .ring{stroke:#262626}
-.scope .hair{stroke:#3a3a3a}
-.scope .tick{stroke:#6e6e69}
-.scope .tlab{fill:#9a9994}
-.edge{background:rgba(0,0,0,.8);border-color:var(--line2)}
-.lock{border:0;background:var(--action);color:var(--on-action);font-weight:800;letter-spacing:.24em}
-.lock[data-state=ready]{outline:2px solid var(--amber);outline-offset:3px}
-.lock:not([data-state=wait]):active{background:var(--action-press)}
-.dots span.on{background:var(--text)}
-.meter .arc{stroke:var(--text)}
-.map{border-color:var(--line2)}
-.big-pm{font-size:56px;color:var(--text)}
-.coords,.mgrs{color:var(--text)}
-.dest.pick[aria-pressed=true]{background:var(--action);border-color:var(--action);color:var(--on-action)}
-.seg button[aria-pressed=true]{box-shadow:inset 0 -3px var(--amber)}
-.spot.hide b{color:#9fb4c7}.spot.signal b{color:#ff9f0a}
-.start-ln{border-left-color:var(--amber)}
-.sheet{background:rgba(0,0,0,.78)}
-.sheet .in{border-top:2px solid var(--amber)}
-.nb.ok i{background:var(--text)}
-</style>
+
 </head>
 <body>
 <div class="app">
@@ -1116,7 +1069,7 @@ $('camopt').onchange = e => { camWanted = e.target.checked; store.set('cam', cam
 // Night (red), kept on this phone (store wraps localStorage in try/catch)
 function setNight(on) {
   document.documentElement.classList.toggle('night', on);
-  const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.content = on ? '#000000' : '#000000';
+  const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.content = on ? '#000000' : '#0b0e10';
   $('nightopt').checked = on;
 }
 setNight(!!store.get('night', false));
