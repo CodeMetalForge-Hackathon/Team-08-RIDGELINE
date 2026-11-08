@@ -38,6 +38,8 @@ class Parsers(unittest.TestCase):
         self.assertFalse(pf.has_reverse(out, 8779))
         self.assertFalse(pf.has_reverse('UsbFfs tcp:8768 tcp:9000\n', 8768))   # mapped to another PC port
         self.assertFalse(pf.has_reverse('', 8768))
+        self.assertTrue(pf.has_reverse('UsbFfs tcp:18087 tcp:8087\n', 8087, 18087))   # ATAK holds 8087 on the phone
+        self.assertFalse(pf.has_reverse('UsbFfs tcp:18087 tcp:8087\n', 8087))
 
     def test_battery_ignores_the_change_log(self):
         out = ('Current Battery Service state:\n  AC powered: false\n  USB powered: true\n  level: 99\n'
