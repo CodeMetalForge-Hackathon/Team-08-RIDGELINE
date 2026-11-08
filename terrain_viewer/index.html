@@ -6,20 +6,24 @@
 <meta name="theme-color" content="#ece7dc">
 <meta name="color-scheme" content="light">
 <title>Team-8 Terrain Nav</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="lib/fonts/fonts.css">
 <style>
-/* A printed topographic sheet that moves.
-   Map conventions follow USGS US Topo, swisstopo and CalTopo: green woods, grey rock, blue water with italic names,
+/* A printed topographic sheet that moves, and the judge drives it.
+   Map conventions follow USGS US Topo, swisstopo and CalTopo: green woods, grey rock, blue water (and only water is blue),
    brown contours with bold index lines, a 1 km UTM grid, and a collar with the scale bar, contour interval and declination.
-   Plotting follows the paper habit of land navigation: a pencil line to the landmark, the fix as a circle with a dot.
-   Three plotting colours only: red-orange for where you can be, magenta for the route, red for danger.
+   Plotting follows the paper habit of land navigation: a pencil line from each peak, the fix as a circle with a dot.
+   Red-orange is where you can be, the route is coloured by how hard the ground is (yellow easy, orange moderate,
+   pink steep), red is danger. Ink is the only colour of the controls; amber only asks for attention.
    The phone stays a dark phone, because that is what the person in the field holds.
-   Vercel web interface guidelines still apply: focus rings, aria states, tabular numbers, reduced motion. */
+   Web interface rules (Vercel guidelines, taste-skill): visible focus, aria states, tabular numbers, 44 px targets on
+   the phone, one button style, one radius scale, no motion past what explains a change, prefers-reduced-motion. */
 :root{
   color-scheme:light;
   --paper:#ece7dc;--card:#fbfaf6;--well:#f3f0e8;--rule:#d5cebf;--rule-2:#e5dfd2;
   --ink:#1f1d1a;--ink-2:#46423b;--mute:#6b665b;--faint:#7c776b;
-  --area:#d9481c;--route:#b0157f;--danger:#c62828;--water:#2f6fa3;
+  --area:#d9481c;--danger:#c62828;--water:#2f6fa3;--warn:#a5520c;
+  --easy:#e3ab06;--mod:#ea7a1c;--steep:#d4386c;
   --r:8px;--shadow:0 1px 2px rgba(45,35,15,.10),0 6px 20px rgba(45,35,15,.08);
   --ui:'Noto Sans JP',system-ui,'Segoe UI',sans-serif;
   --num:'B612 Mono',ui-monospace,Consolas,monospace;
@@ -31,38 +35,91 @@ html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font:400
 .panel{position:fixed;background:var(--card);border:1px solid var(--rule);border-radius:var(--r);box-shadow:var(--shadow)}
 .eyebrow{font:600 11px/16px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
 .mono{font-family:var(--num);font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
 
 /* one button system */
-button{font:500 13px/1 var(--ui);color:var(--ink);background:#fff;border:1px solid var(--rule);border-radius:6px;height:32px;padding:0 11px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background-color .15s,border-color .15s,color .15s,transform .1s}
+button{position:relative;overflow:hidden;font:500 13px/1 var(--ui);color:var(--ink);background:#fff;border:1px solid var(--rule);border-radius:6px;height:32px;padding:0 11px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background-color .15s,border-color .15s,color .15s,transform .1s}
 button:hover{background:#f6f3ec;border-color:#bfb7a6}
 button:active{transform:translateY(1px)}
 button.act,button.act:hover{background:var(--ink);border-color:var(--ink);color:#fff}
+button:disabled{opacity:.42;cursor:default;transform:none}
+button:disabled:hover{background:#fff;border-color:var(--rule)}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--water);outline-offset:2px}
 button svg{display:block}
-.group{display:flex;gap:4px}
+.group{display:flex;gap:4px;align-items:center}
+.glab{font:500 12px/1 var(--ui);color:var(--mute);margin:0 2px 0 4px}
 .vr{width:1px;align-self:stretch;background:var(--rule);margin:0 6px}
 
-/* left sidebar: the sheet title, what is happening, the readings, and the map key at the bottom */
+/* left sidebar: the sheet title, what is happening, how sure we are, and the map key at the bottom */
 #info{left:24px;top:24px;bottom:24px;width:360px;padding:18px 22px;display:flex;flex-direction:column;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
 #team{margin:0;font:600 11px/16px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
 #areaRow{display:flex;align-items:center;margin-top:2px}
 #areaSel{appearance:none;-webkit-appearance:none;max-width:100%;margin:0 0 0 -4px;padding:0 24px 0 4px;border:0;border-radius:4px;cursor:pointer;font:700 24px/1.2 var(--ui);color:var(--ink);background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2346423b' stroke-width='1.6'/%3E%3C/svg%3E") no-repeat right 4px center}
 #areaSel:hover{background-color:var(--well)}
 #region{margin-top:1px;font-size:13px;line-height:18px;color:var(--mute)}
-#stepEyebrow{margin-top:14px}
+#stepEyebrow{margin-top:12px}
 #stepTitle{margin:2px 0 4px;font:700 19px/1.25 var(--ui);text-wrap:balance}
-#stepText{margin:0;color:var(--ink-2);min-height:65px;text-wrap:pretty}
+#stepText{margin:0;color:var(--ink-2);min-height:66px;text-wrap:pretty}
+
+/* how sure: the 95% radius, the area, and the capture meter (one slot per peak) */
+#fixcard{margin-top:12px;padding-top:10px;border-top:1px solid var(--rule-2)}
+.fixrow{display:flex;align-items:baseline;gap:10px;margin-top:2px}
+#fixBig{font:700 30px/1.1 var(--ui);font-variant-numeric:tabular-nums;color:var(--area);white-space:nowrap}
+#fixSub{font-size:12px;line-height:16px;color:var(--mute)}
+#meter{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.slot{display:flex;flex-direction:column;gap:2px;min-width:0;padding:6px 7px;border:1px solid var(--rule-2);border-radius:6px;background:var(--well)}
+.slot .top{display:flex;align-items:center;gap:6px;min-width:0}
+.slot .lt{flex:none;width:18px;height:18px;border-radius:4px;display:grid;place-items:center;font:700 11px/1 var(--ui);border:1px dashed #a39b8b;color:var(--faint)}
+.slot .nm{font-size:12px;line-height:16px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slot .rd{font:400 11.5px/15px var(--ui);font-variant-numeric:tabular-nums;color:var(--faint);white-space:nowrap}
+.slot.done{background:#fff;border-color:var(--rule)}
+.slot.done .lt{background:var(--ink);border:1px solid var(--ink);color:#fff}
+.slot.done .nm{color:var(--ink);font-weight:500}
+.slot.done .rd{color:var(--ink-2)}
+.slot.next{border-color:var(--ink-2);border-style:dashed;background:#fff}
+.slot.next .lt{border-color:var(--ink-2);color:var(--ink-2)}
+.slot.next .nm{color:var(--ink-2)}
+.slot.none{opacity:.55}
+#verdict{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:3px 9px;border-radius:999px;font:600 12px/18px var(--ui);border:1px solid var(--rule)}
+#verdict.ok{background:var(--ink);border-color:var(--ink);color:#fff}
+#verdict.next{color:var(--ink-2);border-style:dashed;border-color:var(--ink-2)}
+#verdict.warn{color:var(--warn);border-color:var(--warn);background:#fff7ec}
+#verdict:empty{display:none}
+
 #sensors{margin:12px 0 0;padding:10px 0 0;border-top:1px solid var(--rule-2);display:grid;grid-template-columns:1fr auto;row-gap:1px;column-gap:16px;align-items:baseline}
 #sensors dt{font-size:13px;line-height:19px;color:var(--mute)}
 #sensors dd{margin:0;font:500 13px/19px var(--ui);font-variant-numeric:tabular-nums;color:var(--faint);text-align:right;white-space:nowrap}
 #sensors dd.on{color:var(--ink)}
 #sensors dd.alert{color:var(--danger)}
-#area{margin-top:12px;padding-top:10px;border-top:1px solid var(--rule-2)}
-#areaVal{display:block;margin-top:2px;font:700 30px/1.1 var(--ui);font-variant-numeric:tabular-nums;color:var(--area)}
-#areaFrom{display:block;margin-top:2px;font-size:12px;line-height:16px;color:var(--mute)}
-#mc{margin:6px 0 0;font-size:12px;line-height:16px;color:var(--mute)}
-#mc:empty{display:none}
-#mc b{font-weight:600;color:var(--ink-2)}
+#sensors dd.off{text-decoration:line-through;text-decoration-color:var(--faint)}
+
+/* destination: the pin, the route in numbers, colours and words, the lock, the way home, the marks */
+#destcard{margin-top:12px;padding-top:10px;border-top:1px solid var(--rule-2)}
+.dhead{display:flex;justify-content:space-between;align-items:center}
+#lockTag{font:600 11px/16px var(--ui);letter-spacing:.06em;text-transform:uppercase;color:var(--ink);display:inline-flex;align-items:center;gap:4px}
+#destName{margin-top:2px;font:700 16px/1.3 var(--ui)}
+#destStats{margin-top:4px;font-size:12.5px;line-height:17px;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+#routeBar{display:flex;height:8px;margin:8px 0 6px;border-radius:2px;overflow:hidden;background:var(--rule-2);outline:1px solid rgba(31,29,26,.55);outline-offset:0}
+#routeBar i{display:block;height:100%}
+#routeKey{display:flex;gap:12px;font-size:11px;line-height:14px;color:var(--mute)}
+#routeKey span{display:inline-flex;align-items:center;gap:5px}
+#routeKey b{display:inline-block;width:10px;height:6px;border-radius:1px;outline:1px solid rgba(31,29,26,.55)}
+#destSay{margin:6px 0 0;font-size:13px;line-height:19px;color:var(--ink-2);text-wrap:pretty}
+#destSay.stop{color:var(--danger);font-weight:600}
+.dbtns{display:flex;gap:6px;margin-top:10px}
+.dbtns button{flex:1}
+button.hold::before{content:"";position:absolute;inset:0;background:rgba(31,29,26,.16);transform:scaleX(0);transform-origin:left;transition:transform .12s}
+button.hold.holding::before{transform:scaleX(1);transition:transform .7s linear}
+button.hold span{position:relative}
+#confirm{display:flex;align-items:center;gap:6px;margin-top:8px;padding:6px 8px;border-radius:6px;background:var(--well);font-size:12.5px;color:var(--ink-2)}
+#confirm span{flex:1}
+#confirm button{height:28px;padding:0 9px}
+#marks{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+#marks li{display:flex;align-items:center;gap:8px;font-size:12.5px;line-height:18px}
+#marks li .sq{flex:none;width:9px;height:9px;background:var(--ink);transform:rotate(45deg)}
+#marks li .mn{flex:1;min-width:0}
+#marks li .mr{font:400 11.5px/1 var(--num);color:var(--mute)}
+#marks li button{height:24px;padding:0 8px;font-size:12px}
 
 /* the map key and the collar, like the margin of a printed sheet */
 #legend{margin-top:auto;padding-top:12px;display:grid;grid-template-columns:1fr 1fr;column-gap:14px;font-size:11.5px;line-height:17px;color:var(--ink-2)}
@@ -79,17 +136,26 @@ button svg{display:block}
 #decl{display:flex;align-items:center;gap:6px;flex:none}
 #declSvg{width:50px;height:50px;flex:none;overflow:visible}
 
-/* top and bottom bars, centred on the map between the sidebar and the phone */
+/* top bar, the map hint and the bottom steps, centred on the map between the sidebar and the phone */
 #views{left:calc(50% + 30px);top:24px;transform:translateX(-50%);width:max-content;display:flex;padding:6px}
-#banner{left:calc(50% + 30px);top:80px;transform:translateX(-50%);padding:8px 16px;display:none;border-color:var(--danger);color:var(--ink-2);white-space:nowrap}
+#hint{left:calc(50% + 30px);top:78px;transform:translateX(-50%);width:max-content;max-width:620px;display:flex;align-items:center;gap:8px;padding:5px 6px 5px 12px;font-size:13px;line-height:18px;color:var(--ink-2);background:rgba(251,250,246,.94)}
+#hint svg{flex:none}
+#hint .presets{display:flex;gap:4px;margin-left:4px}
+#hint .presets button{height:26px;padding:0 9px;font-size:12px}
+#hint.locked{border-color:var(--ink);color:var(--ink)}
+#banner{left:calc(50% + 30px);top:124px;transform:translateX(-50%);padding:8px 16px;display:none;border-color:var(--danger);color:var(--ink-2);white-space:nowrap}
 #banner b{color:var(--danger);font-weight:700;margin-right:10px}
+#toast{position:fixed;left:calc(50% + 30px);bottom:84px;transform:translate(-50%,8px);padding:8px 14px;border-radius:8px;background:var(--ink);color:#fff;font:500 13px/18px var(--ui);opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:5;max-width:560px;text-align:center}
+#toast.on{opacity:1;transform:translate(-50%,0)}
 #steps{left:calc(50% + 30px);bottom:24px;transform:translateX(-50%);width:max-content;display:flex;gap:3px;padding:6px;align-items:center}
 #steps button{padding:0 9px}
 #steps .n{font-family:var(--num);font-size:12px;color:var(--faint)}
 #steps .act .n{color:#d9d4c8}
+#steps button.done .n{color:var(--ink)}
+#steps button.done .n::after{content:"";display:inline-block;width:5px;height:9px;margin-left:3px;border:solid currentColor;border-width:0 1.6px 1.6px 0;transform:translateY(-1px) rotate(45deg)}
 #walkbar{left:calc(50% + 30px);bottom:80px;transform:translateX(-50%);width:max-content;display:none;gap:8px;padding:6px;align-items:center}
-#walkbar input{width:200px;accent-color:var(--route)}
-#clock{font:500 12px/1 var(--ui);font-variant-numeric:tabular-nums;color:var(--mute);min-width:132px;text-align:center}
+#walkbar input{width:150px;accent-color:var(--ink)}
+#clock{font:500 12px/1 var(--ui);font-variant-numeric:tabular-nums;color:var(--mute);min-width:118px;text-align:center}
 #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font:500 13px/1 var(--ui);color:var(--mute);background:var(--paper);z-index:9}
 #credit{position:fixed;right:24px;bottom:16px;width:340px;margin:0;padding:6px 10px;border-radius:6px;background:rgba(236,231,220,.9);font-size:10.5px;line-height:15px;color:var(--mute);text-align:right}
 
@@ -104,8 +170,8 @@ button svg{display:block}
 #tape{height:46px}
 #sky{height:96px}
 .ph-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;padding:0 8px}
-#arrow{width:136px;height:136px;transition:transform .25s linear}
-#phBig{font:700 40px/1 var(--ui);font-variant-numeric:tabular-nums}
+#arrow{width:124px;height:124px;transition:transform .25s linear}
+#phBig{font:700 38px/1 var(--ui);font-variant-numeric:tabular-nums}
 #phSay{font-size:14px;line-height:1.5;color:#d1d1d6;min-height:42px;text-wrap:balance}
 #phStop{display:none;font:700 30px/1.15 var(--ui);color:#ff453a}
 .ph-coords{font:400 12px/18px var(--ui);font-variant-numeric:tabular-nums;color:#fff;background:#1c1c1e;border-radius:10px;padding:8px 10px;white-space:pre}
@@ -114,7 +180,7 @@ button svg{display:block}
 #phBtn:hover{background:#fff}
 @media (max-width:1180px),(max-height:840px){#credit{display:none}}
 /* fitUI() zooms the panels as one layout below 1440 x 760; under 760 px wide only the phone and the steps stay */
-body.narrow #info,body.narrow #views,body.narrow #walkbar,body.narrow #banner,body.narrow #credit{display:none!important}
+body.narrow #info,body.narrow #views,body.narrow #walkbar,body.narrow #banner,body.narrow #credit,body.narrow #hint{display:none!important}
 body.narrow #phone{right:auto;left:50%;top:8px;transform:translateX(-50%)}
 body.narrow #steps{left:50%;bottom:8px}
 #loading.err{font:400 14px/22px var(--ui);color:var(--ink-2);padding:24px;text-align:center}
@@ -135,14 +201,30 @@ html.still *{transition:none!important;animation:none!important}
   <div id="stepEyebrow" class="eyebrow"></div>
   <h2 id="stepTitle"></h2>
   <p id="stepText" aria-live="polite"></p>
+  <section id="fixcard" aria-label="How sure the fix is">
+    <div class="eyebrow" id="fixEyebrow">Where you can be · 95%</div>
+    <div class="fixrow"><span id="fixBig"></span><span id="fixSub"></span></div>
+    <div id="meter" role="list" aria-label="Peaks aimed at"></div>
+    <div id="verdict" role="status"></div>
+  </section>
   <dl id="sensors">
     <dt>GPS</dt><dd class="alert">Off, jammed</dd>
     <dt>Barometer</dt><dd id="sBaro">waiting</dd>
-    <dt>Compass bearing</dt><dd id="sComp">waiting</dd>
-    <dt>Tilt angle</dt><dd id="sTilt">waiting</dd>
-    <dt>Steps and heading</dt><dd id="sDR">idle</dd>
+    <dt>Gyro, angles between peaks</dt><dd id="sGyro">waiting</dd>
+    <dt>Tilt to each summit</dt><dd id="sTilt">waiting</dd>
+    <dt>Compass</dt><dd id="sComp" class="off">not used</dd>
   </dl>
-  <div id="area"><div class="eyebrow">Where you can be · 95%</div><span id="areaVal"></span><span id="areaFrom"></span><p id="mc"></p></div>
+  <section id="destcard" aria-label="Destination" hidden>
+    <div class="dhead"><span class="eyebrow" id="destEyebrow">Destination</span><span id="lockTag"></span></div>
+    <div id="destName"></div>
+    <div id="destStats"></div>
+    <div id="routeBar" aria-hidden="true"></div>
+    <div id="routeKey" aria-hidden="true"><span><b style="background:var(--easy)"></b>Easy, up to 10°</span><span><b style="background:var(--mod)"></b>Moderate</span><span><b style="background:var(--steep)"></b>Steep, over 20°</span></div>
+    <p id="destSay" aria-live="polite"></p>
+    <div class="dbtns"><button id="lockBtn" class="hold" aria-pressed="false"><span>Hold to lock</span></button><button id="homeBtn">Back to start</button></div>
+    <div id="confirm" hidden><span>Unlock the destination?</span><button id="unlockYes">Unlock</button><button id="unlockNo">Keep</button></div>
+    <ul id="marks" aria-label="Marks"></ul>
+  </section>
   <div id="legend" role="group" aria-label="Map key">
     <div class="col">
       <div class="eyebrow">Map</div>
@@ -151,16 +233,16 @@ html.still *{transition:none!important;animation:none!important}
       <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="1" y="1" width="20" height="10" rx="2" fill="#d6d1ca" stroke="#bdb6aa" stroke-width=".8"/></svg>Rock and scree</div>
       <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="1" y="1" width="20" height="10" rx="2" fill="#aacee4" stroke="#4a80ac" stroke-width="1"/></svg>Water</div>
       <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M1 4.5c6-3.5 10 2.5 20-1" fill="none" stroke="#b58a63" stroke-width=".9"/><path d="M1 9c6-3.5 10 2.5 20-1" fill="none" stroke="#8a542e" stroke-width="1.6"/></svg>Contours</div>
-      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M1 3.5H21M1 8.5H21M7.5 0.5V11.5M15 0.5V11.5" fill="none" stroke="#5f7393" stroke-width=".9"/></svg><span id="lgGrid">1 km grid</span></div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M1 3.5H21M1 8.5H21M7.5 0.5V11.5M15 0.5V11.5" fill="none" stroke="#5f7393" stroke-width=".9"/></svg>1 km grid</div>
     </div>
     <div class="col">
       <div class="eyebrow">Plotting</div>
       <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="1" y="1" width="20" height="10" rx="3" fill="rgba(217,72,28,.3)" stroke="#a8330c" stroke-width="1.2"/></svg>Where you can be</div>
-      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M1 6H21" stroke="#1f1d1a" stroke-width="1.6" stroke-dasharray="4 2.5"/></svg><span id="lgSight">Line to the peak</span></div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M1 6H21" stroke="#1f1d1a" stroke-width="1.6" stroke-dasharray="4 2.5"/></svg>Pencil line from a peak</div>
       <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><circle cx="11" cy="6" r="4.4" fill="#fff" stroke="#1f1d1a" stroke-width="1.6"/><circle cx="11" cy="6" r="1.3" fill="#1f1d1a"/></svg>Fix</div>
-      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M2 6H20" stroke="#fff" stroke-width="5.5" stroke-linecap="round"/><path d="M2 6H20" stroke="#b0157f" stroke-width="2.8" stroke-linecap="round"/></svg>Route</div>
-      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><circle cx="11" cy="6" r="4.4" fill="#fff" stroke="#1f1d1a" stroke-width="2.2"/></svg>Rendezvous</div>
-      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><defs><pattern id="hp" width="3.5" height="3.5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V3.5" stroke="#c62828" stroke-width="1.1"/></pattern></defs><rect x="1" y="1" width="20" height="10" rx="2" fill="url(#hp)" stroke="#c62828" stroke-width=".8"/></svg><span id="lgSteep">Too steep for you</span></div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M2 6H20" stroke="#1f1d1a" stroke-width="5.5" stroke-linecap="round"/><path d="M2 6H8" stroke="#e3ab06" stroke-width="3"/><path d="M8 6H14" stroke="#ea7a1c" stroke-width="3"/><path d="M14 6H20" stroke="#d4386c" stroke-width="3"/></svg>Route, by how hard</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="5.5" y="0.5" width="11" height="11" rx="2" fill="#1f1d1a"/><text x="11" y="9.2" font-size="8.5" font-weight="700" text-anchor="middle" fill="#fff">H</text></svg>Start, kept as home</div>
+      <div class="k"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><defs><pattern id="hp" width="3.5" height="3.5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V3.5" stroke="#c62828" stroke-width="1.1"/></pattern></defs><rect x="1" y="1" width="20" height="10" rx="2" fill="url(#hp)" stroke="#c62828" stroke-width=".8"/></svg>Too steep for you</div>
     </div>
     <div id="collar">
       <div id="scale"><span><span id="scaleLab"></span> <span id="scaleNote"></span></span><span id="scaleBar" style="width:100px"></span><span id="sheetNote"></span></div>
@@ -180,9 +262,15 @@ html.still *{transition:none!important;animation:none!important}
     <button data-health="healthy" id="bHealthy" class="act" aria-pressed="true">Healthy</button>
     <button data-health="injured" id="bInjured" aria-pressed="false">Injured</button>
   </div>
+  <span class="vr" aria-hidden="true"></span>
+  <div class="group" role="group" aria-label="Aiming error">
+    <span class="glab">Aim ±</span><button data-aim="1" aria-pressed="false">1°</button><button data-aim="2" class="act" aria-pressed="true">2°</button><button data-aim="4" aria-pressed="false">4°</button>
+  </div>
 </div>
 
+<div id="hint" class="panel" role="status"></div>
 <div id="banner" class="panel" role="status"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <div id="walkbar" class="panel">
   <button id="play">Pause</button>
@@ -191,26 +279,28 @@ html.still *{transition:none!important;animation:none!important}
   <div class="group" role="group" aria-label="Playback speed">
     <button data-speed="120" aria-pressed="false">×120</button><button data-speed="300" class="act" aria-pressed="true">×300</button><button data-speed="900" aria-pressed="false">×900</button>
   </div>
-  <button id="refix">Re-fix now</button>
+  <button id="refix">Re-fix</button>
+  <button id="markBtn">Mark here</button>
 </div>
 
 <nav id="steps" class="panel" aria-label="Demo steps">
   <button id="prev" aria-label="Previous step"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M9 2 4 7l5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
   <button data-step="0"><span class="n">0</span>GPS lost</button>
-  <button data-step="1"><span class="n">1</span>Barometer</button>
-  <button data-step="2"><span class="n">2</span>Bearing</button>
-  <button data-step="3"><span class="n">3</span>Tilt</button>
+  <button data-step="1"><span class="n">1</span>Altitude</button>
+  <button data-step="2"><span class="n">2</span>Peak A</button>
+  <button data-step="3"><span class="n">3</span>Peak B</button>
+  <button data-step="4"><span class="n">4</span>Peak C</button>
   <span class="vr" aria-hidden="true"></span>
-  <button data-step="4"><span class="n">4</span>Route</button>
-  <button data-step="5"><span class="n">5</span>Walk</button>
-  <button data-step="6">Reveal</button>
+  <button data-step="5"><span class="n">5</span>Go to</button>
+  <button data-step="6"><span class="n">6</span>Walk</button>
+  <button data-step="7">Reveal</button>
   <button id="next" aria-label="Next step"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M5 2l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
 </nav>
 
 <div id="phone" class="panel" role="region" aria-label="Survivor phone, no map">
   <div class="notch" aria-hidden="true"></div>
   <div class="ph-status"><span class="ns">No service · GPS off</span><span id="phFix" class="tag">No fix</span></div>
-  <canvas id="tape" width="560" height="92" role="img" aria-label="Compass tape"></canvas>
+  <canvas id="tape" width="560" height="92" role="img" aria-label="Heading tape"></canvas>
   <div class="ph-main">
     <svg id="arrow" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="none" stroke="#2c2c2e" stroke-width="1.5"/><path id="arrowPath" d="M50 8 L74 72 L50 60 L26 72 Z" fill="#ff375f"/></svg>
     <div id="phStop">STAY<br>SIGNAL<br>WAIT</div>
@@ -218,12 +308,13 @@ html.still *{transition:none!important;animation:none!important}
     <div id="phSay"></div>
   </div>
   <div class="ph-coords" id="phCoords"></div>
-  <canvas id="sky" width="560" height="192" role="img" aria-label="Skyline toward where the phone points"></canvas>
+  <canvas id="sky" width="560" height="192" role="img" aria-label="What the camera sees, the peak to aim at is boxed"></canvas>
   <button id="phBtn">Next</button>
 </div>
 
 <p id="credit"></p>
 <script src="lib/deck.gl@9.3.11/dist.min.js"></script>
+<script src="team8_nav.js"></script>
 <script src="data/areas.js"></script>
 <script>
 // Pick the area (?area=<id>, else the first), load its bundle as a classic script so file:// works, then start.
@@ -232,28 +323,29 @@ html.still *{transition:none!important;animation:none!important}
   const AREAS = window.TEAM8_AREAS || [], want = new URLSearchParams(location.search).get('area');
   const pick = AREAS.find(a => a.id === want) || AREAS[0], sel = document.getElementById('areaSel');
   AREAS.forEach(a => { const o = document.createElement('option'); o.value = a.id; o.textContent = a.name; o.selected = !!pick && a.id === pick.id; sel.appendChild(o); });
-  sel.onchange = () => { const q = new URLSearchParams(location.search); q.set('area', sel.value); q.delete('t'); location.search = q.toString(); };
+  sel.onchange = () => { const q = new URLSearchParams(); q.set('area', sel.value); location.search = q.toString(); };
   if (!pick || !window.deck) { TEAM8_MAIN(); return; }
   const sc = document.createElement('script'); sc.src = `data/${pick.id}/bundle.js`; sc.onload = sc.onerror = TEAM8_MAIN; document.body.appendChild(sc);
 })();
 function TEAM8_MAIN() {
 'use strict';
 const D = window.TEAM8;
-if (!D || !window.deck) {
+if (!D || !window.deck || !window.TEAM8_NAV) {
   const L = document.getElementById('loading');
   L.classList.add('err');
   L.innerHTML = /^(data|about|blob):$/.test(location.protocol)
     ? '<div><b>This window opened the page without its folder.</b><br>Open <a href="http://localhost:8792/">http://localhost:8792</a> (run <code>python -m http.server 8792</code> in this folder),<br>or double-click index.html so it opens in Chrome or Edge.</div>'
-    : '<div><b>Missing files.</b><br>Keep index.html next to the lib and data folders (data/areas.js and data/&lt;area&gt;/bundle.js).</div>';
+    : '<div><b>Missing files.</b><br>Keep index.html next to team8_nav.js and the lib and data folders (data/areas.js and data/&lt;area&gt;/bundle.js).</div>';
   return;
 }
 const {Deck, MapView, FirstPersonView, LinearInterpolator, WebMercatorViewport,
   TerrainLayer, TripsLayer, PathLayer, LineLayer, ScatterplotLayer, TextLayer} = deck;
+
 const M = D.meta, S = D.sim, B = M.bounds;
-const LMN = S.landmark.name, DECL = (M.declination && M.declination.deg) || 0;
+const DECL = (M.declination && M.declination.deg) || 0;
 const DECL_TXT = `${Math.abs(DECL).toFixed(1)}° ${DECL >= 0 ? 'E' : 'W'}`;
-const CAP_OK = S.routes.healthy ? S.routes.healthy.cap_deg : 30, CAP_INJ = S.routes.injured ? S.routes.injured.cap_deg : 18;
-const TW = M.grid.width, TH = M.grid.height, PW = S.grid.width, PH = S.grid.height;
+const CAP = {healthy: 30, injured: 18}, SPEED = {healthy: 1, injured: 0.5};
+const TW = M.grid.width, TH = M.grid.height;
 const MPLON = M.grid.cell_m[0] / ((B[2] - B[0]) / TW), MPLAT = M.grid.cell_m[1] / ((B[3] - B[1]) / TH);
 // peak labels sit above their dot, or beside it (west one to the left, east one to the right) when another peak is within 1.2 km east or west
 const SIDE = new Map(M.peaks.map(p => {
@@ -261,7 +353,7 @@ const SIDE = new Map(M.peaks.map(p => {
     const dx = (o.lon - p.lon) * MPLON, dy = (o.lat - p.lat) * MPLAT;
     return o !== p && Math.hypot(dx, dy) < 1200 && Math.abs(dx) > Math.abs(dy);
   });
-  return [p, q ? (q.lon > p.lon ? -1 : 1) : 0];
+  return [p.name, q ? (q.lon > p.lon ? -1 : 1) : 0];
 }));
 const NAMED = M.peaks.filter(p => p.verified);
 const DECODER = M.elevation_decoder;   // constant references, so the mesh is built once
@@ -269,8 +361,11 @@ const BOUNDS = B;
 const $ = id => document.getElementById(id);
 const UI_FONT = '"Noto Sans JP", "Segoe UI", sans-serif', NUM_FONT = '"B612 Mono", Consolas, monospace';
 const REDUCED = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
-const NB = s => String(s).replace(/(\d) (?=(?:m|km|km²|min|h)\b)/g, '$1 ');   // keep a number and its unit on one line
+const QS = new URLSearchParams(location.search), STILL = QS.has('still');
+if (STILL) document.documentElement.classList.add('still');   // screenshots: no half-finished button transitions
+const NB = s => String(s).replace(/(\d) (?=(?:m|km|km²|min|h)(?![\w]))/g, '$1 ');   // keep a number and its unit on one line
 const press = (el, on) => { el.classList.toggle('act', on); el.setAttribute('aria-pressed', on ? 'true' : 'false'); };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 
 // ---------------------------------------------------------------- geometry helpers
 const toXY = (lon, lat) => [(lon - B[0]) * MPLON, (lat - B[1]) * MPLAT];
@@ -281,6 +376,9 @@ const dist = (a, b) => { const [x0, y0] = toXY(a[0], a[1]), [x1, y1] = toXY(b[0]
 const wrap = d => ((d % 360) + 360) % 360;
 const angd = (a, b) => ((a - b + 540) % 360) - 180;
 const fmtT = s => { const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min` : `${m} min`; };
+const fmtKm2 = v => v >= 10 ? v.toFixed(1) : v >= 1 ? v.toFixed(2) : v.toFixed(3);
+const fmtM = v => v >= 1000 ? `${(v / 1000).toFixed(1)} km` : `${Math.max(10, Math.round(v / 10) * 10)} m`;
+const sgn = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '°';
 const DIR8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
 // WGS84 UTM and MGRS (for the coordinate readout)
@@ -304,51 +402,77 @@ function mgrs(lon, lat) {
 }
 
 // ---------------------------------------------------------------- state
-const EST = [S.estimate.lon, S.estimate.lat], TRUTH = [S.truth.lon, S.truth.lat];
-const MORAN = [S.landmark.lon, S.landmark.lat, S.landmark.elev_m];
-const LZ = [S.rendezvous.lon, S.rendezvous.lat, S.rendezvous.elev_m];
-const state = {step: 0, view: '3d', health: 'healthy', t: 0, playing: true, speed: 300, heading: wrap(brg(EST, MORAN)),
-  vs: null, tex: {}, loaded: false, fixD: 0, fixes: 0, refixUntil: 0, drift: [0, 0], lastD: 0};
+let NAV = null;
+const RV = S.rendezvous ? {lon: S.rendezvous.lon, lat: S.rendezvous.lat, label: S.rendezvous.label || 'Rendezvous', kind: 'rv'} : null;
+const state = {step: 0, view: '3d', health: 'healthy', aim: 2, scen: null, picked: false,
+  dest: null, locked: false, route: null, rt: null, rtKey: '', start: null, home: null, marks: [], trail: [],
+  t: 0, playing: true, speed: 300, heading: 0, vs: null, tex: {}, loaded: false,
+  fixD: 0, fixes: 0, refixUntil: 0, drift: [0, 0], lastD: 0, trailD: 0, presets: []};
 
-// route and dead-reckoning bookkeeping
-const R = S.routes.healthy;
-const RP = R ? R.path : [], RT = R ? R.timestamps : [];
-const RD = [0];
-for (let i = 1; i < RP.length; i++) RD.push(RD[i - 1] + dist(RP[i - 1], RP[i]));
+// one landing: what the pilot sees and reads there, and the fix solved from those readings alone
+let scenSeq = 0;
+function land(lon, lat, picked) {
+  const t0 = performance.now();
+  const sg = NAV.sight(lon, lat, {sa: state.aim, se: 1, sb: 30});
+  const sol = NAV.solve({baro: sg.baro, sb: 30, sa: state.aim, se: 1, peaks: sg.peaks, compass: sg.compass});
+  const np = sg.peaks.length, fixStep = 1 + np, st = sol.stages, last = st[Math.min(st.length - 1, fixStep)];
+  const fin = np && last && !last.empty ? last : null, est = fin ? [fin.est.lon, fin.est.lat, fin.est.z] : null;
+  const vis = sg.seen.filter(p => p.visible);
+  const sc = {id: ++scenSeq, truth: [lon, lat, sg.z], sg, st, np, fixStep, fin, est, picked,
+    err: est ? Math.round(dist([lon, lat], est)) : null, inside: !!fin && NAV.inStage(fin, lon, lat),
+    skyLo: Math.min(-8, Math.floor(Math.min(...sg.skyline.horizon_deg)) - 2), ms: 0};
+  sc.skyHi = Math.max(sc.skyLo + 40, Math.ceil(Math.max(0, ...vis.map(p => p.elev_deg))) + 8);
+  sc.ms = Math.round(performance.now() - t0);
+  Object.values(state.tex).forEach(c => { if (c && c.width) c.width = c.height = 1; });   // let the old textures go
+  Object.assign(state, {scen: sc, tex: {}, picked: !!picked, home: est, start: est, marks: [], trail: [], rt: null, rtKey: '', route: null,
+    locked: false, dest: RV && !NAV.isWater(RV.lon, RV.lat) ? {...RV} : null});
+  window.TEAM8_SCEN = {ms: sc.ms, solve_ms: sol.ms, cells: sol.cells, err_m: sc.err, r95_m: fin && Math.round(fin.r95), inside95: sc.inside,
+    peaks: sg.peaks.map(p => p.name), visible: vis.map(p => p.name)};
+  return sc;
+}
+const stageAt = s => { const sc = state.scen; return sc.st[Math.min(s >= 5 ? sc.fixStep : s, sc.st.length - 1, sc.fixStep)]; };
+const aimedAt = s => { const sc = state.scen; return s >= 5 ? sc.np : Math.max(0, Math.min(sc.np, s - 1)); };
+
+// ---------------------------------------------------------------- route bookkeeping (start, destination, health)
+function computeRoute() {
+  const sc = state.scen;
+  state.route = null;
+  if (!sc.fin || !state.dest) return;
+  const from = state.start || sc.est, key = `${from[0].toFixed(6)},${from[1].toFixed(6)}|${state.health}`;
+  if (state.rtKey !== key) { state.rt = NAV.reach(from[0], from[1], CAP[state.health], SPEED[state.health], 9 * 3600); state.rtKey = key; }
+  const pp = NAV.pathTo(state.rt, state.dest.lon, state.dest.lat);
+  const r = pp && NAV.buildRoute(pp, state.rt);
+  if (r && !(r.length_m < 25 && !r.reached)) { r.say = NAV.describe(r); state.route = r; }
+}
+const R = () => state.route;
 function routeAt(t) {
-  if (!R) return null;
+  const r = R(); if (!r) return null;
+  const RP = r.path, RT = r.timestamps, RD = r.dist;
   t = Math.max(0, Math.min(t, RT[RT.length - 1]));
   let lo = 0, hi = RT.length - 1;
   while (hi - lo > 1) { const m = (lo + hi) >> 1; if (RT[m] <= t) lo = m; else hi = m; }
   const f = RT[hi] > RT[lo] ? (t - RT[lo]) / (RT[hi] - RT[lo]) : 0, a = RP[lo], b = RP[hi];
-  return {i: lo, pos: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f],
-    d: RD[lo] + (RD[hi] - RD[lo]) * f, hdg: brg(a, b)};
+  return {i: lo, pos: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f], d: RD[lo] + (RD[hi] - RD[lo]) * f, hdg: brg(a, b)};
 }
-
-// posterior spread of the final stage, from the probability PNG (P is proportional to R squared)
-let SIG0 = 60;
+const routeEnd = () => { const r = R(); return r ? r.timestamps[r.timestamps.length - 1] : 0; };
+function setDest(lon, lat, label, kind) {
+  state.dest = {lon, lat, label, kind};
+  computeRoute();
+  if (state.step < 5 || state.step === 7) state.step = 5;
+  if (state.step === 6) resetWalk();
+  frame(); render();
+}
 
 // ---------------------------------------------------------------- images and the texture compositor
 const loadImg = src => new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; });
 const canvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-let COLOR, GLOW = [], SLOPE = null;
+let COLOR, SLOPE = null;
+const HATCH = {};
 const TSC = Math.max(1, Math.max(TW, TH * 1.35) / 1150);   // texture pixels per screen pixel when the whole tile fills the view
 async function prepImages() {
   COLOR = await loadImg(D.img.color);
   const sl = await loadImg(D.img.slope), slc = canvas(sl.width, sl.height), slx = slc.getContext('2d', {willReadFrequently: true});
   slx.drawImage(sl, 0, 0); SLOPE = {w: sl.width, h: sl.height, d: slx.getImageData(0, 0, sl.width, sl.height).data};
-  const probs = await Promise.all(D.img.prob.map(loadImg));
-  probs.forEach(im => {
-    const w = im.width, h = im.height, c = canvas(w, h), x = c.getContext('2d');
-    x.drawImage(im, 0, 0);
-    const p = x.getImageData(0, 0, w, h).data, g = x.createImageData(w, h), o = g.data;
-    for (let i = 0; i < w * h; i++) {
-      const v = p[4 * i] / 255;   // square root of the posterior relative to its peak
-      if (v > 0.03) { o[4 * i] = 217; o[4 * i + 1] = 72; o[4 * i + 2] = 28; o[4 * i + 3] = Math.round((0.16 + 0.5 * v) * 255); }
-    }
-    const gc = canvas(w, h); gc.getContext('2d').putImageData(g, 0, 0); GLOW.push(gc);
-  });
-  SIG0 = Math.max(25, Math.sqrt(ST[ST.length - 1].hpd50_km2 * 1e6 / Math.PI));   // fix radius on the phone: a circle with the area of the 50% region
 }
 const trace = (ctx, pts, close) => { pts.forEach((p, i) => { const [x, y] = px(p[0], p[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); if (close) ctx.closePath(); };
 function strokePath(ctx, pts, color, width, casing, dash) {
@@ -359,54 +483,108 @@ function strokePath(ctx, pts, color, width, casing, dash) {
   ctx.setLineDash([]);
 }
 function hatch(cap) {   // red hatching where the smoothed slope is over the limit; the route planner reads the same slope file
-  const key = 'hatch' + cap;
-  if (state.tex[key]) return state.tex[key];
+  if (HATCH[cap]) return HATCH[cap];
   const {w, h, d} = SLOPE, m = canvas(w, h), mx = m.getContext('2d'), id = mx.createImageData(w, h), lim = cap * 2;
   for (let i = 0; i < w * h; i++) if (d[4 * i] > lim) id.data[4 * i + 3] = 255;
   mx.putImageData(id, 0, 0);
-  const sp = Math.max(4, Math.round(6 * TSC)), t = canvas(sp, sp), tx = t.getContext('2d');
-  tx.strokeStyle = 'rgba(198,40,40,.6)'; tx.lineWidth = Math.max(1, 1.1 * TSC);
+  const sp = Math.max(5, Math.round(8 * TSC)), t = canvas(sp, sp), tx = t.getContext('2d');   // light and open, so the route stays the loudest line
+  tx.strokeStyle = 'rgba(198,40,40,.42)'; tx.lineWidth = Math.max(1, 1.1 * TSC);
   tx.beginPath(); tx.moveTo(0, sp); tx.lineTo(sp, 0); tx.moveTo(-sp / 2, sp / 2); tx.lineTo(sp / 2, -sp / 2); tx.moveTo(sp / 2, sp * 1.5); tx.lineTo(sp * 1.5, sp / 2); tx.stroke();
   const c = canvas(TW, TH), x = c.getContext('2d');
   x.fillStyle = x.createPattern(t, 'repeat'); x.fillRect(0, 0, TW, TH);
   x.globalCompositeOperation = 'destination-in'; x.imageSmoothingEnabled = true; x.drawImage(m, 0, 0, TW, TH);
-  return (state.tex[key] = c);
+  return (HATCH[cap] = c);
+}
+// the posterior as a glow (alpha follows the square root of P relative to its peak), and its 95% and 50% outlines
+function glowCanvas(stg) {
+  const {PW, PH} = NAV.post, c = canvas(PW, PH), x = c.getContext('2d'), id = x.createImageData(PW, PH), o = id.data, P = stg.P;
+  let mx = 0; for (let i = 0; i < P.length; i++) if (P[i] > mx) mx = P[i];
+  for (let i = 0; i < P.length; i++) {
+    const v = Math.sqrt(P[i] / mx);
+    if (v > 0.03) { o[4 * i] = 217; o[4 * i + 1] = 72; o[4 * i + 2] = 28; o[4 * i + 3] = Math.round((0.16 + 0.5 * v) * 255); }
+  }
+  x.putImageData(id, 0, 0);
+  return c;
+}
+function contour(P, W, H, thr) {   // marching squares between cell centres, in grid units
+  const segs = [];
+  for (let r = 0; r < H - 1; r++) for (let c = 0; c < W - 1; c++) {
+    const a = P[r * W + c], b = P[r * W + c + 1], d = P[(r + 1) * W + c], e = P[(r + 1) * W + c + 1];
+    const k = (a >= thr) | ((b >= thr) << 1) | ((e >= thr) << 2) | ((d >= thr) << 3);
+    if (k === 0 || k === 15) continue;
+    const t = (p, q) => (thr - p) / (q - p);
+    const T = () => [c + t(a, b), r], Rt = () => [c + 1, r + t(b, e)], Bm = () => [c + t(d, e), r + 1], L = () => [c, r + t(a, d)];
+    switch (k) {
+      case 1: case 14: segs.push([L(), T()]); break;
+      case 2: case 13: segs.push([T(), Rt()]); break;
+      case 3: case 12: segs.push([L(), Rt()]); break;
+      case 4: case 11: segs.push([Rt(), Bm()]); break;
+      case 6: case 9: segs.push([T(), Bm()]); break;
+      case 7: case 8: segs.push([L(), Bm()]); break;
+      case 5: segs.push([L(), T()], [Rt(), Bm()]); break;
+      case 10: segs.push([T(), Rt()], [L(), Bm()]); break;
+    }
+  }
+  return segs;
+}
+function strokeSegs(x, segs, sx, sy, color, width, dash) {
+  x.strokeStyle = color; x.lineWidth = width; x.lineCap = 'round'; x.setLineDash(dash || []);
+  x.beginPath(); segs.forEach(([p, q]) => { x.moveTo((p[0] + 0.5) * sx, (p[1] + 0.5) * sy); x.lineTo((q[0] + 0.5) * sx, (q[1] + 0.5) * sy); }); x.stroke();
+  x.setLineDash([]);
+}
+// pencil plotting on the paper: the tilt ring around the first peak, then a line from every aimed peak
+function plotPencil(x, sc, j, stg) {
+  const P = sc.sg.peaks, dash = [7 * TSC, 4 * TSC];
+  if (j === 1) {
+    const A = P[0], dz = A.elev_m - sc.sg.baro - NAV.EYE, tn = Math.tan(A.e * Math.PI / 180);
+    let d = tn > 0.01 ? dz / tn : 0;
+    for (let k = 0; k < 3 && d > 0; k++) d = (dz - NAV.CURV * d * d) / tn;
+    if (d > 100) {
+      const [cx, cy] = px(A.lon, A.lat);
+      [['rgba(255,255,255,.75)', 1.6 * TSC + 2.6 * TSC], ['#1f1d1a', 1.6 * TSC]].forEach(([c, w]) => {
+        x.strokeStyle = c; x.lineWidth = w; x.setLineDash(dash); x.beginPath(); x.ellipse(cx, cy, d / M.grid.cell_m[0], d / M.grid.cell_m[1], 0, 0, 2 * Math.PI); x.stroke();
+      });
+      x.setLineDash([]);
+    }
+    if (sc.sg.compass) {   // one peak only: the compass bearing is the fallback, drawn as the old pencil line
+      const back = (sc.sg.compass.deg + 180) * Math.PI / 180, [mx, my] = toXY(A.lon, A.lat), L = A.dist_m + 900;
+      strokePath(x, [[A.lon, A.lat], fromXY(mx + Math.sin(back) * L, my + Math.cos(back) * L)], '#1f1d1a', 1.6 * TSC, 'rgba(255,255,255,.75)', dash);
+    }
+    return;
+  }
+  const used = P.slice(0, j), th = NAV.offsetAt(stg.est.lon, stg.est.lat, used);
+  used.forEach(p => {
+    const back = (p.m - th + 180) * Math.PI / 180, [mx, my] = toXY(p.lon, p.lat), L = dist([p.lon, p.lat], [stg.est.lon, stg.est.lat]) + 800;
+    strokePath(x, [[p.lon, p.lat], fromXY(mx + Math.sin(back) * L, my + Math.cos(back) * L)], '#1f1d1a', 1.6 * TSC, 'rgba(255,255,255,.75)', dash);
+  });
+}
+function texKey() {
+  const s = state.step, sc = state.scen;
+  if (s <= 4) return 'p' + Math.min(s, sc.fixStep);
+  return s === 7 ? 'reveal' : 'route_' + state.health;
 }
 function texture(key) {
   if (state.tex[key]) return state.tex[key];
-  const c = canvas(TW, TH), x = c.getContext('2d');
+  const sc = state.scen, c = canvas(TW, TH), x = c.getContext('2d');
   x.drawImage(COLOR, 0, 0, TW, TH);
-  const k = key === 'p0' ? undefined : ({p1: 0, p2: 1, p3: 2}[key] ?? 2);
-  const late = key.startsWith('route') || key === 'reveal';
-  if (key.startsWith('route')) x.drawImage(hatch(key === 'route_injured' ? CAP_INJ : CAP_OK), 0, 0);
-  if (key === 'p0') { x.fillStyle = 'rgba(217,72,28,.06)'; x.fillRect(0, 0, TW, TH); }
-  if (k !== undefined) {
-    x.imageSmoothingEnabled = true; x.globalAlpha = late ? 0.45 : 1; x.drawImage(GLOW[k], 0, 0, TW, TH); x.globalAlpha = 1;
-    const ol = ST[k].outline;
-    if (ol) {
-      x.lineJoin = 'round'; x.strokeStyle = '#a8330c'; x.lineWidth = 1.7 * TSC;
-      x.beginPath(); ol.hpd95.forEach(r => trace(x, r, true)); x.stroke();
-      if (!late) { x.setLineDash([5 * TSC, 4 * TSC]); x.lineWidth = 1.1 * TSC; x.beginPath(); ol.hpd50.forEach(r => trace(x, r, true)); x.stroke(); x.setLineDash([]); }
-    }
+  const m = /^p(\d)$/.exec(key), k = m ? +m[1] : sc.fixStep, late = !m;
+  if (key.startsWith('route')) x.drawImage(hatch(CAP[state.health]), 0, 0);
+  if (k === 0) { x.fillStyle = 'rgba(217,72,28,.06)'; x.fillRect(0, 0, TW, TH); }
+  const stg = sc.st[Math.min(k, sc.st.length - 1)];
+  if (k >= 1 && stg && stg.P) {
+    const {PW, PH, K} = NAV.post, gw = PW * K * TW / NAV.W, gh = PH * K * TH / NAV.H, sx = gw / PW, sy = gh / PH;
+    x.imageSmoothingEnabled = true; x.globalAlpha = late ? 0.45 : 1; x.drawImage(glowCanvas(stg), 0, 0, gw, gh); x.globalAlpha = 1;
+    strokeSegs(x, contour(stg.P, PW, PH, stg.thr95), sx, sy, '#a8330c', 1.7 * TSC);
+    if (!late && k >= 2) strokeSegs(x, contour(stg.P, PW, PH, stg.thr50), sx, sy, '#a8330c', 1.1 * TSC, [5 * TSC, 4 * TSC]);
+    if (k >= 2 && !late) plotPencil(x, sc, k - 1, stg);
+    if (late && sc.fin) plotPencil(x, sc, sc.np, sc.fin);
   }
-  if (key === 'p2' || key === 'p3') {   // the pencil line from the landmark along the back azimuth, and its ±sigma wedge
-    const lop = S.line_of_position, L = dist(lop[0], lop[lop.length - 1]), back = S.measurements.bearing_deg + 180, [mx, my] = toXY(MORAN[0], MORAN[1]);
-    [-S.measurements.bearing_sigma_deg, S.measurements.bearing_sigma_deg].forEach(dd => {
-      const th = (back + dd) * Math.PI / 180;
-      strokePath(x, [MORAN, fromXY(mx + Math.sin(th) * L, my + Math.cos(th) * L)], 'rgba(31,29,26,.5)', 1 * TSC, null, [2.5 * TSC, 3 * TSC]);
-    });
-    strokePath(x, lop, '#1f1d1a', 1.6 * TSC, 'rgba(255,255,255,.75)', [7 * TSC, 4 * TSC]);
-  }
-  const rr = key === 'route_injured' ? S.routes.injured : R;
-  if ((key.startsWith('route') || key === 'reveal') && rr) strokePath(x, rr.path, '#b0157f', 2.6 * TSC, '#ffffff');
-  return (state.tex[key] = c.toDataURL('image/jpeg', 0.9));
+  return (state.tex[key] = c);
 }
-const texKey = () => state.step <= 3 ? 'p' + state.step : (state.step === 6 ? 'reveal' : 'route_' + state.health);
 
 // ---------------------------------------------------------------- terrain mesh on the main thread
 // The deck.gl bundle parses terrain only in a web worker fetched from a CDN, which breaks offline and on file://.
 // This loader decodes the terrain-RGB PNG itself and builds a regular grid mesh (10 m image: about 0.8 M vertices).
-const STRIDE = 1;
 const GridTerrainLoader = {
   name: 'Team-8 grid terrain', id: 'team8-grid-terrain', module: 'terrain', version: '1.0.0', worker: false,
   extensions: ['png'], mimeTypes: ['image/png'], binary: true,
@@ -417,30 +595,27 @@ const GridTerrainLoader = {
     const w = bmp.width, h = bmp.height, c = canvas(w, h), x = c.getContext('2d', {willReadFrequently: true});
     x.drawImage(bmp, 0, 0);
     const p = x.getImageData(0, 0, w, h).data, dec = o.elevationDecoder || DECODER, [x0, y0, x1, y1] = o.bounds || BOUNDS;
-    const gw = Math.floor((w - 1) / STRIDE) + 1, gh = Math.floor((h - 1) / STRIDE) + 1;
-    const pos = new Float32Array(gw * gh * 3), uv = new Float32Array(gw * gh * 2);
+    const pos = new Float32Array(w * h * 3), uv = new Float32Array(w * h * 2);
     let zmin = Infinity, zmax = -Infinity;
-    for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
-      const X = Math.min(w - 1, i * STRIDE), Y = Math.min(h - 1, j * STRIDE), k = 4 * (Y * w + X), v = j * gw + i;
-      const z = p[k] * dec.rScaler + p[k + 1] * dec.gScaler + p[k + 2] * dec.bScaler + dec.offset;
-      pos[3 * v] = x0 + (x1 - x0) * (X + 0.5) / w; pos[3 * v + 1] = y1 - (y1 - y0) * (Y + 0.5) / h; pos[3 * v + 2] = z;
-      uv[2 * v] = (X + 0.5) / w; uv[2 * v + 1] = (Y + 0.5) / h;
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+      const k = 4 * (j * w + i), v = j * w + i, z = p[k] * dec.rScaler + p[k + 1] * dec.gScaler + p[k + 2] * dec.bScaler + dec.offset;
+      pos[3 * v] = x0 + (x1 - x0) * (i + 0.5) / w; pos[3 * v + 1] = y1 - (y1 - y0) * (j + 0.5) / h; pos[3 * v + 2] = z;
+      uv[2 * v] = (i + 0.5) / w; uv[2 * v + 1] = (j + 0.5) / h;
       if (z < zmin) zmin = z; if (z > zmax) zmax = z;
     }
-    const idx = new Uint32Array((gw - 1) * (gh - 1) * 6);
+    const idx = new Uint32Array((w - 1) * (h - 1) * 6);
     let n = 0;
-    for (let j = 0; j < gh - 1; j++) for (let i = 0; i < gw - 1; i++) {
-      const a = j * gw + i, b = a + 1, cc = a + gw, d = cc + 1;
+    for (let j = 0; j < h - 1; j++) for (let i = 0; i < w - 1; i++) {
+      const a = j * w + i, b = a + 1, cc = a + w, d = cc + 1;
       idx[n++] = a; idx[n++] = cc; idx[n++] = b; idx[n++] = b; idx[n++] = cc; idx[n++] = d;
     }
-    window.TEAM8_MESH = {vertices: gw * gh, triangles: idx.length / 3, ms: Math.round(performance.now() - t0), at: Math.round(t0)};
-    setTimeout(() => { $('loading').style.display = 'none'; }, 300);
+    window.TEAM8_MESH = {vertices: w * h, triangles: idx.length / 3, ms: Math.round(performance.now() - t0)};
     return {loaderData: {header: {}}, header: {vertexCount: idx.length, boundingBox: [[x0, y0, zmin], [x1, y1, zmax]]}, mode: 4,
       indices: {value: idx, size: 1}, attributes: {POSITION: {value: pos, size: 3}, TEXCOORD_0: {value: uv, size: 2}}};
   }
 };
 
-// ---------------------------------------------------------------- views
+// ---------------------------------------------------------------- views and the camera for each step
 const mapView = new MapView({id: 'map', controller: {dragRotate: true, touchRotate: true}, farZMultiplier: 3});
 const eyeView = new FirstPersonView({id: 'eye', controller: true, fovy: 62, near: 2, far: 40000});
 function fitUI() {
@@ -448,56 +623,125 @@ function fitUI() {
   const w = window.innerWidth, h = window.innerHeight, narrow = w < 760;
   document.body.classList.toggle('narrow', narrow);
   const z = narrow ? 1 : Math.min(1, w / 1440, h / 760);
-  ['info', 'views', 'banner', 'walkbar', 'credit', 'steps', 'phone'].forEach(id => { $(id).style.zoom = z; });
+  ['info', 'views', 'hint', 'banner', 'walkbar', 'credit', 'steps', 'phone', 'toast'].forEach(id => { $(id).style.zoom = z; });
   if (narrow) {
     const st = $('steps'), sz = Math.min(1, (w - 16) / st.offsetWidth);
     st.style.zoom = sz;
     $('phone').style.zoom = Math.max(0.3, Math.min(1, (h - 32 - 64 * sz) / 656, (w - 16) / 316));
   }
 }
-function fitVS(pitch, bearing) {
-  const w = Math.max(400, window.innerWidth), h = Math.max(400, window.innerHeight);
-  const pad = {top: Math.min(80, h * 0.1), bottom: Math.min(90, h * 0.12), left: Math.min(390, w * 0.3), right: Math.min(w > 1180 ? 340 : 270, w * 0.25)};
+function padding() {
+  const w = Math.max(400, window.innerWidth), h = Math.max(400, window.innerHeight), z = Math.min(1, w / 1440, h / 760);
+  return {top: Math.round(130 * z), bottom: Math.round(110 * z), left: Math.round(410 * z), right: Math.round((w > 1180 ? 350 : 290) * z)};
+}
+// the camera turns around a point lifted to the height of the terrain it frames (position), not around sea level:
+// a 2,500 m tile otherwise stands closer to the camera than its centre, and a close-up puts the camera inside the mountain
+function fitBox(w, s, e, n, pitch, bearing, zc) {
+  const W = Math.max(400, window.innerWidth), H = Math.max(400, window.innerHeight);
   let v;
-  try { v = new WebMercatorViewport({width: w, height: h}).fitBounds([[B[0], B[1]], [B[2], B[3]]], {padding: pad}); }
-  catch (e) { v = {longitude: (B[0] + B[2]) / 2, latitude: (B[1] + B[3]) / 2, zoom: 12.3}; }
-  let zoom = v.zoom + (pitch ? -0.25 : 0);
-  if (!pitch) {   // the terrain stands closer to the camera than sea level, so a flat fit of a high tile runs off the screen
-    const e = (M.elev_range_m[0] + M.elev_range_m[1]) / 2, ppm = 512 * Math.pow(2, v.zoom) / (40075016.686 * Math.cos(v.latitude * Math.PI / 180));
-    const A = 1.5 * h / ppm;   // deck.gl camera distance in metres (altitude 1.5 viewport heights)
-    zoom += Math.log2(A / (A + e));
+  try { v = new WebMercatorViewport({width: W, height: H}).fitBounds([[w, s], [e, n]], {padding: padding(), maxZoom: 16}); }
+  catch (err) { v = {longitude: (w + e) / 2, latitude: (s + n) / 2, zoom: 12.3}; }
+  return {longitude: v.longitude, latitude: v.latitude, zoom: v.zoom - (pitch ? 0.25 : 0), pitch, bearing, position: [0, 0, zc || 0], maxPitch: 80, minZoom: 9, maxZoom: 17};
+}
+// what each step is about, where the camera should look from (you, toward the peaks; the start, toward the goal),
+// and the spot that must not hide behind a ridge
+// points are [lon, lat, z, label]: label 1 = a summit name sits above it and a letter below
+const gz = (lon, lat) => NAV.zAt(NAV.xOf(lon), NAV.yOf(lat));
+function framePts() {
+  const sc = state.scen, s = state.step, P = sc.sg.peaks, pts = [], T = sc.truth;
+  if (s <= 1 || !P.length) {   // the whole sheet
+    [[B[0], B[1]], [B[0], B[3]], [B[2], B[1]], [B[2], B[3]]].forEach(([lon, lat]) => pts.push([lon, lat, gz(lon, lat)]));
+    NAMED.forEach(p => pts.push([p.lon, p.lat, p.elev_m]));
+    return {pts, pad: 0, look: -62, key: null, pitch: 55};
   }
-  return {longitude: v.longitude, latitude: v.latitude, zoom, pitch, bearing, maxPitch: 80, minZoom: 9, maxZoom: 17};
+  if (s <= 4) {
+    const j = aimedAt(s), stg = stageAt(s), seen = P.slice(0, Math.max(1, j));
+    seen.forEach(p => pts.push([p.lon, p.lat, p.elev_m, 1]));
+    if (stg && stg.bb) stg.bb.forEach(q => pts.push(q));   // the whole 95% area, other spots included
+    else if (stg && stg.est) pts.push([stg.est.lon, stg.est.lat, stg.est.z]);
+    pts.push([T[0], T[1], T[2]]);
+    const cx = seen.reduce((a, p) => a + p.lon, 0) / seen.length, cy = seen.reduce((a, p) => a + p.lat, 0) / seen.length;
+    return {pts, pad: 300, look: brg(T, [cx, cy]), key: T, pitch: 38};
+  }
+  if (s === 7) {
+    pts.push([T[0], T[1], T[2]], [sc.est[0], sc.est[1], sc.est[2]]);
+    ring(pts, [(T[0] + sc.est[0]) / 2, (T[1] + sc.est[1]) / 2], 1100);   // the paper texture is about 5 m a pixel: closer only blurs it
+    return {pts, pad: 0, look: P.length ? brg(T, [P[0].lon, P[0].lat]) : -62, key: T, pitch: 45};
+  }
+  const r = R(), from = state.start || sc.est;
+  if (r) r.path.forEach((p, i) => { if (i % 8 === 0 || i === r.path.length - 1) pts.push([p[0], p[1], p[2]]); });
+  else if (sc.est) pts.push([sc.est[0], sc.est[1], sc.est[2]]);
+  if (state.dest) pts.push([state.dest.lon, state.dest.lat, gz(state.dest.lon, state.dest.lat), 1]);   // its name sits above it
+  ring(pts, from, 300);   // a short walk still keeps some ground around it
+  const to = state.dest ? [state.dest.lon, state.dest.lat] : null;
+  return {pts, pad: 150, look: to && dist(from, to) > 150 ? brg(from, to) : -62, key: r ? r.path[Math.floor(r.path.length / 2)] : from, pitch: 46};
+}
+function ring(pts, c, m) { [[m, 0], [-m, 0], [0, m], [0, -m]].forEach(([dx, dy]) => { const lon = c[0] + dx / MPLON, lat = c[1] + dy / MPLAT; pts.push([lon, lat, gz(lon, lat)]); }); }
+// a pitched camera draws near things big and far summits high: project the points with the real camera and step the
+// zoom and the centre until they all sit in the free part of the screen (between the panels, under the toolbar)
+function fit3D(v, pts) {
+  const W = Math.max(400, window.innerWidth), H = Math.max(400, window.innerHeight), pd = padding();
+  const L = pd.left, Rt = W - pd.right, Tp = pd.top, Bt = H - pd.bottom, zc = v.position[2];
+  let {longitude, latitude, zoom} = v;
+  for (let i = 0; i < 14; i++) {
+    let vp;
+    try { vp = new WebMercatorViewport({width: W, height: H, longitude, latitude, zoom, pitch: v.pitch, bearing: v.bearing, position: v.position}); } catch (err) { break; }
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of pts) {
+      const q = vp.project([p[0], p[1], p[2]]), mx = p[3] ? 72 : 16, mt = p[3] ? 44 : 16, mb = p[3] ? 34 : 16;
+      x0 = Math.min(x0, q[0] - mx); x1 = Math.max(x1, q[0] + mx); y0 = Math.min(y0, q[1] - mt); y1 = Math.max(y1, q[1] + mb);
+    }
+    if (!isFinite(x0 + x1 + y0 + y1)) { zoom -= 0.5; continue; }
+    const dz = Math.log2(Math.min((Rt - L) / (x1 - x0), (Bt - Tp) / (y1 - y0)));
+    const ox = (x0 + x1 - L - Rt) / 2, oy = (y0 + y1 - Tp - Bt) / 2;
+    const a = vp.unproject([W / 2, H / 2], {targetZ: zc}), b = vp.unproject([W / 2 + ox, H / 2 + oy], {targetZ: zc});
+    if (a && b && isFinite(b[0]) && isFinite(b[1])) { longitude += b[0] - a[0]; latitude += b[1] - a[1]; }
+    zoom = Math.min(16, Math.max(9, zoom + dz * 0.85));
+    if (Math.abs(dz) < 0.02 && Math.abs(ox) < 6 && Math.abs(oy) < 6) break;
+  }
+  return {...v, longitude, latitude, zoom};
+}
+const TRANS = {transitionDuration: 1100, transitionInterpolator: new LinearInterpolator({transitionProps: ['longitude', 'latitude', 'zoom', 'pitch', 'bearing', 'position']})};
+function targetView() {
+  const flat = state.view === '2d', f = framePts();
+  const pitch = flat ? 0 : f.pitch, zc = f.pts.reduce((a, p) => a + p[2], 0) / f.pts.length;
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+  f.pts.forEach(p => { w = Math.min(w, p[0]); e = Math.max(e, p[0]); s = Math.min(s, p[1]); n = Math.max(n, p[1]); });
+  const dl = f.pad / MPLON, dt = f.pad / MPLAT;
+  w -= dl; e += dl; s -= dt; n += dt;
+  const bearing = flat ? 0 : f.key ? NAV.bestBearing(f.key[0], f.key[1], pitch, angd(f.look, 0)) : f.look;
+  const v = fitBox(w, s, e, n, pitch, bearing, zc);
+  return fit3D(v, f.pts);   // the flat map too: labels and the panels decide the fit, not the bare box
 }
 function eyeVS() {
-  return {longitude: EST[0], latitude: EST[1], position: [0, 0, S.estimate.elev_m + 6], bearing: state.heading,
-    pitch: -14, maxPitch: 60, minPitch: -80};   // FirstPersonView: negative pitch looks up
+  const sc = state.scen, p = state.step <= 4 || !sc.est ? sc.truth : sc.est;
+  return {longitude: p[0], latitude: p[1], position: [0, 0, p[2] + 6], bearing: state.heading, pitch: -12, maxPitch: 60, minPitch: -80};
 }
-const TRANS = {transitionDuration: 1100, transitionInterpolator: new LinearInterpolator({transitionProps: ['longitude', 'latitude', 'zoom', 'pitch', 'bearing']})};
-function setView(v, instant) {
+function frame(instant) {
   if (!deckgl) return;
+  if (state.view === 'eye') { state.vs = eyeVS(); deckgl.setProps({views: [eyeView], viewState: state.vs}); return; }
+  const target = targetView();
+  if (deckgl.props.views && deckgl.props.views[0] && deckgl.props.views[0].id !== 'map') deckgl.setProps({views: [mapView], viewState: target});
+  state.vs = instant || REDUCED || STILL ? target : {...target, ...TRANS};
+  deckgl.setProps({views: [mapView], viewState: state.vs});
+}
+function setView(v, instant) {
   state.view = v;
   document.querySelectorAll('[data-view]').forEach(b => press(b, b.dataset.view === v));
   $('stage').classList.toggle('eye', v === 'eye');
-  if (v === 'eye') { state.vs = eyeVS(); deckgl.setProps({views: [eyeView], viewState: state.vs}); }
-  else {
-    const cur = state.vs && state.vs.zoom !== undefined ? state.vs : fitVS(0, 0);
-    const target = v === '2d' ? fitVS(0, 0) : fitVS(58, -62);
-    if (deckgl.props.views && deckgl.props.views[0] && deckgl.props.views[0].id !== 'map') { state.vs = cur; deckgl.setProps({views: [mapView], viewState: cur}); }
-    state.vs = instant || REDUCED ? target : {...target, ...TRANS};
-    deckgl.setProps({views: [mapView], viewState: state.vs});
-  }
-  render();
+  frame(instant); render();
 }
 
 // ---------------------------------------------------------------- layers
 const ON_TOP = {depthCompare: 'always', depthWriteEnabled: false};
-const PAPER = [251, 250, 246, 235], INK = [31, 29, 26], ROUTE = [176, 21, 127], WATER_INK = [47, 111, 163];
+const PAPER = [251, 250, 246, 235], INK = [31, 29, 26], WATER_INK = [47, 111, 163], RED = [198, 40, 40];
+const RUN_COLOR = [[227, 171, 6], [234, 122, 28], [212, 56, 108]];
 const TXT = {fontFamily: UI_FONT, fontSettings: {sdf: true}, outlineWidth: 3, outlineColor: PAPER, characterSet: 'auto'};
 const PEAK_NAMES = new Set(M.peaks.map(p => p.name));   // a glacier item that only repeats a summit name is dropped
+
 const SUPP = new Set(M.peaks.filter(p => M.peaks.some(q => q !== p && q.elev_m > p.elev_m && (q.verified || !p.verified)
-  && Math.hypot((q.lon - p.lon) * MPLON, (q.lat - p.lat) * MPLAT) < 750)));   // a sub-summit within 750 m of a higher one keeps its triangle, not its name
-const nearPeak = l => NAMED.some(p => Math.hypot((p.lon - l.lon) * MPLON, (p.lat - l.lat) * MPLAT) < 700);   // and so is a glacier name sitting on a named summit
+  && Math.hypot((q.lon - p.lon) * MPLON, (q.lat - p.lat) * MPLAT) < 750)).map(p => p.name));   // a sub-summit within 750 m of a higher one keeps its triangle, not its name
+const nearPeak = l => NAMED.some(p => Math.hypot((p.lon - l.lon) * MPLON, (p.lat - l.lat) * MPLAT) < 700);
 const GRID_LABELS = (() => {   // kilometre digits of the UTM grid along the map edge, as on a military sheet
   const g = M.utm_grid, two = v => String(Math.floor(v / 1000) % 100).padStart(2, '0'), z0 = M.elev_range_m[0];
   if (!g) return [];
@@ -505,18 +749,29 @@ const GRID_LABELS = (() => {   // kilometre digits of the UTM grid along the map
     ...g.west.map(t => ({...t, s: two(t.v), o: [-14, 0], z: z0})), ...g.east.map(t => ({...t, s: two(t.v), o: [14, 0], z: z0}))];
 })();
 function layers() {
-  const eye = state.view === 'eye', flat = state.view === '2d', step = state.step, top = eye ? {} : ON_TOP;
+  const eye = state.view === 'eye', flat = state.view === '2d', step = state.step, top = eye ? {} : ON_TOP, sc = state.scen;
   const out = [new TerrainLayer({id: 'terrain', elevationData: D.img.terrain, texture: texture(texKey()), bounds: BOUNDS,
-    elevationDecoder: DECODER, meshMaxError: 2.0, material: false, loaders: [GridTerrainLoader]})];
-  const peaks = eye ? S.peaks_from_estimate.filter(p => p.visible) : (flat ? M.peaks : NAMED);
-  const side = p => eye ? 0 : (SIDE.get(p) || 0), lm = p => p.name === LMN;
+    elevationDecoder: DECODER, meshMaxError: 2.0, material: false, loaders: [GridTerrainLoader], pickable: !eye})];
+  const aimedN = aimedAt(step), aimed = sc.sg.peaks.slice(0, aimedN).map((p, i) => ({...p, letter: 'ABC'[i]}));
+  const aimedNames = new Set(aimed.map(p => p.name)), nextP = step <= 4 && aimedN < sc.np ? sc.sg.peaks[aimedN] : null;
+  const big = p => aimedNames.has(p.name) || (nextP && p.name === nextP.name);
+  const peaks = eye ? sc.sg.seen.filter(p => p.visible) : flat ? M.peaks : [...NAMED, ...sc.sg.peaks.filter(p => !p.verified && big(p))];
+  const side = p => eye ? 0 : (SIDE.get(p.name) || 0), bigs = peaks.filter(big);
+  const crowd = p => !big(p) && bigs.some(q => Math.hypot((q.lon - p.lon) * MPLON, (q.lat - p.lat) * MPLAT) < 1300);   // a neighbour of an aimed summit gives way
   out.push(new TextLayer({id: 'peak-marks', data: peaks, ...TXT, getPosition: p => [p.lon, p.lat, p.elev_m + 8], getText: () => '▲',
-    getSize: p => lm(p) ? 15 : 11, getColor: INK, outlineWidth: 2, getAlignmentBaseline: 'center', parameters: top}));
-  out.push(new TextLayer({id: 'peaks', data: eye ? peaks : peaks.filter(p => !SUPP.has(p)), ...TXT, getPosition: p => [p.lon, p.lat, p.elev_m + (eye ? 30 : 8)], fontWeight: 600,
-    getText: p => eye ? `${p.verified ? p.name : Math.round(p.elev_m) + ' m'}  ${(p.dist_m / 1000).toFixed(1)} km` : (p.verified ? `${p.name} ${Math.round(p.elev_m)}` : `${Math.round(p.elev_m)}`),
-    getSize: p => lm(p) ? 16 : (p.verified ? 12.5 : 11), getColor: p => p.verified ? INK : [86, 80, 70],
+    getSize: p => big(p) ? 15 : 11, getColor: INK, outlineWidth: 2, getAlignmentBaseline: 'center', updateTriggers: {getSize: [step, sc.id]}, parameters: top}));
+  out.push(new TextLayer({id: 'peaks', data: eye ? peaks : peaks.filter(p => (!SUPP.has(p.name) || big(p)) && !crowd(p)), ...TXT,
+    getPosition: p => [p.lon, p.lat, p.elev_m + (eye ? 30 : 8)], fontWeight: 600,
+    getText: p => eye ? `${p.verified ? p.name : Math.round(p.elev_m) + ' m'}  ${(p.dist_m / 1000).toFixed(1)} km` : (p.verified ? `${p.name} ${Math.round(p.elev_m)}` : big(p) ? p.name : `${Math.round(p.elev_m)}`),
+    getSize: p => big(p) ? 15 : (p.verified ? 12.5 : 11), getColor: p => p.verified || big(p) ? INK : [86, 80, 70],
     getTextAnchor: p => ['end', 'middle', 'start'][side(p) + 1], getAlignmentBaseline: p => side(p) ? 'center' : 'bottom',
-    getPixelOffset: p => side(p) ? [side(p) * 11, 0] : [0, -9], parameters: top}));
+    getPixelOffset: p => side(p) ? [side(p) * 11, 0] : [0, -9], parameters: top,
+    updateTriggers: {getSize: [step, sc.id], getColor: [step, sc.id]}}));
+  if (!eye && aimed.length) {   // the aimed peaks carry their letter, as on the meter
+    out.push(new TextLayer({id: 'aim-letters', data: aimed, ...TXT, getPosition: p => [p.lon, p.lat, p.elev_m + 8], getText: p => p.letter,
+      getSize: 13, fontWeight: 700, getColor: [255, 255, 255], outlineWidth: 0, background: true, getBackgroundColor: INK, backgroundPadding: [5, 3, 5, 2],
+      getPixelOffset: [0, 16], getAlignmentBaseline: 'top', parameters: top}));
+  }
   if (!eye) {   // water names in blue italic, glaciers only on the flat map
     const names = (M.labels || []).filter(l => l.elev_m !== undefined && !PEAK_NAMES.has(l.name) && !(l.kind === 'glacier' && nearPeak(l)) && (flat || (l.kind === 'lake' && l.area_m2 > 300000)));
     out.push(new TextLayer({id: 'water-names', data: names, ...TXT, getPosition: l => [l.lon, l.lat, l.elev_m + 4], getText: l => l.name,
@@ -528,54 +783,82 @@ function layers() {
     out.push(new TextLayer({id: 'grid-labels', data: GRID_LABELS, ...TXT, getPosition: t => [t.lon, t.lat, t.z], getText: t => t.s,
       getSize: 11, getColor: [42, 74, 116], fontWeight: 600, getPixelOffset: t => t.o, parameters: ON_TOP}));
   }
-  if (step >= 3 && step < 5) {
-    out.push(new LineLayer({id: 'sight', data: [0], getSourcePosition: () => [EST[0], EST[1], S.estimate.elev_m + 2], getTargetPosition: () => MORAN,
-      getColor: [31, 29, 26, 220], getWidth: 2, widthUnits: 'pixels', parameters: top}));
+  if (eye) return out;
+  const T = sc.truth;
+  // where the judge dropped the pilot; the phone never sees it
+  if (step < 7) {
+    out.push(new ScatterplotLayer({id: 'landing', data: [T], getPosition: p => [p[0], p[1], p[2] + 9], getRadius: 5, radiusUnits: 'pixels',
+      filled: true, getFillColor: [255, 255, 255, 230], stroked: true, getLineColor: RED, lineWidthMinPixels: 2, parameters: top}));
+    if (step <= 1) out.push(new TextLayer({id: 'landing-label', data: [T], ...TXT, getPosition: p => [p[0], p[1], p[2] + 9], getPixelOffset: [0, -11],
+      getText: () => sc.picked ? 'You dropped the pilot here · the phone does not know' : 'The pilot came down here · the phone does not know',
+      getSize: 12.5, getColor: [150, 25, 25], fontWeight: 700, getAlignmentBaseline: 'bottom', parameters: top}));
   }
-  const RR = state.health === 'healthy' ? R : S.routes.injured;
-  if (step >= 4 && RR) {
-    const lifted = RR.path.map(p => [p[0], p[1], p[2] + 8]), walking = step === 5 && RR === R;
-    out.push(new PathLayer({id: 'route-casing', data: [{path: lifted}], getPath: d => d.path, getColor: [255, 255, 255, walking ? 120 : 235],
-      getWidth: 7, widthUnits: 'pixels', jointRounded: true, capRounded: true, parameters: top}));
-    out.push(new PathLayer({id: 'route', data: [{path: lifted}], getPath: d => d.path, getColor: [...ROUTE, walking ? 110 : 255],
-      getWidth: 3.5, widthUnits: 'pixels', jointRounded: true, capRounded: true, parameters: top}));
+  const r = R();
+  if (step >= 5 && step <= 6 && r) {
+    const walking = step === 6, lift = p => [p[0], p[1], p[2] + 8];
+    out.push(new PathLayer({id: 'route-casing', data: [{path: r.path.map(lift)}], getPath: d => d.path, getColor: [31, 29, 26, walking ? 110 : 225],
+      getWidth: 8, widthUnits: 'pixels', jointRounded: true, capRounded: true, parameters: top}));
+    out.push(new PathLayer({id: 'route', data: r.runs, getPath: d => d.path.map(lift), getColor: d => [...RUN_COLOR[d.cls], walking ? 120 : 255],
+      getWidth: 4.5, widthUnits: 'pixels', jointRounded: true, capRounded: true, updateTriggers: {getColor: walking}, parameters: top}));
+    if (!r.reached) {   // the spot itself could not be reached: a thin red line from the end of the route to it
+      out.push(new LineLayer({id: 'gap', data: [0], getSourcePosition: () => lift(r.path[r.path.length - 1]), getTargetPosition: () => [state.dest.lon, state.dest.lat, NAV.zAt(NAV.xOf(state.dest.lon), NAV.yOf(state.dest.lat)) + 8],
+        getColor: [...RED, 200], getWidth: 2, widthUnits: 'pixels', parameters: top}));
+    }
     if (walking) {
-      out.push(new TripsLayer({id: 'trail', data: [{path: lifted, timestamps: RT}], getPath: d => d.path, getTimestamps: d => d.timestamps,
-        getColor: ROUTE, widthMinPixels: 5, trailLength: 1500, fadeTrail: true, currentTime: state.t, jointRounded: true, capRounded: true, parameters: top}));
+      out.push(new TripsLayer({id: 'trail', data: [{path: r.path.map(lift), timestamps: r.timestamps}], getPath: d => d.path, getTimestamps: d => d.timestamps,
+        getColor: INK, widthMinPixels: 4, trailLength: 1e7, fadeTrail: false, currentTime: state.t, jointRounded: true, capRounded: true, parameters: top}));
       const w = routeAt(state.t), est = devicePos(w);
+      if (state.trail.length) out.push(new ScatterplotLayer({id: 'crumbs', data: state.trail, getPosition: p => [p[0], p[1], p[2] + 10], getRadius: 2.6, radiusUnits: 'pixels',
+        getFillColor: [31, 29, 26, 170], updateTriggers: {getPosition: state.trail.length}, parameters: top}));
       out.push(new ScatterplotLayer({id: 'dr-circle', data: [0], getPosition: () => [est[0], est[1], w.pos[2] + 10], getRadius: () => sigmaNow(w),
-        radiusUnits: 'meters', filled: true, getFillColor: [...ROUTE, 28], stroked: true, getLineColor: [...ROUTE, 230], lineWidthMinPixels: 1.6,
+        radiusUnits: 'meters', filled: true, getFillColor: [217, 72, 28, 30], stroked: true, getLineColor: [168, 51, 12, 230], lineWidthMinPixels: 1.6,
         updateTriggers: {getPosition: state.t, getRadius: state.t}, parameters: top}));
       out.push(new ScatterplotLayer({id: 'walker', data: [0], getPosition: () => [w.pos[0], w.pos[1], w.pos[2] + 10], getRadius: 6.5, radiusUnits: 'pixels',
-        getFillColor: ROUTE, stroked: true, getLineColor: [255, 255, 255], lineWidthMinPixels: 2, updateTriggers: {getPosition: state.t}, parameters: top}));
+        getFillColor: INK, stroked: true, getLineColor: [255, 255, 255], lineWidthMinPixels: 2, updateTriggers: {getPosition: state.t}, parameters: top}));
     }
   }
-  if (step >= 4) {
-    out.push(new ScatterplotLayer({id: 'lz', data: [LZ], getPosition: p => [p[0], p[1], p[2] + 8], getRadius: 7, radiusUnits: 'pixels',
-      getFillColor: [255, 255, 255], stroked: true, getLineColor: INK, lineWidthMinPixels: 2.5, parameters: top}));
-    if (step < 6) out.push(new TextLayer({id: 'lz-label', data: [LZ], ...TXT, getPosition: p => [p[0], p[1], p[2] + 8], getText: () => 'Rendezvous', getSize: 13,
-      getPixelOffset: [0, -13], getColor: INK, fontWeight: 700, getAlignmentBaseline: 'bottom', parameters: top}));
+  if (state.marks.length && step >= 5) {   // marks keep the error circle they had when they were made
+    const mk = state.marks;
+    out.push(new ScatterplotLayer({id: 'mark-circles', data: mk, getPosition: m => [m.lon, m.lat, m.z + 9], getRadius: m => m.r, radiusUnits: 'meters',
+      filled: true, getFillColor: [31, 29, 26, 14], stroked: true, getLineColor: [31, 29, 26, 150], lineWidthMinPixels: 1.2, updateTriggers: {getRadius: mk.length}, parameters: top}));
+    out.push(new TextLayer({id: 'marks', data: mk, ...TXT, getPosition: m => [m.lon, m.lat, m.z + 9], getText: () => '◆', getSize: 13, getColor: INK, outlineWidth: 2,
+      getAlignmentBaseline: 'center', updateTriggers: {getPosition: mk.length}, parameters: top}));
+    out.push(new TextLayer({id: 'mark-names', data: mk, ...TXT, getPosition: m => [m.lon, m.lat, m.z + 9], getText: m => m.label, getSize: 12, fontWeight: 700,
+      getColor: INK, getPixelOffset: [10, 0], getTextAnchor: 'start', getAlignmentBaseline: 'center', updateTriggers: {getText: mk.length}, parameters: top}));
   }
-  if (step >= 3 && step !== 5 && !eye) {   // the fix, plotted as a circle with a dot
-    out.push(new ScatterplotLayer({id: 'fix', data: [EST], getPosition: p => [p[0], p[1], S.estimate.elev_m + 8], getRadius: 8, radiusUnits: 'pixels',
+  if (step >= 5 && state.dest) {   // the destination pin
+    const d = state.dest, z = NAV.zAt(NAV.xOf(d.lon), NAV.yOf(d.lat)) + 9;
+    out.push(new ScatterplotLayer({id: 'dest', data: [d], getPosition: () => [d.lon, d.lat, z], getRadius: 8, radiusUnits: 'pixels', filled: true,
+      getFillColor: state.locked ? INK : [255, 255, 255], stroked: true, getLineColor: INK, lineWidthMinPixels: 2.5, updateTriggers: {getFillColor: state.locked}, parameters: top}));
+    out.push(new TextLayer({id: 'dest-label', data: [d], ...TXT, getPosition: () => [d.lon, d.lat, z], getPixelOffset: [0, -14], getAlignmentBaseline: 'bottom',
+      getText: () => d.label + (state.locked ? ' · locked' : ''), getSize: 13, fontWeight: 700, getColor: INK, updateTriggers: {getText: [state.locked, d.label]}, parameters: top}));
+  }
+  if (step >= 5 && state.home && sc.est) {   // the start, kept as home
+    out.push(new TextLayer({id: 'home', data: [state.home], ...TXT, getPosition: h => [h[0], h[1], h[2] + 9], getText: () => 'H', getSize: 12, fontWeight: 700,
+      getColor: [255, 255, 255], outlineWidth: 0, background: true, getBackgroundColor: INK, backgroundPadding: [4, 2, 4, 1], getPixelOffset: [-15, 13], parameters: top}));
+  }
+  if (sc.est && step >= sc.fixStep && step !== 6) {   // the fix, plotted as a circle with a dot
+    const E = sc.est;
+    out.push(new ScatterplotLayer({id: 'fix', data: [E], getPosition: p => [p[0], p[1], p[2] + 8], getRadius: 8, radiusUnits: 'pixels',
       filled: true, getFillColor: [255, 255, 255, 170], stroked: true, getLineColor: INK, lineWidthMinPixels: 2.4, parameters: top}));
-    out.push(new ScatterplotLayer({id: 'fix-dot', data: [EST], getPosition: p => [p[0], p[1], S.estimate.elev_m + 8], getRadius: 2.2,
-      radiusUnits: 'pixels', getFillColor: INK, parameters: top}));
+    out.push(new ScatterplotLayer({id: 'fix-dot', data: [E], getPosition: p => [p[0], p[1], p[2] + 8], getRadius: 2.2, radiusUnits: 'pixels', getFillColor: INK, parameters: top}));
   }
-  if (step === 6) {
-    out.push(new LineLayer({id: 'err', data: [0], getSourcePosition: () => [EST[0], EST[1], S.estimate.elev_m + 9], getTargetPosition: () => [TRUTH[0], TRUTH[1], S.truth.elev_m + 9],
-      getColor: [198, 40, 40], getWidth: 2.5, widthUnits: 'pixels', parameters: top}));
-    out.push(new ScatterplotLayer({id: 'truth', data: [TRUTH], getPosition: p => [p[0], p[1], S.truth.elev_m + 9], getRadius: 6, radiusUnits: 'pixels',
-      getFillColor: [198, 40, 40], stroked: true, getLineColor: [255, 255, 255], lineWidthMinPixels: 2, parameters: top}));
-    out.push(new TextLayer({id: 'truth-label', data: [TRUTH], ...TXT, getPixelOffset: [0, -12], getPosition: p => [p[0], p[1], S.truth.elev_m + 9],
-      getText: () => `True spot, ${S.estimate.error_m} m from the fix`, getSize: 14, getColor: [150, 25, 25], fontWeight: 700, getAlignmentBaseline: 'bottom', parameters: top}));
+  if (step === 7 && sc.est) {
+    const E = sc.est;
+    out.push(new LineLayer({id: 'err', data: [0], getSourcePosition: () => [E[0], E[1], E[2] + 9], getTargetPosition: () => [T[0], T[1], T[2] + 9],
+      getColor: RED, getWidth: 2.5, widthUnits: 'pixels', parameters: top}));
+    out.push(new ScatterplotLayer({id: 'truth', data: [T], getPosition: p => [p[0], p[1], p[2] + 9], getRadius: 6, radiusUnits: 'pixels',
+      getFillColor: RED, stroked: true, getLineColor: [255, 255, 255], lineWidthMinPixels: 2, parameters: top}));
+    out.push(new TextLayer({id: 'truth-label', data: [T], ...TXT, getPixelOffset: [0, -12], getPosition: p => [p[0], p[1], p[2] + 9],
+      getText: () => `Real landing, ${sc.err} m from the fix`, getSize: 14, getColor: [150, 25, 25], fontWeight: 700, getAlignmentBaseline: 'bottom', parameters: top}));
   }
   return out;
 }
 
 // ---------------------------------------------------------------- dead reckoning (the fix moves as the person walks)
 const DR_SCALE = 0.04, DR_HEAD = 3 * Math.PI / 180, DR_GROW = 0.05;
-function sigmaNow(w) { return Math.hypot(SIG0, DR_GROW * Math.max(0, w.d - state.fixD)); }
+const SIG0 = () => (state.scen.fin ? state.scen.fin.r95 : 200);
+function sigmaNow(w) { return Math.hypot(SIG0(), DR_GROW * Math.max(0, w.d - state.fixD)); }
 function devicePos(w) { const [x, y] = toXY(w.pos[0], w.pos[1]); return fromXY(x + state.drift[0], y + state.drift[1]); }
 function advanceDrift(w) {
   const dd = w.d - state.lastD;
@@ -585,56 +868,145 @@ function advanceDrift(w) {
     state.drift[1] += dd * (DR_SCALE * ay - Math.sin(DR_HEAD) * ax);
   }
   state.lastD = w.d;
+  if (w.d - state.trailD >= 60) { const p = devicePos(w); state.trail.push([p[0], p[1], w.pos[2]]); state.trailD = w.d; }
 }
-function refix(w) {
-  state.fixD = w.d; state.fixes += 1; state.drift = [SIG0 * 0.25, -SIG0 * 0.15]; state.refixUntil = performance.now() + 1400;
-}
-function resetWalk() { state.t = 0; state.fixD = 0; state.lastD = 0; state.drift = [0, 0]; state.fixes = 0; state.refixUntil = 0; }
+function refix(w) { state.fixD = w.d; state.fixes += 1; state.drift = [SIG0() * 0.25, -SIG0() * 0.15]; state.refixUntil = performance.now() + 1400; }
+function resetWalk() { Object.assign(state, {t: 0, fixD: 0, lastD: 0, drift: [0, 0], fixes: 0, refixUntil: 0, trailD: 0}); }
 
 // ---------------------------------------------------------------- texts
-const MS = S.measurements, ST = S.stages;
+function verdict(stg, j) {
+  const sc = state.scen;
+  if (!sc.np) return ['No peak in view · walk to open ground', 'warn'];
+  if (!stg || stg.empty || j === 0) return ['Aim at a peak', 'next'];
+  if (stg.alt > 0.1) return [`${Math.round(stg.alt * 100)}% on another spot · aim at one more`, 'warn'];
+  if (j < sc.np) return ['One more peak', 'next'];
+  if (j >= 3 || stg.r95 <= 250) return ['Enough peaks', 'ok'];
+  return [`Only ${j} in view · re-aim from open ground`, 'warn'];
+}
 function stepCopy() {
-  const s = state.step, r = state.health === 'healthy' ? R : S.routes.injured, mc = S.mc;
+  const sc = state.scen, s = state.step, P = sc.sg.peaks, A = P[0], r = R(), np = sc.np;
+  const rel = q => { const a = angd(P[q].m, A.m); return `${Math.abs(a).toFixed(1)}° ${a >= 0 ? 'right' : 'left'} of ${A.name}`; };
+  const fewer = n => n < 3 ? ` Only ${n === 1 ? 'one peak is' : 'two peaks are'} in view here, so the fix is wider.` : '';
   switch (s) {
-    case 0: return ['GPS lost', `GPS is jammed. The device has only the pre-loaded map, a barometer, and a compass with tilt. You could be anywhere in ${fmtKm2(S.prior_km2)} km².`];
-    case 1: return ['Barometer', `Altitude ${MS.baro_alt_m.toFixed(0)} m ±${MS.baro_sigma_m} m. Only this band of contours fits.`];
-    case 2: return [`Bearing to ${LMN}`, `Pointing at the summit reads ${MS.bearing_deg.toFixed(0)}° true ±${MS.bearing_sigma_deg}°, after the ${DECL_TXT} declination stored with the map. Only spots on this line fit.`];
-    case 3: return ['Tilt up to the summit', `The phone tilts +${MS.elev_angle_deg.toFixed(1)}° ±${MS.elev_sigma_deg}°. Altitude plus the angle gives the distance, so one peak is enough.`];
-    case 4: return r ? ['Safe route', `A* with Tobler walking time and a ${r.cap_deg}° slope limit, around cliffs and water. ${(r.length_m / 1000).toFixed(1)} km, about ${fmtT(r.time_s)}, steepest ${r.max_slope_deg}°.`]
-      : ['No safe route', `With an injured ankle (${CAP_INJ}° limit, half speed) every way out crosses the hatched ground. Stay, signal, wait.`];
-    case 5: return r ? ['Walk out', `Steps and heading move the fix as you walk. The circle grows with distance, and a new sighting of ${LMN} shrinks it again.`]
-      : ['Stay put', 'No walk-out under the injured limit. The phone keeps the fix and beacons it when any signal returns.'];
-    default: return ['Reveal', `The hidden spot was ${S.estimate.error_m} m from the fix.` + (mc ? ` ${LMN} is in view from only ${Math.round(mc.landmark_visible_share * 100)}% of this land, so picking the landmark for you is the next step.` : '')];
+    case 0: return ['GPS lost', `GPS is jammed. ${sc.picked ? 'You chose where the pilot came down, and' : 'The pilot came down somewhere on this sheet, and'} the phone does not know: it has the pre-loaded map, a barometer and a gyro. Anywhere on ${fmtKm2(NAV.landKm2)} km² of land.`];
+    case 1: return ['Altitude', np ? `The barometer reads ${Math.round(sc.sg.baro)} m, ±30 m after the morning calibration. Only this band of contours fits. It cuts the candidates, the peaks will place you.`
+      : `The barometer reads ${Math.round(sc.sg.baro)} m, but no peak is in view from here. Walk to open ground, then aim.`];
+    case 2: return [`Peak A · ${A.name}`, np === 1 ? `Only ${A.name} is in view. Its tilt (+${A.e.toFixed(1)}°) gives the distance, and the compass is the fallback for the direction (±5° after the ${DECL_TXT} declination).`
+      : `Aim at ${A.name} and press. The tilt (+${A.e.toFixed(1)}°) says how far away it is, and it has to be in view from where you stand. You are near this pencil ring.`];
+    case 3: return [`Peak B · ${P[1].name}`, `Swing to ${P[1].name}, ${rel(1)}. The gyro reads only that angle, so a compass bent by the wreckage, or the declination, cannot matter.${np === 2 ? fewer(2) : ''}`];
+    case 4: return [`Peak C · ${P[2].name}`, `${P[2].name} is ${rel(2)}. Three angles pin you down: the pencil lines from the three peaks cross where you are.`];
+    case 5:
+      if (!state.dest) return ['Pick where to go', 'Click the map where you want to go. The route avoids water and cliffs and stays under your slope limit.'];
+      if (!r) return ['No safe route', `With ${state.health === 'injured' ? `an injured ankle (${CAP.injured}° limit, half speed)` : `the ${CAP.healthy}° limit`} there is no safe way from here. Stay, signal, wait.`];
+      return [`Go to: ${state.dest.label}`, `${fmtM(r.length_m)}, about ${fmtT(r.time_s)}, avoiding water and cliffs. The colours say how hard each stretch is. ${state.locked ? 'Locked, so a stray tap cannot move it.' : 'Hold the lock so a stray tap cannot move it.'}`];
+    case 6: return r ? ['Walk', 'Steps and heading move the fix. The circle grows with distance; aiming at a peak again shrinks it. Mark what matters on the way, it keeps its error circle.']
+      : ['Stay put', 'No safe way out under this limit. The phone keeps the fix and beacons it when any signal returns.'];
+    default: return ['Reveal', sc.est ? `The pilot really landed ${sc.err} m from the fix, ${sc.inside ? 'inside' : 'outside'} the 95% area (±${Math.round(sc.fin.r95)} m). Drop the pilot anywhere else and try again.` : 'No fix from this spot.'];
   }
 }
+let countRaf = 0, countFrom = null, countKey = '';
+function countTo(el, key, to, fmt) {   // the number rolls to its new value (on a log scale, so each cut feels its true size)
+  const same = key === countKey && countFrom !== null;
+  if (!same || REDUCED || STILL || Math.abs(countFrom - to) < 1e-9) { countFrom = to; countKey = key; el.textContent = NB(fmt(to)); return; }
+  const from = countFrom, t0 = performance.now(), dur = 850;
+  countFrom = to; cancelAnimationFrame(countRaf);
+  const f = now => {
+    const u = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - u, 3);
+    el.textContent = NB(fmt(Math.exp(Math.log(from) + (Math.log(to) - Math.log(from)) * e)));
+    if (u < 1) countRaf = requestAnimationFrame(f);
+  };
+  countRaf = requestAnimationFrame(f);
+}
 function updatePanels() {
-  const s = state.step, [title, text] = stepCopy();
-  $('stepEyebrow').textContent = s <= 5 ? `Step ${s} of 5` : 'Ground truth';
+  const sc = state.scen, s = state.step, [title, text] = stepCopy(), P = sc.sg.peaks, j = aimedAt(s), stg = stageAt(s);
+  $('stepEyebrow').textContent = s <= 6 ? `Step ${s} of 6` : 'Ground truth';
   $('stepTitle').textContent = title; $('stepText').textContent = NB(text);
   document.querySelectorAll('[data-step]').forEach(b => {
-    const on = +b.dataset.step === s; b.classList.toggle('act', on);
+    const k = +b.dataset.step, on = k === s, off = (k > sc.fixStep && k <= 4) || (!sc.fin && k > 1);
+    b.classList.toggle('act', on); b.classList.toggle('done', k < s && !off && k >= 1 && k <= sc.fixStep && s <= 7);
+    b.disabled = off; b.title = off ? (sc.fin ? 'Not in view from this spot' : 'No fix from this spot') : '';
     if (on) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
   });
+  // how sure: the area first, the 95% radius once a peak is in
+  if (s <= 1 || !stg || stg.empty || !stg.r95) {
+    $('fixEyebrow').textContent = 'Where you can be · 95%';
+    countTo($('fixBig'), 'km2', s === 0 ? NAV.landKm2 : (stg && stg.area95) || NAV.landKm2, v => `${fmtKm2(v)} km²`);
+    $('fixSub').textContent = s === 0 ? 'all the land on this sheet' : NB(`down from ${fmtKm2(NAV.landKm2)} km²`);
+  } else {
+    $('fixEyebrow').textContent = 'You are within · 95%';
+    countTo($('fixBig'), 'r95', stg.r95, v => `±${Math.round(v)} m`);
+    $('fixSub').innerHTML = NB(`${fmtKm2(stg.area95)} km², down from ${fmtKm2(NAV.landKm2)} km²` + (stg.alt >= 0.02 ? `<br>${Math.round(stg.alt * 100)}% on another spot` : ''));
+  }
+  $('meter').innerHTML = [0, 1, 2].map(q => {
+    const p = P[q], done = q < j, next = !done && q === j && s <= 4 && s >= 1, none = !p;
+    const rd = !p ? 'not in view' : !done ? (next ? 'aim next' : '') : q === 0 ? `tilt ${sgn(p.e)}` : `${sgn(angd(p.m, P[0].m))} from A`;
+    return `<div class="slot${done ? ' done' : next ? ' next' : ''}${none ? ' none' : ''}" role="listitem"><div class="top"><span class="lt">${'ABC'[q]}</span><span class="nm">${p ? esc(p.name) : '·'}</span></div><span class="rd">${rd}</span></div>`;
+  }).join('');
+  const [vt, vc] = s >= 1 ? verdict(stg, j) : ['', ''];
+  $('verdict').textContent = vt; $('verdict').className = vc;
+  // sensors (steps 0 to 4) or the destination (steps 5 and up)
+  const destMode = s >= 5 && s <= 6;
+  $('sensors').hidden = destMode; $('destcard').hidden = !destMode;
   const set = (id, on, txt) => { $(id).classList.toggle('on', on); $(id).textContent = NB(txt); };
-  set('sBaro', s >= 1, s >= 1 ? `${MS.baro_alt_m.toFixed(0)} m ±${MS.baro_sigma_m}` : 'waiting');
-  set('sComp', s >= 2, s >= 2 ? `${MS.bearing_deg.toFixed(0)}° true ±${MS.bearing_sigma_deg}` : 'waiting');
-  set('sTilt', s >= 3, s >= 3 ? `+${MS.elev_angle_deg.toFixed(1)}° ±${MS.elev_sigma_deg}` : 'waiting');
-  set('sDR', s === 5 && !!R && state.health === 'healthy', s === 5 && R && state.health === 'healthy' ? 'tracking' : 'idle');
-  const a = s === 0 ? S.prior_km2 : s <= 3 ? ST[s - 1].hpd95_km2 : ST[2].hpd95_km2;
-  countArea(a);
-  $('areaFrom').textContent = s === 0 ? 'anywhere on the map tile' : s <= 3 ? NB(`down from ${fmtKm2(S.prior_km2)} km²`) : 'after three readings';
-  $('walkbar').style.display = s === 5 && R && state.health === 'healthy' ? 'flex' : 'none';
-  if (s === 5 && R) { const end = RT[RT.length - 1]; $('scrub').value = Math.round(state.t / end * 1000); $('clock').textContent = `${fmtT(state.t)} of ${fmtT(end)}`; }
-  const ban = $('banner'), noRoute = s >= 4 && s <= 5 && state.health === 'injured' && !S.routes.injured;
+  set('sBaro', s >= 1, s >= 1 ? `${Math.round(sc.sg.baro)} m ±30` : 'waiting');
+  set('sGyro', j >= 2, j >= 2 ? P.slice(1, j).map((p, q) => `${'BC'[q]} ${sgn(angd(p.m, P[0].m))}`).join('  ') : j === 1 ? 'A held' : 'waiting');
+  set('sTilt', j >= 1, j >= 1 ? P.slice(0, j).map(p => sgn(p.e)).join('  ') : 'waiting');
+  const cmp = sc.np === 1 && j >= 1;
+  set('sComp', cmp, cmp ? 'fallback ±5°' : 'not used'); $('sComp').classList.toggle('off', !cmp);
+  if (destMode) updateDest();
+  $('walkbar').style.display = s === 6 && R() ? 'flex' : 'none';
+  if (s === 6 && R()) { const end = routeEnd(); $('scrub').value = Math.round(state.t / end * 1000); $('clock').textContent = `${fmtT(state.t)} of ${fmtT(end)}`; }
+  const ban = $('banner'), noRoute = (s === 5 || s === 6) && !!state.dest && !R();
   ban.style.display = noRoute ? 'block' : 'none';
-  ban.innerHTML = noRoute ? `<b>No safe route under ${CAP_INJ}°</b>Stay, signal, wait.` : '';
+  ban.innerHTML = noRoute ? `<b>No safe route under ${CAP[state.health]}°</b>Stay, signal, wait.` : '';
   document.querySelectorAll('[data-health]').forEach(b => press(b, b.dataset.health === state.health));
+  document.querySelectorAll('[data-aim]').forEach(b => press(b, +b.dataset.aim === state.aim));
+  updateHint();
 }
+function updateDest() {
+  const r = R(), d = state.dest;
+  $('destEyebrow').textContent = d && d.kind === 'home' ? 'Back to start' : 'Destination';
+  $('lockTag').innerHTML = state.locked ? '<svg width="10" height="11" viewBox="0 0 10 11" aria-hidden="true"><rect x="1" y="4.5" width="8" height="6" rx="1" fill="currentColor"/><path d="M3 4.5V3a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>Locked' : '';
+  $('destName').textContent = d ? d.label : 'No destination yet';
+  if (r) {
+    $('destStats').textContent = NB(`${fmtM(r.length_m)} · ${fmtT(r.time_s)} · up ${r.climb_m} m · down ${r.descent_m} m · max ${Math.round(r.max_slope_deg)}°`);
+    const tot = r.runs.reduce((a, q) => a + q.len, 0) || 1;
+    $('routeBar').innerHTML = r.runs.map(q => `<i style="width:${(q.len / tot * 100).toFixed(2)}%;background:var(--${['easy', 'mod', 'steep'][q.cls]})"></i>`).join('');
+    $('destSay').className = '';
+    $('destSay').textContent = NB((r.reached ? '' : `That spot cannot be reached safely (water, cliffs, or over ${r.cap_deg}°). The route stops ${fmtM(r.gap_m)} short, at the closest safe point. `) + r.say);
+  } else {
+    $('destStats').textContent = ''; $('routeBar').innerHTML = '';
+    $('destSay').className = d ? 'stop' : '';
+    $('destSay').textContent = d ? `No safe way there under ${CAP[state.health]}°. Stay, signal, wait.` : 'Click the map where you want to go.';
+  }
+  const lb = $('lockBtn');
+  lb.querySelector('span').textContent = state.locked ? 'Locked · unlock' : 'Hold to lock';
+  lb.setAttribute('aria-pressed', state.locked ? 'true' : 'false'); lb.classList.toggle('act', state.locked); lb.disabled = !d;
+  $('homeBtn').disabled = !state.home || (d && d.kind === 'home');
+  $('marks').innerHTML = state.marks.map((m, i) => `<li><span class="sq" aria-hidden="true"></span><span class="mn">${esc(m.label)}</span><span class="mr">±${m.r} m</span><button data-mark="${i}">Go</button></li>`).join('');
+  document.querySelectorAll('[data-mark]').forEach(b => b.onclick = () => {
+    if (state.locked) { toast('The destination is locked. Unlock it first.'); return; }
+    const m = state.marks[+b.dataset.mark]; setDest(m.lon, m.lat, m.label, 'mark');
+  });
+}
+const CROSS = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7 0.5V4M7 10V13.5M0.5 7H4M10 7H13.5" stroke="currentColor" stroke-width="1.3"/></svg>';
+function updateHint() {
+  const s = state.step, h = $('hint');
+  h.classList.toggle('locked', s >= 5 && state.locked);
+  let html;
+  if (s <= 4) html = `${CROSS}<span>Click the map to drop the pilot anywhere</span>` + (state.presets.length ? `<span class="presets">${state.presets.map((p, i) => `<button data-preset="${i}" title="${esc(p.note)}">${esc(p.name)}</button>`).join('')}</span>` : '');
+  else if (s === 7) html = `${CROSS}<span>Click the map to drop the pilot somewhere new</span>`;
+  else html = state.locked ? `${CROSS}<span>Destination locked. Unlock it to pick another spot.</span>` : `${CROSS}<span>Click the map to pick where to go</span>`;
+  if (h.dataset.html !== html) {
+    h.innerHTML = html; h.dataset.html = html;
+    h.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => { const p = state.presets[+b.dataset.preset]; dropPilot(p.lon, p.lat, false); });
+  }
+}
+let toastT = 0;
+function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2600); }
 
-// ---------------------------------------------------------------- phone (no map: compass tape, arrow, one line, skyline)
+// ---------------------------------------------------------------- phone (no map: heading tape, arrow, one line, the camera's skyline)
 const tape = $('tape').getContext('2d'), sky = $('sky').getContext('2d');
-const SKY_LO = Math.min(-8, Math.floor(Math.min(...S.skyline.horizon_deg)) - 2);
-const SKY_HI = Math.max(SKY_LO + 40, Math.ceil(Math.max(0, ...S.peaks_from_estimate.filter(p => p.visible).map(p => p.elev_deg))) + 8);
 function drawTape(h, marks) {
   const c = tape, w = c.canvas.width, hh = c.canvas.height, span = 110, k = w / span;
   c.clearRect(0, 0, w, hh); c.fillStyle = '#050505'; c.fillRect(0, 0, w, hh);
@@ -650,7 +1022,7 @@ function drawTape(h, marks) {
       c.font = card ? `700 24px ${NUM_FONT}` : `400 20px ${NUM_FONT}`; c.fillStyle = card ? '#ffffff' : '#9a9aa3'; c.fillText(lab, x, 30);
     }
   }
-  marks.forEach(m => {   // yellow diamond = the landmark, pink diamond = where to walk, a chevron at the edge when it is out of view
+  marks.forEach(m => {   // yellow diamond = the peak to aim at, pink diamond = where to walk, a chevron at the edge when it is out of view
     const off = angd(m.deg, h), x = w / 2 + off * k;
     c.fillStyle = m.color; c.beginPath();
     if (Math.abs(off) <= span / 2) { c.moveTo(x, hh - 30); c.lineTo(x + 10, hh - 16); c.lineTo(x, hh - 2); c.lineTo(x - 10, hh - 16); }
@@ -659,9 +1031,9 @@ function drawTape(h, marks) {
   });
   c.fillStyle = '#ffffff'; c.beginPath(); c.moveTo(w / 2 - 10, 0); c.lineTo(w / 2 + 10, 0); c.lineTo(w / 2, 12); c.closePath(); c.fill();
 }
-function drawSky(h, target) {
-  const c = sky, w = c.canvas.width, hh = c.canvas.height, span = 90, k = w / span, a0 = SKY_LO, a1 = SKY_HI;
-  const Y = a => hh - (a - a0) / (a1 - a0) * hh, HZ = S.skyline.horizon_deg, NR = S.skyline.near_ridge_deg, st = S.skyline.az_step_deg;
+function drawSky(h, target, held) {
+  const sc = state.scen, sk = sc.sg.skyline, c = sky, w = c.canvas.width, hh = c.canvas.height, span = 90, k = w / span, a0 = sc.skyLo, a1 = sc.skyHi;
+  const Y = a => hh - (a - a0) / (a1 - a0) * hh, HZ = sk.horizon_deg, NR = sk.near_ridge_deg, st = sk.az_step_deg;
   c.fillStyle = '#070a0d'; c.fillRect(0, 0, w, hh);
   [[HZ, '#6c737c'], [NR, '#2b3036']].forEach(([arr, col]) => {
     c.fillStyle = col; c.beginPath(); c.moveTo(0, hh);
@@ -669,66 +1041,79 @@ function drawSky(h, target) {
     c.lineTo(w, hh); c.closePath(); c.fill();
   });
   c.font = `600 18px ${UI_FONT}`; c.textAlign = 'center';
-  const shown = [], vis = S.peaks_from_estimate.filter(p => p.visible).sort((a, b) => (b.name === target) - (a.name === target) || b.elev_deg - a.elev_deg);
+  const shown = [], vis = sc.sg.seen.filter(p => p.visible).sort((a, b) => (b.name === target) - (a.name === target) || b.elev_deg - a.elev_deg);
   vis.forEach(p => {   // the target first, then the highest; a name that would overlap one already drawn is left off
     const off = angd(p.bearing_deg, h); if (Math.abs(off) > span / 2) return;
-    const x = w / 2 + off * k, y = Y(p.elev_deg), hit = target && p.name === target;
-    c.fillStyle = hit ? '#ffd60a' : '#e6eef2'; c.beginPath(); c.moveTo(x, y - 4); c.lineTo(x - 7, y + 8); c.lineTo(x + 7, y + 8); c.fill();
+    const x = w / 2 + off * k, y = Y(p.elev_deg), hit = target && p.name === target, got = held.has(p.name);
+    c.fillStyle = hit ? '#ffd60a' : got ? '#30d158' : '#e6eef2'; c.beginPath(); c.moveTo(x, y - 4); c.lineTo(x - 7, y + 8); c.lineTo(x + 7, y + 8); c.fill();
     if (hit) { c.strokeStyle = '#ffd60a'; c.lineWidth = 2; c.strokeRect(x - 34, y - 34, 68, 56); }
     const half = c.measureText(p.name).width / 2 + 6, lx = Math.min(w - half, Math.max(half, x)), ly = Math.max(20, y - 40);
     if (shown.some(b => Math.abs(b.x - lx) < b.half + half && Math.abs(b.y - ly) < 22)) return;
     shown.push({x: lx, y: ly, half});
-    c.fillStyle = hit ? '#ffd60a' : '#e6eef2'; c.fillText(p.name, lx, ly);
+    c.fillStyle = hit ? '#ffd60a' : got ? '#30d158' : '#e6eef2'; c.fillText(p.name, lx, ly);
   });
   c.strokeStyle = 'rgba(255,255,255,.6)'; c.lineWidth = 2; c.beginPath(); c.moveTo(w / 2, 0); c.lineTo(w / 2, hh); c.stroke();
 }
+function phoneHeading() {   // where the person faces: the next peak to aim at, then the way to walk
+  const sc = state.scen, s = state.step, P = sc.sg.peaks, j = aimedAt(s), r = R();
+  if (s <= 4 && j < sc.np) return P[j].true_bearing_deg;
+  if (s <= 4) return P.length ? P[P.length - 1].true_bearing_deg : 0;
+  if (r && r.path.length > 1) return wrap(brg(r.path[0], r.path[Math.min(20, r.path.length - 1)]));
+  return state.heading;
+}
 function updatePhone(now) {
-  const s = state.step, inj = state.health === 'injured', r = inj ? S.routes.injured : R;
-  let big = '', say = '', target = null, arrowTo = null, coords = null, sig = null, btn = 'Next';
-  const mor = wrap(brg(EST, MORAN));
-  $('phStop').style.display = 'none'; $('arrow').style.display = '';
+  const sc = state.scen, s = state.step, P = sc.sg.peaks, j = aimedAt(s), r = R(), stg = stageAt(s);
+  let big = '', say = '', target = null, arrowTo = null, coords = null, sig = null, btn = 'Next', stop = false;
+  const held = new Set(P.slice(0, j).map(p => p.name));
   if (s === 0) { big = 'Hold on'; say = 'GPS lost. Finding you from the terrain.'; btn = 'Read barometer'; }
-  else if (s === 1) { big = `${MS.baro_alt_m.toFixed(0)} m`; say = 'Altitude from the barometer. Next, find the peak in the box.'; target = LMN; btn = 'Aim at the peak'; }
-  else if (s === 2) { big = `${MS.bearing_deg.toFixed(0)}°`; say = 'Bearing locked. Now tilt up to the summit.'; target = LMN; arrowTo = mor; btn = 'Tilt and press'; }
-  else if (s === 3) { big = `+${MS.elev_angle_deg.toFixed(1)}°`; say = 'Position found.'; coords = EST; sig = SIG0; btn = 'Plan route'; }
-  else if (s === 4) {
-    if (r) { big = `${(r.length_m / 1000).toFixed(1)} km`; say = `Safe route, about ${fmtT(r.time_s)}, steepest ${r.max_slope_deg}°.`; arrowTo = wrap(brg(EST, RP[Math.min(20, RP.length - 1)])); btn = 'Start walking'; }
-    coords = EST; sig = SIG0;
-  } else if (s === 5 && r && !inj) {
-    const w = routeAt(state.t), est = devicePos(w), leg = S.legs.find(l => l.t1_s > state.t) || S.legs[S.legs.length - 1];
-    const legEnd = RP[leg.i1], remain = RD[leg.i1] - w.d, total = RD[RD.length - 1] - w.d;
-    arrowTo = wrap(brg(est, legEnd)); big = remain > 0 ? `${Math.round(remain / 10) * 10} m` : 'Arrived';
-    say = now < state.refixUntil ? `Re-fix. Point at ${LMN} again.` : `${leg.say}. ${(total / 1000).toFixed(1)} km to the rendezvous.`;
-    if (now < state.refixUntil) target = LMN;
-    coords = est; sig = sigmaNow(w); btn = state.playing ? 'Pause' : 'Resume';
-  } else if (s === 6) { big = `${S.estimate.error_m} m`; say = 'The fix was this far from the hidden true spot.'; coords = EST; sig = SIG0; btn = 'Start over'; }
-  if ((s === 4 || s === 5) && inj && !S.routes.injured) {
-    $('phStop').style.display = 'block'; $('arrow').style.display = 'none'; big = ''; say = `No safe way out under ${CAP_INJ}°. Beacon armed, fix kept.`; coords = EST; sig = SIG0; btn = 'Back';
-  }
+  else if (s === 1) {
+    big = `${Math.round(sc.sg.baro)} m`;
+    if (sc.np) { say = `Altitude set. Aim at ${P[0].name} in the yellow box and press.`; target = P[0].name; btn = `Aim at ${P[0].name}`; }
+    else { say = 'No peak in view. Walk to open ground.'; btn = 'Start over'; }
+  } else if (s <= 4) {
+    const p = P[j - 1], last = s === sc.fixStep;
+    big = j === 1 ? `+${p.e.toFixed(1)}°` : sgn(angd(p.m, P[0].m));
+    if (!last) { target = P[j].name; say = `${p.name} held. Swing to ${P[j].name} in the box.`; btn = `Aim at ${P[j].name}`; }
+    else { big = `±${Math.round(stg.r95)} m`; say = `${verdict(stg, j)[0]}. You are here.`; coords = sc.est; sig = stg.r95; btn = 'Pick destination'; }
+  } else if (s === 5) {
+    coords = sc.est; sig = SIG0();
+    if (r) { big = fmtM(r.length_m); say = `About ${fmtT(r.time_s)}. ${r.legs[0] ? r.legs[0].say : ''}.`; arrowTo = phoneHeading(); btn = 'Start walking'; }
+    else if (state.dest) stop = true;
+    else { big = 'Where to?'; say = 'Pick a destination on the map.'; btn = 'Back'; }
+  } else if (s === 6) {
+    if (r) {
+      const w = routeAt(state.t), est = devicePos(w), leg = r.legs.find(l => l.t1_s > state.t) || r.legs[r.legs.length - 1];
+      const legEnd = r.path[leg.i1], remain = r.dist[leg.i1] - w.d, total = r.dist[r.dist.length - 1] - w.d;
+      arrowTo = wrap(brg(est, legEnd)); big = remain > 0 ? `${Math.round(remain / 10) * 10} m` : 'Arrived';
+      say = now < state.refixUntil ? `Re-fix. Aim at ${P[0] ? P[0].name : 'a peak'} again.` : `${leg.say}. ${(total / 1000).toFixed(1)} km to go.`;
+      if (now < state.refixUntil && P[0]) target = P[0].name;
+      coords = est; sig = sigmaNow(w); btn = state.playing ? 'Pause' : 'Resume';
+    } else stop = true;
+  } else { big = sc.est ? `${sc.err} m` : '?'; say = 'The fix was this far from where the pilot really landed.'; coords = sc.est; sig = SIG0(); btn = 'Start over'; }
+  if (stop) { big = ''; say = `No safe way out under ${CAP[state.health]}°. Beacon armed, fix kept.`; coords = sc.est; sig = SIG0(); btn = 'Back'; }
+  $('phStop').style.display = stop ? 'block' : 'none'; $('arrow').style.display = stop ? 'none' : '';
   $('phBig').textContent = NB(big); $('phSay').textContent = NB(say); $('phBtn').textContent = btn;
+  if (target) arrowTo = wrap(P.find(p => p.name === target).true_bearing_deg);   // aiming: the arrow turns you to the boxed peak
   $('arrow').style.opacity = arrowTo === null ? 0.15 : 1;
-  $('arrowPath').setAttribute('fill', s === 2 ? '#ffd60a' : '#ff375f');
+  $('arrowPath').setAttribute('fill', target ? '#ffd60a' : '#ff375f');
   $('arrow').style.transform = `rotate(${arrowTo === null ? 0 : angd(arrowTo, state.heading)}deg)`;
   $('phFix').className = 'tag' + (sig ? ' ok' : ''); $('phFix').textContent = sig ? NB(`Fix ±${Math.round(sig)} m`) : 'No fix';
   $('phCoords').innerHTML = coords ? `<span>LAT</span> ${coords[1].toFixed(5)}  <span>LON</span> ${coords[0].toFixed(5)}<br><span>MGRS</span> ${mgrs(coords[0], coords[1])}<br><span>HDG</span> ${Math.round(state.heading)}°  <span>±</span>${Math.round(sig)} m  <span>re-fixes</span> ${state.fixes}`
-    : '<span>LAT</span> ?  <span>LON</span> ?<br><span>MGRS</span> ?<br><span>HDG</span> ' + Math.round(state.heading) + '°';
-  const marks = [{deg: mor, color: '#ffd60a'}]; if (arrowTo !== null) marks.push({deg: arrowTo, color: '#ff375f'});
-  drawTape(state.heading, marks); drawSky(state.heading, target);
+    : '<span>LAT</span> ?  <span>LON</span> ?<br><span>MGRS</span> ?<br><span>HDG</span> ' + (j ? Math.round(state.heading) + '°' : 'gyro only');
+  const marks = []; if (target) marks.push({deg: P.find(p => p.name === target).true_bearing_deg, color: '#ffd60a'}); if (arrowTo !== null && !target) marks.push({deg: arrowTo, color: '#ff375f'});
+  drawTape(state.heading, marks); drawSky(state.heading, target, held);
 }
 
-// ---------------------------------------------------------------- static texts, the map collar, the area count-down
+// ---------------------------------------------------------------- static texts, the map collar
 function initStatic() {
   document.title = `${M.name} · Team-8 Terrain Nav`;
   $('region').textContent = M.region;
-  $('bHealthy').textContent = `Healthy · ${CAP_OK}°`; $('bInjured').textContent = `Injured · ${CAP_INJ}°`;
+  $('bHealthy').textContent = `Healthy · ${CAP.healthy}°`; $('bInjured').textContent = `Injured · ${CAP.injured}°`;
   const c = M.bounds, sq = mgrs((c[0] + c[2]) / 2, (c[1] + c[3]) / 2).split(' ');
   $('sheetNote').innerHTML = NB(`Contours every ${M.contours.interval_m} m<br>UTM ${sq[0]} ${sq[1]}, 1 km grid`);
-  $('lgSteep').textContent = 'Too steep for you';
-  const mc = S.mc;
-  $('mc').innerHTML = mc ? NB(`<b>${mc.n} random tests</b> · median error <b>${mc.median_err_m} m</b> · inside the 95% area <b>${Math.round(mc.truth_in_95_share * 100)}%</b> · without the declination <b>${mc.no_declination.median_err_m} m</b>`) : '';
   const dem = {cop30: 'Copernicus DEM GLO-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the EU and ESA',
     '3dep10': 'USGS 3DEP 1/3 arc-second DEM, public domain', file: 'USGS 3DEP 1 m lidar via OpenTopography, public domain'}[M.dem.source] || M.dem.label;
-  $('credit').textContent = `${dem}. ESA WorldCover 2021 (CC BY 4.0). Names from Wikidata (CC0). Declination WMM2025. deck.gl 9.3.11 (MIT), Noto Sans JP and B612 Mono (OFL). Synthetic demo spot, no real person or position. Runs offline.`;
+  $('credit').textContent = `${dem}. ESA WorldCover 2021 (CC BY 4.0). Names from Wikidata (CC0). Declination WMM2025. deck.gl 9.3.11 (MIT), Noto Sans JP and B612 Mono (OFL). Synthetic landing spots, no real person or position. Runs offline.`;
 }
 let collarKey = '';
 function updateCollar() {
@@ -754,48 +1139,83 @@ function updateCollar() {
     + `<text x="${f(tx)}" y="${f(ty)}" text-anchor="middle" font-size="7" font-weight="700" fill="#1f1d1a" stroke="none">MN</text></g>`;
   $('declText').innerHTML = NB(`★ True north<br>MN ${DECL_TXT}<br><span style="color:var(--faint)">WMM2025, ${Math.floor(M.declination.year)}</span>`);
 }
-let areaFrom = null, areaRaf = 0;
-const fmtKm2 = v => v >= 10 ? v.toFixed(1) : v >= 1 ? v.toFixed(2) : v.toFixed(3);
-function countArea(to) {   // the area counts down when a reading lands (on a log scale, so each cut feels its true size)
-  const el = $('areaVal');
-  if (areaFrom === null || REDUCED || STILL || Math.abs(areaFrom - to) < 1e-9) { areaFrom = to; el.textContent = NB(`${fmtKm2(to)} km²`); return; }
-  const from = areaFrom, t0 = performance.now(), dur = 900;
-  areaFrom = to; cancelAnimationFrame(areaRaf);
-  const f = now => {
-    const u = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - u, 3);
-    el.textContent = NB(`${fmtKm2(Math.exp(Math.log(from) + (Math.log(to) - Math.log(from)) * e))} km²`);
-    if (u < 1) areaRaf = requestAnimationFrame(f);
-  };
-  areaRaf = requestAnimationFrame(f);
-}
 
-// ---------------------------------------------------------------- render loop
-let deckgl, lastFrame = performance.now();
-const STILL = new URLSearchParams(location.search).has('still');
-if (STILL) document.documentElement.classList.add('still');   // screenshots: no half-finished button transitions
+// ---------------------------------------------------------------- render loop, steps, the judge's clicks
+let deckgl, lastFrame = performance.now(), autoT = 0;
 function render() { if (deckgl) deckgl.setProps({layers: layers()}); updatePanels(); updatePhone(performance.now()); updateCollar(); }
 function tick(now) {
   const dt = Math.min(0.1, (now - lastFrame) / 1000); lastFrame = now;
-  if (state.step === 5 && R && state.health === 'healthy' && state.playing && now >= state.refixUntil) {
-    const end = RT[RT.length - 1];
+  const r = R();
+  if (state.step === 6 && r && state.playing && now >= state.refixUntil) {
+    const end = routeEnd();
     state.t = Math.min(end, state.t + dt * state.speed);
     const w = routeAt(state.t); advanceDrift(w);
     state.heading = wrap(w.hdg + 6 * Math.sin(now / 900));
-    if (sigmaNow(w) > SIG0 + 90) refix(w);
+    if (sigmaNow(w) > SIG0() + 90) refix(w);
     if (state.t >= end) state.playing = false;
-    $('scrub').value = Math.round(state.t / end * 1000);
-    $('clock').textContent = `${fmtT(state.t)} of ${fmtT(end)}`;
     $('play').textContent = state.playing ? 'Pause' : 'Resume';
     render();
-  } else if (state.step === 5) { updatePhone(now); $('play').textContent = 'Resume'; }   // keep the bar in step with the phone button
+  } else if (state.step === 6) { updatePhone(now); $('play').textContent = 'Resume'; }
   if (STILL && now > 6000) { render(); return; }   // ?still=1 stops the loop so headless screenshots can settle
   requestAnimationFrame(tick);
 }
-function go(step) {
-  state.step = Math.max(0, Math.min(6, step));
-  if (state.step === 5) { resetWalk(); state.playing = !REDUCED; }
-  else state.heading = state.step >= 4 && R ? wrap(brg(EST, RP[Math.min(20, RP.length - 1)])) : wrap(brg(EST, MORAN));
-  if (state.view === 'eye') { state.vs = {...state.vs, bearing: state.heading}; deckgl.setProps({viewState: state.vs}); }
+function go(step, dir, auto) {
+  const sc = state.scen;
+  if (!auto) clearTimeout(autoT);
+  let s = Math.max(0, Math.min(7, step));
+  if (s > sc.fixStep && s <= 4) s = dir === -1 ? sc.fixStep : 5;
+  if (!sc.fin && s > 1) s = dir === -1 ? 1 : (state.step === 1 ? 0 : 1);
+  if (s >= 5 && s <= 6 && !state.route && state.dest) computeRoute();
+  state.step = s;
+  if (s === 6) { resetWalk(); state.trail = []; state.playing = !REDUCED && !STILL; }
+  state.heading = phoneHeading();
+  frame(); render();
+}
+function autoplay(to) {   // after a drop, the readings come in one by one and the area shrinks
+  clearTimeout(autoT);
+  if (REDUCED || STILL) { go(to); return; }
+  const stepOn = () => { if (state.step < to) { go(state.step + 1, 1, true); autoT = setTimeout(stepOn, state.step <= 1 ? 1300 : 1700); } };
+  autoT = setTimeout(stepOn, 900);
+}
+function dropPilot(lon, lat, picked) {
+  if (!NAV.inside(lon, lat)) return;
+  if (NAV.isWater(lon, lat)) { toast('That is water. Drop the pilot on land.'); return; }
+  const sc = land(lon, lat, picked);
+  state.step = 0; state.heading = phoneHeading();
+  frame(); render();
+  if (!sc.np) toast('No peak is in view from there. Try more open ground.');
+  autoplay(sc.fin ? sc.fixStep : 1);
+}
+function mapClick(lon, lat) {
+  if (!NAV.inside(lon, lat)) return;
+  if (state.step <= 4 || state.step === 7) { dropPilot(lon, lat, true); return; }
+  if (!state.scen.fin) { toast('No fix yet. Drop the pilot where a peak is in view.'); return; }
+  if (state.locked) { toast('The destination is locked. Unlock it to pick another spot.'); return; }
+  setDest(lon, lat, NAV.isWater(lon, lat) ? 'Pin, in the water' : 'Pin', 'pin');
+}
+function backToStart() {
+  const sc = state.scen; if (!state.home) return;
+  if (state.locked) { toast('The destination is locked. Unlock it first.'); return; }
+  if (state.step === 6 && R()) { const w = routeAt(state.t), p = devicePos(w); state.start = [p[0], p[1], w.pos[2]]; }
+  state.dest = {lon: state.home[0], lat: state.home[1], label: 'Start', kind: 'home'};
+  computeRoute();
+  if (state.step === 6) resetWalk(); else state.step = 5;
+  state.heading = phoneHeading(); frame(); render();
+}
+function markHere() {
+  const sc = state.scen; if (!sc.fin) return;
+  let p, rr;
+  if (state.step === 6 && R()) { const w = routeAt(state.t), d = devicePos(w); p = [d[0], d[1], w.pos[2]]; rr = sigmaNow(w); }
+  else { p = sc.est; rr = sc.fin.r95; }
+  const m = {lon: p[0], lat: p[1], z: p[2], r: Math.round(rr), label: `Mark ${state.marks.length + 1}`};
+  state.marks.push(m);
+  toast(`${m.label} saved where you are, with its ±${m.r} m circle. A note for you, never used for the fix.`);
+  render();
+}
+let holdTimer = 0;
+function lockNow(on) {
+  state.locked = on; $('confirm').hidden = true;
+  toast(on ? 'Destination locked. A stray tap cannot move it now.' : 'Destination unlocked.');
   render();
 }
 
@@ -803,18 +1223,31 @@ function go(step) {
 (async function start() {
   // the map labels are drawn into a glyph atlas once, so the bundled fonts must be ready before deck.gl starts
   const faces = ['600 16px "Noto Sans JP"', '700 16px "Noto Sans JP"', '400 16px "B612 Mono"', '700 16px "B612 Mono"'];
-  await Promise.all([prepImages(), document.fonts ? Promise.all(faces.map(f => document.fonts.load(f))).catch(() => null) : null]);
-  window.TEAM8_PREP = Math.round(performance.now());
+  const [nav] = await Promise.all([TEAM8_NAV.init(D), prepImages(), document.fonts ? Promise.all(faces.map(f => document.fonts.load(f))).catch(() => null) : null]);
+  NAV = nav; window.TEAM8_NAVI = NAV;
   fitUI();
   initStatic();
-  state.vs = fitVS(58, -62);
+  if (QS.has('aim') && [1, 2, 4].includes(+QS.get('aim'))) state.aim = +QS.get('aim');
+  if (QS.has('health')) state.health = QS.get('health') === 'injured' ? 'injured' : 'healthy';
+  const ld = (QS.get('land') || '').split(',').map(Number);
+  if (ld.length === 2 && ld.every(Number.isFinite) && NAV.inside(ld[0], ld[1]) && !NAV.isWater(ld[0], ld[1])) land(ld[0], ld[1], true);
+  else land(S.truth.lon, S.truth.lat, false);
+  state.presets = [{name: 'Demo spot', note: 'The spot from the README', lon: S.truth.lon, lat: S.truth.lat}];
+  state.heading = phoneHeading();
   deckgl = new Deck({
-    parent: $('stage'), views: [mapView], viewState: state.vs, layers: [], useDevicePixels: true,
+    parent: $('stage'), views: [mapView], viewState: fitBox(B[0], B[1], B[2], B[3], 55, -62), layers: [], useDevicePixels: true,
+    getCursor: ({isDragging}) => isDragging ? 'grabbing' : (state.view === 'eye' ? 'grab' : 'crosshair'),
     onViewStateChange: ({viewState}) => {
       state.vs = viewState;
       if (state.view === 'eye') { state.heading = wrap(viewState.bearing); updatePhone(performance.now()); }
       deckgl.setProps({viewState});
       updateCollar();
+    },
+    onClick: info => {
+      if (state.view === 'eye') { toast('Switch to Map or 3D to pick a spot.'); return; }
+      const p = deckgl.pickObject({x: info.x, y: info.y, radius: 2, layerIds: ['terrain'], unproject3D: true});
+      const c = (p && p.coordinate) || info.coordinate;
+      if (c) mapClick(c[0], c[1]);
     },
     onAfterRender: () => {
       if (state.loaded) return;
@@ -823,45 +1256,97 @@ function go(step) {
     }
   });
   window.TEAM8_DECK = deckgl; window.TEAM8_STATE = state;
-  render();
-  // deep links for demos and screenshots, e.g. ?step=5&t=2400&view=3d&health=healthy
-  const q = new URLSearchParams(location.search);
-  if (q.has('health')) state.health = q.get('health') === 'injured' ? 'injured' : 'healthy';
-  if (q.has('step')) go(+q.get('step'));
-  if (q.has('t') && R) { simulateTo(+q.get('t')); state.playing = !STILL && !REDUCED; }   // a deep link keeps walking unless it is a still
-  if (q.has('view')) setView(q.get('view'), true);
-  render();
+  const dl = (QS.get('dest') || '').split(',').map(Number);
+  if (dl.length === 2 && dl.every(Number.isFinite) && NAV.inside(dl[0], dl[1])) state.dest = {lon: dl[0], lat: dl[1], label: 'Pin', kind: 'pin'};
+  if (QS.has('view')) { state.view = QS.get('view'); document.querySelectorAll('[data-view]').forEach(b => press(b, b.dataset.view === state.view)); $('stage').classList.toggle('eye', state.view === 'eye'); }
+  if (QS.has('step')) go(+QS.get('step'));
+  else go(0);
+  if (QS.has('t') && R()) { simulateTo(+QS.get('t')); state.playing = !STILL && !REDUCED; }
+  frame(true); render();
   requestAnimationFrame(tick);
+  setTimeout(findPresets, 1500);
 })();
 function simulateTo(tt) {
-  resetWalk();
-  for (let t = 0; t <= tt; t += 20) { state.t = t; const w = routeAt(t); advanceDrift(w); if (sigmaNow(w) > SIG0 + 90) { refix(w); state.refixUntil = 0; } }
+  resetWalk(); state.trail = [];
+  for (let t = 0; t <= tt; t += 20) { state.t = t; const w = routeAt(t); advanceDrift(w); if (sigmaNow(w) > SIG0() + 90) { refix(w); state.refixUntil = 0; } }
   state.t = tt; const w = routeAt(tt); advanceDrift(w); state.heading = wrap(w.hdg);
 }
+// two more ready-made spots with three peaks in view and a good spread, found once per sheet (the same every time)
+// two more landing spots for the live demo: three peaks spread wide around you, and a fix that holds up (truth inside
+// its 95% area, ±250 m or better). Solved in small slices after load, so the page stays responsive
+async function findPresets() {
+  const r = NAV.rng(7), found = [], T0 = [S.truth.lon, S.truth.lat];
+  let solves = 0;
+  for (let k = 0; k < 400 && found.length < 2 && solves < 16; k++) {
+    const p = NAV.randomSpot(r); if (!p) break;
+    if ([T0, ...found.map(f => [f.lon, f.lat])].some(q => dist(q, p) < 2000)) continue;
+    const sg = NAV.sight(p[0], p[1], {sa: 2, se: 1, sb: 30, noSky: true});
+    if (sg.peaks.length < 3) continue;
+    const spread = Math.max(...sg.peaks.map(a => Math.max(...sg.peaks.map(b => Math.abs(angd(a.true_bearing_deg, b.true_bearing_deg))))));
+    if (spread < 60) continue;
+    solves++;
+    await new Promise(res => setTimeout(res, 40));
+    const sol = NAV.solve({baro: sg.baro, sb: 30, sa: 2, se: 1, peaks: sg.peaks, compass: sg.compass}), f = sol.stages[sol.stages.length - 1];
+    if (!f || f.empty || !NAV.inStage(f, p[0], p[1]) || f.r95 > 250 || f.alt > 0.05) continue;
+    found.push({name: found.length ? 'Spot 3' : 'Spot 2', note: `${sg.n_visible} peaks in view, ±${Math.round(f.r95)} m`, lon: p[0], lat: p[1]});
+  }
+  state.presets = state.presets.slice(0, 1).concat(found);
+  updateHint();
+}
 
-document.querySelectorAll('[data-step]').forEach(b => b.onclick = () => go(+b.dataset.step));
+document.querySelectorAll('[data-step]').forEach(b => b.onclick = () => go(+b.dataset.step, +b.dataset.step < state.step ? -1 : 1));
 document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => setView(b.dataset.view));
-document.querySelectorAll('[data-health]').forEach(b => b.onclick = () => { state.health = b.dataset.health; render(); });
+document.querySelectorAll('[data-health]').forEach(b => b.onclick = () => {
+  state.health = b.dataset.health; state.rtKey = ''; computeRoute();
+  if (state.step === 6) resetWalk();
+  render();
+});
+document.querySelectorAll('[data-aim]').forEach(b => b.onclick = () => {   // re-aim the same spot with a steadier or shakier hand
+  state.aim = +b.dataset.aim;
+  const sc = state.scen, s = state.step;
+  land(sc.truth[0], sc.truth[1], sc.picked);
+  go(Math.min(s, state.scen.fin ? 7 : 1));
+  toast(`Aiming error now ±${state.aim}°: the fix is ±${state.scen.fin ? Math.round(state.scen.fin.r95) : '?'} m.`);
+});
 document.querySelectorAll('[data-speed]').forEach(b => b.onclick = () => { state.speed = +b.dataset.speed; document.querySelectorAll('[data-speed]').forEach(x => press(x, x === b)); });
-$('prev').onclick = () => go(state.step - 1);
-$('next').onclick = () => go(state.step + 1);
-$('play').onclick = () => { state.playing = !state.playing; if (state.playing && R && state.t >= RT[RT.length - 1]) resetWalk(); };
-$('refix').onclick = () => { if (R) refix(routeAt(state.t)); };
-$('scrub').oninput = e => { if (!R) return; simulateTo(e.target.value / 1000 * RT[RT.length - 1]); render(); };
+$('prev').onclick = () => go(state.step - 1, -1);
+$('next').onclick = () => go(state.step + 1, 1);
+$('play').onclick = () => { state.playing = !state.playing; if (state.playing && R() && state.t >= routeEnd()) { resetWalk(); state.trail = []; } };
+$('refix').onclick = () => { if (R()) refix(routeAt(state.t)); };
+$('markBtn').onclick = markHere;
+$('homeBtn').onclick = backToStart;
+$('scrub').oninput = e => { if (!R()) return; simulateTo(e.target.value / 1000 * routeEnd()); render(); };
 $('phBtn').onclick = () => {
-  if (state.step === 5) { state.playing = !state.playing; return; }
-  if ((state.step === 4 || state.step === 5) && state.health === 'injured' && !S.routes.injured) { go(3); return; }
-  go(state.step === 6 ? 0 : state.step + 1);
+  const s = state.step, sc = state.scen;
+  if (s === 6 && R()) { state.playing = !state.playing; return; }
+  if (s === 7 || (s === 1 && !sc.np)) { go(0); return; }
+  if ((s === 5 || s === 6) && !R()) { go(sc.fixStep, -1); return; }
+  go(s === sc.fixStep && s < 5 ? 5 : s + 1, 1);
 };
+const lockBtn = $('lockBtn');
+const holdStart = e => {
+  if (state.locked || lockBtn.disabled) return;
+  if (e.type === 'keydown') { if ((e.key !== ' ' && e.key !== 'Enter') || e.repeat) return; e.preventDefault(); }
+  lockBtn.classList.add('holding'); clearTimeout(holdTimer);
+  holdTimer = setTimeout(() => { lockBtn.classList.remove('holding'); lockNow(true); }, REDUCED ? 0 : 700);
+};
+const holdEnd = () => { clearTimeout(holdTimer); lockBtn.classList.remove('holding'); };
+lockBtn.addEventListener('pointerdown', holdStart); lockBtn.addEventListener('keydown', holdStart);
+['pointerup', 'pointerleave', 'pointercancel', 'keyup', 'blur'].forEach(ev => lockBtn.addEventListener(ev, holdEnd));
+lockBtn.addEventListener('click', () => { if (state.locked) { $('confirm').hidden = false; $('unlockNo').focus(); } });   // unlocking takes two taps
+$('unlockYes').onclick = () => lockNow(false);
+$('unlockNo').onclick = () => { $('confirm').hidden = true; };
 window.addEventListener('keydown', e => {
   const tag = e.target && e.target.tagName;   // leave the slider its arrow keys, and focused buttons their own Space and Enter
-  if (tag === 'INPUT' || (tag === 'BUTTON' && (e.key === ' ' || e.key === 'Enter'))) return;
-  if (e.key === 'ArrowRight') go(state.step + 1);
-  else if (e.key === 'ArrowLeft') go(state.step - 1);
+  if (tag === 'INPUT' || tag === 'SELECT' || (tag === 'BUTTON' && (e.key === ' ' || e.key === 'Enter'))) return;
+  if (e.key === 'ArrowRight') go(state.step + 1, 1);
+  else if (e.key === 'ArrowLeft') go(state.step - 1, -1);
   else if (e.key === ' ') { e.preventDefault(); state.playing = !state.playing; }
+  else if (e.key === 'm' && state.step >= 5) markHere();
+  else if (e.key === 'h' && state.step >= 5) backToStart();
   else if (e.key === 'q' || e.key === 'e') { state.heading = wrap(state.heading + (e.key === 'q' ? -5 : 5)); if (state.view === 'eye') { state.vs = {...state.vs, bearing: state.heading}; deckgl.setProps({viewState: state.vs}); } updatePhone(performance.now()); }
 });
-window.addEventListener('resize', () => { fitUI(); if (state.view !== 'eye') setView(state.view); });
+window.addEventListener('resize', () => { fitUI(); frame(true); });
 }
 </script>
 </body>
