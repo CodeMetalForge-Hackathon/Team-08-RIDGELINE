@@ -922,9 +922,13 @@ function start() {
   if (source === 'sensor' && performance.now() - sensorSeen > 1500 && !('ontouchstart' in window)) source = 'keyboard';
   solveNow(); go('aim');
 }
+let lockAt = -1e9;   // time of the last Lock. A second press within 600 ms (double tap, glove bounce, key repeat) is ignored, so the same card is never Locked twice before the next card is up
 function doLock(ev) {
+  const now = performance.now();
+  if (now - lockAt < 600) return;
   const v = meanVec(300);
   if (!v || v.flat || !target) return;
+  lockAt = now;
   if (navigator.vibrate) navigator.vibrate(v.steady ? 40 : [20, 40, 20]);
   const sus = result && result.status === 'mismatch' ? result.suspect : null;
   if (sus) locks.splice(sus.lock_index, 1);
