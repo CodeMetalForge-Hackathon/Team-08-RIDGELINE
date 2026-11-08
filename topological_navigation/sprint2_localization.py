@@ -15,7 +15,7 @@ def main():
     ##Load Data
     with rasterio.open(FILE_PATH) as dataset:
         # Read the first band (elevation data is typically in band 1)
-        elevation_data = dataset.read(1)g
+        elevation_data = dataset.read(1)
         
         # Get the NoData value from the dataset metadata
         nodata_val = dataset.nodata
