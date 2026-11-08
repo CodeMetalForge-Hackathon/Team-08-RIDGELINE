@@ -266,45 +266,108 @@ async function init(D) {
   const NB = [];
   for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) if (dr || dc) NB.push([dr, dc, Math.hypot(dr * RDY, dc * RDX)]);
   const tobler = (L, dz) => L / (VK * Math.exp(-3.5 * Math.abs(dz / Math.max(L, 1e-6) + 0.05)));
+  // a binary heap of cell indices keyed by K[i]; pos[i] is -1 before the first push and -2 once popped
+  function cellHeap(K) {
+    const heap = new Int32Array(RN), pos = new Int32Array(RN).fill(-1); let hn = 0;
+    const swap = (a, b) => { const x = heap[a]; heap[a] = heap[b]; heap[b] = x; pos[heap[a]] = a; pos[heap[b]] = b; };
+    const up = k => { while (k > 0) { const p = (k - 1) >> 1; if (K[heap[p]] <= K[heap[k]]) break; swap(p, k); k = p; } };
+    const down = k => { for (;;) { const l = 2 * k + 1, r = l + 1; let m = k; if (l < hn && K[heap[l]] < K[heap[m]]) m = l; if (r < hn && K[heap[r]] < K[heap[m]]) m = r; if (m === k) break; swap(m, k); k = m; } };
+    return {pos, size: () => hn,
+      push(j) { if (pos[j] < 0) { heap[hn] = j; pos[j] = hn; hn++; } up(pos[j]); },
+      pop() { const i = heap[0]; hn--; if (hn) { heap[0] = heap[hn]; pos[heap[0]] = 0; down(0); } pos[i] = -2; return i; }};
+  }
+  // a diagonal step may not slip through the corner between two blocked cells (two water cells touching at a corner
+  // are one shoreline to a person on foot); mask 1 = water only, 3 = water or cliff
+  const cornerShut = (r, c, rr, cc, mask) => r !== rr && c !== cc && ((NOGO[r * RW + cc] & mask) || (NOGO[rr * RW + c] & mask));
   // one Dijkstra from a start: every reachable cell gets its walking time and the step it came from
   function reach(lon, lat, cap, speed, maxS) {
     const t1 = performance.now(), start = rCell(xOf(lon), yOf(lat)), T = new Float32Array(RN).fill(Infinity), prev = new Int32Array(RN).fill(-1);
-    const heap = new Int32Array(RN), pos = new Int32Array(RN).fill(-1); let hn = 0;
-    const swap = (a, b) => { const x = heap[a]; heap[a] = heap[b]; heap[b] = x; pos[heap[a]] = a; pos[heap[b]] = b; };
-    const up = k => { while (k > 0) { const p = (k - 1) >> 1; if (T[heap[p]] <= T[heap[k]]) break; swap(p, k); k = p; } };
-    const down = k => { for (;;) { const l = 2 * k + 1, r = l + 1; let m = k; if (l < hn && T[heap[l]] < T[heap[m]]) m = l; if (r < hn && T[heap[r]] < T[heap[m]]) m = r; if (m === k) break; swap(m, k); k = m; } };
-    T[start] = 0; heap[0] = start; pos[start] = 0; hn = 1;
+    const hp = cellHeap(T), pos = hp.pos;
+    T[start] = 0; hp.push(start);
     const lim = maxS || 6 * 3600;
-    while (hn) {
-      const i = heap[0]; hn--; if (hn) { heap[0] = heap[hn]; pos[heap[0]] = 0; down(0); } pos[i] = -2;
-      const ti = T[i]; if (ti > lim) break;
+    while (hp.size()) {
+      const i = hp.pop(), ti = T[i]; if (ti > lim) break;
       const r = (i / RW) | 0, c = i - r * RW, zi = ZR[i];
       for (let q = 0; q < 8; q++) {
         const rr = r + NB[q][0], cc = c + NB[q][1]; if (rr < 0 || cc < 0 || rr >= RH || cc >= RW) continue;
-        const j = rr * RW + cc; if (pos[j] === -2 || NOGO[j] || SR[j] > cap) continue;
+        const j = rr * RW + cc; if (pos[j] === -2 || NOGO[j] || SR[j] > cap || cornerShut(r, c, rr, cc, 3)) continue;
         const tj = ti + tobler(NB[q][2], ZR[j] - zi) / speed;
-        if (tj < T[j]) { T[j] = tj; prev[j] = i; if (pos[j] < 0) { heap[hn] = j; pos[j] = hn; hn++; } up(pos[j]); }
+        if (tj < T[j]) { T[j] = tj; prev[j] = i; hp.push(j); }
       }
     }
     return {T, prev, start, cap, speed, lon, lat, ms: Math.round(performance.now() - t1)};
   }
-  // the cells from the start to a spot; if the spot cannot be reached, to the reachable cell nearest to it
+  // a straight line on the working grid (about 10 m) that touches no water and no cliff and stays under the limit
+  function clearLine(x0, y0, x1, y1, cap) {
+    const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (Math.min(DX, DY) / 3)));
+    for (let s = 0; s <= n; s++) {
+      const i = cellAt(x0 + (x1 - x0) * s / n, y0 + (y1 - y0) * s / n);
+      if (i < 0 || WATER[i] || CLIFF[i] || SLOPE[i] > cap) return false;
+    }
+    return true;
+  }
+  // from a spot on land back to the nearest cell the walker can reach, over land only (any slope, cliffs included,
+  // never water): the stretch the walker cannot do. null when water cuts the spot off (an island, a far shore).
+  function landLink(rt, g0) {
+    const D = new Float32Array(RN).fill(Infinity), prev = new Int32Array(RN).fill(-1), hp = cellHeap(D);
+    D[g0] = 0; hp.push(g0);
+    while (hp.size()) {
+      const i = hp.pop();
+      if (rt.T[i] < Infinity) { const tail = [i]; while (tail[tail.length - 1] !== g0) tail.push(prev[tail[tail.length - 1]]); return {cell: i, tail, len: D[i]}; }
+      const r = (i / RW) | 0, c = i - r * RW;
+      for (let q = 0; q < 8; q++) {
+        const rr = r + NB[q][0], cc = c + NB[q][1]; if (rr < 0 || cc < 0 || rr >= RH || cc >= RW) continue;
+        const j = rr * RW + cc; if (hp.pos[j] === -2 || (NOGO[j] & 1) || cornerShut(r, c, rr, cc, 1)) continue;
+        const dj = D[i] + NB[q][2];
+        if (dj < D[j]) { D[j] = dj; prev[j] = i; hp.push(j); }
+      }
+    }
+    return null;
+  }
+  // The cells from the start to a spot. Nothing the planner returns crosses water:
+  //   reached  the spot itself (the exact pin is the last point when the step onto it is clear)
+  //   'steep'  the spot is on land the walker cannot get onto under the limit: the route stops at the closest safe cell
+  //            along the land, and tail is that last stretch over land (never water) for a thin red line
+  //   'water'  the pin is in the water: the route goes to the reachable cell nearest to it, the closest shore
+  //   'island' the pin is on land that water cuts off: the route goes to the closest reachable shore, no line across
   function pathTo(rt, lon, lat) {
-    const gx = xOf(lon), gy = yOf(lat); let goal = rCell(gx, gy), reached = rt.T[goal] < Infinity;
-    if (!reached) {
-      const R = Math.ceil(3000 / Math.min(RDX, RDY)), gr = (goal / RW) | 0, gc = goal - gr * RW; let best = -1, bd = Infinity;
-      for (let r = Math.max(0, gr - R); r <= Math.min(RH - 1, gr + R); r++) for (let c = Math.max(0, gc - R); c <= Math.min(RW - 1, gc + R); c++) {
-        const i = r * RW + c; if (!(rt.T[i] < Infinity)) continue;
-        const d = (c - gc) * (c - gc) * RDX * RDX + (r - gr) * (r - gr) * RDY * RDY; if (d < bd) { bd = d; best = i; }
+    const gx = xOf(lon), gy = yOf(lat), g0 = rCell(gx, gy), wet = isWater(lon, lat);
+    let goal = g0, reached = !wet && rt.T[g0] < Infinity, why = null, tail = null, pin = null, gap = 0;
+    if (!wet && !reached) {
+      const link = landLink(rt, g0);
+      if (link) {
+        goal = link.cell; why = 'steep'; tail = link.tail; gap = link.len;
+        if (link.len <= 2.3 * Math.max(RDX, RDY) && clearLine(rX(goal % RW), rY((goal / RW) | 0), gx, gy, rt.cap)) { reached = true; why = null; tail = null; gap = 0; }
+      }
+    }
+    if (!reached && !why) {   // in the water, or cut off by it
+      const gr = (g0 / RW) | 0, gc = g0 - gr * RW; let best = -1, bd = Infinity;
+      for (let i = 0; i < RN; i++) {
+        if (!(rt.T[i] < Infinity)) continue;
+        const r = (i / RW) | 0, c = i - r * RW, d = (c - gc) * (c - gc) * RDX * RDX + (r - gr) * (r - gr) * RDY * RDY;
+        if (d < bd) { bd = d; best = i; }
       }
       if (best < 0) return null;
-      goal = best;
+      goal = best; why = wet ? 'water' : 'island'; gap = Math.hypot(rX(goal % RW) - gx, rY((goal / RW) | 0) - gy);
     }
+    if (reached && clearLine(rX(goal % RW), rY((goal / RW) | 0), gx, gy, rt.cap)) pin = [lon, lat];
     const cells = [goal];
     while (cells[cells.length - 1] !== rt.start) { const p = rt.prev[cells[cells.length - 1]]; if (p < 0) return null; cells.push(p); }
     cells.reverse();
-    const gr = (goal / RW) | 0;
-    return {cells, reached, gap_m: reached ? 0 : Math.round(Math.hypot(rX(goal - gr * RW) - gx, rY(gr) - gy)), target: [lon, lat]};
+    if (tail) {   // cell centres from the route's end over the land to the pin, which takes the place of its own cell
+      tail = tail.map(i => { const x = rX(i % RW), y = rY((i / RW) | 0); return [lonOf(x), latOf(y), zAt(x, y)]; });
+      tail[tail.length - 1] = [lon, lat, zAt(gx, gy)];
+    }
+    return {cells, reached, gap_m: Math.round(gap), target: [lon, lat], why, pin, tail};
+  }
+  // a leg of the drawn line is fine when every few metres of it sit on a cell the planner itself would walk
+  function legOK(x0, y0, x1, y1, rt) {
+    const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (Math.min(RDX, RDY) / 4)));
+    for (let s = 0; s <= n; s++) {
+      const i = rCell(x0 + (x1 - x0) * s / n, y0 + (y1 - y0) * s / n);
+      if (i !== rt.start && (NOGO[i] || SR[i] > rt.cap)) return false;
+    }
+    return true;
   }
   function dp(xs, ys, i0, i1, eps, keep) {   // Douglas-Peucker for the phone's legs
     let m = -1, md = eps;
@@ -319,8 +382,19 @@ async function init(D) {
     if (xs.length > 7) {   // a 5-point running mean, ends kept, as in team8_simulate.py
       const sx = xs.slice(), sy = ys.slice();
       for (let i = 2; i < xs.length - 2; i++) { sx[i] = (xs[i - 2] + xs[i - 1] + xs[i] + xs[i + 1] + xs[i + 2]) / 5; sy[i] = (ys[i - 2] + ys[i - 1] + ys[i] + ys[i + 1] + ys[i + 2]) / 5; }
+      // the mean pulls a bend toward the inside, and around a lake the inside is water: a leg that leaves the cells the
+      // planner walked puts both of its ends back on their cell centres
+      for (let pass = 0; pass < 4; pass++) {
+        let moved = false;
+        for (let k = 1; k < xs.length; k++) {
+          if (legOK(sx[k - 1], sy[k - 1], sx[k], sy[k], rt)) continue;
+          for (const q of [k - 1, k]) if (sx[q] !== xs[q] || sy[q] !== ys[q]) { sx[q] = xs[q]; sy[q] = ys[q]; moved = true; }
+        }
+        if (!moved) break;
+      }
       xs = sx; ys = sy;
     }
+    if (pp.pin) { xs.push(xOf(pp.pin[0])); ys.push(yOf(pp.pin[1])); }   // the last step, checked clear, onto the pin itself
     const n = xs.length, zs = xs.map((x, k) => zAt(x, ys[k])), path = [], ts = [0], dist = [0], sl = [];
     let t = 0, L = 0, climb = 0, desc = 0, smax = 0;
     for (let k = 0; k < n; k++) {
@@ -359,10 +433,23 @@ async function init(D) {
         + (dz > 25 ? `, climb ${Math.round(dz)} m` : dz < -25 ? `, descend ${Math.round(-dz)} m` : '') + (steep ? ', steep' : '');
       legs.push({i0, i1, bearing_deg: Math.round(b * 10) / 10, dist_m: Math.round(d), dz_m: Math.round(dz), t0_s: ts[i0], t1_s: ts[i1], to: path[i1].slice(0, 2), say});
     }
-    return {path, timestamps: ts, dist, length_m: Math.round(L), time_s: Math.round(t), climb_m: Math.round(climb), descent_m: Math.round(desc),
-      max_slope_deg: Math.round(smax * 10) / 10, cap_deg: rt.cap, speed_factor: rt.speed, runs, legs, reached: pp.reached, gap_m: pp.gap_m, target: pp.target};
+    const R = {path, timestamps: ts, dist, length_m: Math.round(L), time_s: Math.round(t), climb_m: Math.round(climb), descent_m: Math.round(desc),
+      max_slope_deg: Math.round(smax * 10) / 10, cap_deg: rt.cap, speed_factor: rt.speed, runs, legs, reached: pp.reached, gap_m: pp.gap_m, target: pp.target,
+      why: pp.why || null, tail: pp.tail ? [path[n - 1], ...pp.tail.slice(1)] : null};   // the red line starts where the drawn route stops
+    R.note = noteOf(R);
+    return R;
   }
   const mRound = v => v >= 1000 ? `${(v / 1000).toFixed(1)} km` : `${Math.max(10, Math.round(v / 10) * 10)} m`;
+  // why the route stops short of the pin, in one sentence for any screen (null when it gets there)
+  function noteOf(R) {
+    const here = R.length_m < 25, g = mRound(R.gap_m);
+    if (R.why === 'water') return here ? `The pin is in the water. You are already at the closest shore you can reach, ${g} from the pin.`
+      : `The pin is in the water. The route goes to the closest shore you can reach, ${g} from the pin.`;
+    if (R.why === 'island') return here ? `That spot is cut off by water (an island or a far shore). You are already at the closest shore you can reach, ${g} across the water.`
+      : `That spot is cut off by water (an island or a far shore). The route stops at the closest shore you can reach, ${g} across the water.`;
+    if (R.why === 'steep') return `The last ${g} to the pin is steeper than ${R.cap_deg}° or crosses a cliff. The route stops at the closest safe point.`;
+    return null;
+  }
   // the route in one or two sentences, the way the team's route screen says it
   function describe(R) {
     const out = [];
