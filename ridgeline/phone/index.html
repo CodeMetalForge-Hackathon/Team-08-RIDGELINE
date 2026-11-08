@@ -411,7 +411,7 @@ window.addEventListener('online', () => { if (relay.body != null) flush(); else 
 // ---------- route: the viewer's planner (terrain_viewer/team8_nav.js), loaded on demand ----------
 // Dijkstra with Tobler walking time, water and cliffs blocked, slope limit by walking ability.
 let NAV = null, lastView = null;
-const nav = { loading: false, err: null, health: 'healthy', dest: null, rt: null, rtKey: '', route: null, stay: false, picking: false, unpin: false };
+const nav = { loading: false, err: null, health: 'healthy', dest: null, rt: null, rtKey: '', route: null, stay: false, shore: null, picking: false, unpin: false };
 const CAP = { healthy: 30, injured: 18 }, SPEED = { healthy: 1, injured: 0.5 };
 const store = {
   get(k, d) { try { const v = localStorage.getItem('ridgeline.' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -474,7 +474,8 @@ function startNow() {
       const rt = NAV.reach(p.lon, p.lat, CAP[nav.health], SPEED[nav.health], 9 * 3600);
       if (!first) first = rt;
       const pp = NAV.pathTo(rt, rv.lon, rv.lat), r = pp && NAV.buildRoute(pp, rt);
-      if (r && !(r.length_m < 25 && !r.reached)) { wstart.pick = p; wstart.rt = rt; break; }
+      // leaves: the route gets there or walks 25 m or more toward it, and water does not cut this start off from it
+      if (r && (r.reached || r.length_m >= 25) && r.why !== 'island') { wstart.pick = p; wstart.rt = rt; break; }
     }
     if (!wstart.rt) wstart.rt = first;   // no start leaves under the limit, the route says STAY from the first one
     wstart.rtKey = startKeyOf(wstart.pick);
@@ -514,8 +515,24 @@ function spotsHtml(dl) {
   if (!sp.length) return `<div class="spots"><p class="leg">No Hide or Signal spot within ${h.minutes} min under ${h.cap_deg}° from here.</p>${note}</div>`;
   return `<div class="spots" role="group" aria-label="Hide and signal">${sp.map(d => `<button class="spot ${d.kind === 'HIDE' ? 'hide' : 'signal'}" data-d="${d.id}" aria-pressed="${!!(nav.dest && nav.dest.id === d.id)}"><b>${d.label}</b><span>${d.why}</span></button>`).join('')}${note}</div>`;
 }
+// true when some ground within about 45 m of a point is water, so a route that ends there ends at a shore
+function nearWater(lon, lat) {
+  for (const d of [0, 20, 40]) for (let k = 0; k < (d ? 8 : 1); k++) {
+    const a = k * Math.PI / 4;
+    if (NAV.isWater(lon + d * Math.sin(a) / 80300, lat + d * Math.cos(a) / 111200)) return true;
+  }
+  return false;
+}
+// the planner's own sentence on why a route stops short (water, an island, steep ground), said about this destination
+function noteFor(r, d) {
+  let s = (r && r.note) || '';
+  if (!s) return '';
+  const name = !d || d.id === 'pin' ? null : d.id === 'home' ? 'the start' : d.label;
+  if (name) s = s.replace(/\bThe pin\b/g, name[0].toUpperCase() + name.slice(1)).replace(/\bthe pin\b/g, name);
+  return s.replace(/closest safe point/g, 'closest point you can walk to');
+}
 function computeRoute() {
-  nav.route = null; nav.stay = false;
+  nav.route = null; nav.stay = false; nav.shore = null;
   if (nav.dest && nav.dest.kind) nav.dest = spotDests().find(d => d.id === nav.dest.id) || null;   // the spots move with the fix and the walking ability
   const here = fixLL();
   if (!NAV || !nav.dest || !here) return;
@@ -523,7 +540,9 @@ function computeRoute() {
   if (nav.rtKey !== key) { nav.rt = wstart.rt && wstart.rtKey === key ? wstart.rt : NAV.reach(s.lon, s.lat, CAP[nav.health], SPEED[nav.health], 9 * 3600); nav.rtKey = key; }
   const pp = NAV.pathTo(nav.rt, nav.dest.lon, nav.dest.lat);
   const r = pp && NAV.buildRoute(pp, nav.rt);
-  if (r && !(r.length_m < 25 && !r.reached)) { r.say = NAV.describe(r); nav.route = r; } else nav.stay = true;
+  if (r && !(r.length_m < 25 && !r.reached)) { r.say = NAV.describe(r); nav.route = r; }
+  else if (r && (r.why === 'water' || r.why === 'island') && r.path.length && nearWater(r.path[r.path.length - 1][0], r.path[r.path.length - 1][1])) nav.shore = r;   // already at the closest shore, not a STAY case
+  else nav.stay = true;
 }
 function setDest(id) {
   nav.dest = destList().find(d => d.id === id) || null;
@@ -536,19 +555,21 @@ function routeHtml() {
   if (!NAV) return `<p class="leg">Loading the terrain for routes…</p>`;
   if (!nav.dest) return `<p class="leg">Choose where to go. Water and cliffs are avoided, and the slope limit follows how well you can walk.</p>`;
   if (nav.stay) return `<div class="stay"><b>STAY<br>SIGNAL<br>WAIT</b><p>No way to ${nav.dest.label} stays under ${CAP[nav.health]}° from here. Stay where the team will look first, make yourself easy to see, and wait.</p></div>`;
+  if (nav.shore) return `<div class="rt-top">At the shore<small>No walking needed</small></div><p class="say">${noteFor(nav.shore, nav.dest)}</p>`;
   const r = nav.route, tot = r.length_m || 1;
   return `<div class="rt-top">${fmtM(r.length_m)}<small>${fmtT(r.time_s)} · up ${r.climb_m} m · down ${r.descent_m} m</small></div>
     <div class="rbar" aria-hidden="true">${r.runs.map(q => `<i style="width:${(q.len / tot * 100).toFixed(2)}%;background:var(--${['easy', 'mod', 'steep'][q.cls]})"></i>`).join('')}</div>
-    <p class="say">${r.say}${r.reached ? '' : ` It ends ${r.gap_m} m short, the rest is steeper than ${CAP[nav.health]}°.`}</p>
+    <p class="say">${r.say}${r.reached ? '' : ' ' + noteFor(r, nav.dest)}</p>
     ${r.legs[0] ? `<p class="leg"><b>First leg.</b> ${r.legs[0].say}.</p>` : ''}
     <div class="key"><span><i style="background:var(--easy)"></i>Easy, up to 10°</span><span><i style="background:var(--mod)"></i>Moderate</span><span><i style="background:var(--steep)"></i>Steep, over 20°</span></div>`;
 }
 function routeForBoard() {
   if (!nav.dest) return null;
-  const r = nav.route;
+  const r = nav.route, s = nav.shore;
   const thin = path => path.filter((p, i) => i % 2 === 0 || i === path.length - 1).map(p => [+p[0].toFixed(6), +p[1].toFixed(6)]);
+  const say = r ? (r.reached ? r.say : `${r.say} ${noteFor(r, nav.dest)}`) : s ? noteFor(s, nav.dest) : null;
   return { dest: { lon: nav.dest.lon, lat: nav.dest.lat, label: nav.dest.label }, health: nav.health, cap_deg: CAP[nav.health], stay: nav.stay,
-    say: r ? r.say : null, length_m: r ? r.length_m : null, time_s: r ? r.time_s : null, reached: r ? r.reached : null,
+    say, length_m: r ? r.length_m : s ? s.length_m : null, time_s: r ? r.time_s : s ? s.time_s : null, reached: r ? r.reached : s ? false : null,
     runs: r ? r.runs.map(q => ({ cls: q.cls, path: thin(q.path) })) : [] };
 }
 
