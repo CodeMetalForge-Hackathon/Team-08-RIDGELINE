@@ -448,6 +448,21 @@ class CotEvents(unittest.TestCase):
         self.assertEqual(links[0].get('point'), f'{path[0][1]:.6f},{path[0][0]:.6f}')
         self.assertEqual(links[-1].get('point'), f'{path[-1][1]:.6f},{path[-1][0]:.6f}')
 
+    def test_auto_pace_words_the_walk_and_the_gps(self):
+        st = self.state()
+        st['phone']['pace'] = {'walked_fix_m': 1268, 'gps_used': 0, 'refixes': 0, 'sim': True, 'refix': True, 'basis': 'drift'}
+        me = ET.fromstring(dict(cot.build(cot.snapshot(st), time.time()))['RIDGELINE-1'])
+        text = me.find('detail/remarks').text
+        self.assertIn('Terrain fix from 3 peaks, 1.3 km walked since (simulated), kept live by Auto-PACE, no GPS', text)
+        self.assertIn('Confidence low, aim at 3 peaks again.', text)
+        st['phone']['pace'] = {'walked_fix_m': 0, 'gps_used': 1, 'refixes': 0, 'sim': False, 'refix': False}
+        text = ET.fromstring(dict(cot.build(cot.snapshot(st), time.time()))['RIDGELINE-1']).find('detail/remarks').text
+        self.assertIn('a GPS reading inside the circle used', text)
+        self.assertNotIn('no GPS', text)
+        st['phone']['pace'] = {'walked_fix_m': 0, 'gps_used': 0, 'refixes': 0}   # just after the fix: the plain wording
+        text = ET.fromstring(dict(cot.build(cot.snapshot(st), time.time()))['RIDGELINE-1']).find('detail/remarks').text
+        self.assertIn(f'Terrain fix from 3 peaks, no GPS, 95% radius {R95} m', text)
+
     def test_remarks_say_how_old_the_position_is(self):
         """Resends restamp time and stale, so a responder in ATAK reads the age in the remarks (Matt's point)."""
         fix, now = cot.snapshot(self.state()), 1_762_600_000.0   # 2025-11-08 11:06:40 UTC

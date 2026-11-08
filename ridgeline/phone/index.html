@@ -289,7 +289,33 @@ html.night .dots span.on{color:#000;background:var(--amber)}html.night .boot-mar
 @media(prefers-reduced-motion:reduce){.scope #br,.dots span,.meter .arc{transition:none}}
 
 </style>
-
+<style id="auto-pace">
+/* Auto-PACE: what the position rests on now. Text and muted for the tiers, red only when a source disagrees or a
+   new fix is needed. Gold stays for what to aim at and what to press. */
+.pc{display:flex;flex-direction:column;border-top:1px solid var(--line2);border-bottom:1px solid var(--line2)}
+.pc-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 8px;padding:10px 0 6px;font:600 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.pc-head>*{white-space:nowrap}
+.pc-head b{color:var(--text);font-weight:700;margin-left:auto}
+.pc-head b.low{color:var(--red)}
+.pc-row{display:grid;grid-template-columns:18px 88px minmax(0,1fr);gap:8px;align-items:baseline;padding:7px 0 7px 8px;border-top:1px solid var(--line);font-size:14px;line-height:1.35;color:var(--muted)}
+.pc-row i{font:700 12px var(--mono);font-style:normal;color:var(--faint)}
+.pc-row b{font-weight:600}
+.pc-row.on{color:var(--text);box-shadow:inset 3px 0 var(--text)}
+.pc-row.on i{color:var(--text)}
+.pc-row.bad,.pc-row.bad i{color:var(--red)}
+.pc-row.bad.on{box-shadow:inset 3px 0 var(--red)}
+.pc-alert{border:2px solid var(--red);padding:12px 14px;margin:8px 0;display:flex;flex-direction:column;gap:8px}
+.pc-alert b{font:800 18px/1.25 var(--font);color:var(--red)}
+.pc-alert span{color:var(--muted);font-size:14px;line-height:1.45}
+.pc-note{font-size:14px;line-height:1.45;color:var(--muted);padding:8px 0;border-top:1px solid var(--line)}
+.pc-note b{color:var(--text);font-weight:600}
+.pc-sim{display:flex;flex-direction:column;gap:6px;padding:10px 0 12px;border-top:1px solid var(--line)}
+.pc-sim .tag{align-self:flex-start;font:700 11px var(--mono);letter-spacing:.14em;color:var(--muted);border:1px dashed var(--line2);padding:2px 6px}
+.pc-simrow{display:flex;gap:8px}.pc-simrow .btn{min-height:44px;font-size:15px}.pc-simrow #sim-speed{flex:0 0 84px;font-family:var(--mono)}.pc-simrow #sim-head{flex:1;min-width:0}
+.pc-btns{display:grid;gap:8px}
+.pm-sub{display:inline-block;white-space:nowrap;font:600 13px var(--font);color:var(--muted);letter-spacing:.02em;margin-left:8px}
+.pm-sub.low{color:var(--red)}
+</style>
 </head>
 <body>
 <div class="app">
@@ -309,10 +335,12 @@ html.night .dots span.on{color:#000;background:var(--amber)}html.night .boot-mar
     <p class="foot" id="sensor-debug">No motion data yet.</p>
     <label class="check"><input type="checkbox" id="camopt"> Rear camera behind the crosshair</label>
     <label class="check"><input type="checkbox" id="nightopt"> Night (red)</label>
+    <label class="check"><input type="checkbox" id="paceopt"> Auto-PACE after the fix (circle grows as you walk, GPS check, re-aim prompt)</label>
+    <label class="check"><input type="checkbox" id="stepsopt"> Count steps with the motion sensor</label>
     <label>Aim error assumed (deg, 1 sigma)<input id="sigma" type="number" min="0.5" max="10" step="0.5" value="3"></label>
-    <label>Test GPS<select id="gpsopt"><option value="off">Off</option><option value="spoof">Far test point, 2.5 km NE of the demo spot</option><option value="honest">Near test point, 40 m from the demo spot</option><option value="custom">Custom lat lon</option></select></label>
+    <label>Test GPS<select id="gpsopt"><option value="off">Off</option><option value="spoof">Far test point, 2.5 km NE of the true spot</option><option value="honest">Near test point, 40 m from the true spot</option><option value="custom">Custom lat lon</option></select></label>
     <div class="pair" id="gps-custom" hidden><label>Lat<input id="gps-lat" type="number" step="0.00001" inputmode="decimal"></label><label>Lon<input id="gps-lon" type="number" step="0.00001" inputmode="decimal"></label></div>
-    <p class="foot">A simulated GPS reading, compared with the terrain estimate. A disagreement does not identify its cause. The phone GPS is never read.</p>
+    <p class="foot">A simulated GPS reading, compared with the terrain estimate. A disagreement does not identify its cause. The phone GPS is never read. The true spot is the demo spot, or the simulated walker during a Simulated walk.</p>
     <label>Barometer altitude (m, simulated)<input id="baro" type="number" step="1"></label>
     <button class="btn" id="assist">Demo assist: aim at the current card (keyboard only)</button>
     <button class="btn" id="reset">Start a new fix and clear marks</button>
@@ -323,6 +351,7 @@ html.night .dots span.on{color:#000;background:var(--amber)}html.night .boot-mar
 </section>
 <script src="/solver.js"></script>
 <script src="/hide.js"></script>
+<script src="/pace.js"></script>
 <script src="/skyline.js"></script>
 <script>
 'use strict';
@@ -344,6 +373,7 @@ let orientMode = 'relative', relSeen = 0, absSeen = 0;
 function onOrient(e, kind) {
   if (e.alpha == null || e.beta == null || e.gamma == null) return;
   if (kind === 'relative') relSeen = performance.now(); else absSeen = performance.now();
+  oriBy[kind] = { a: e.alpha, b: e.beta, g: e.gamma, t: performance.now() };   // Auto-PACE walking direction
   if (kind !== orientMode) return;
   sensorSeen = performance.now();
   if (source !== 'sensor') return;
@@ -381,7 +411,7 @@ function meanVec(ms) {
 
 // ---------- solving ----------
 function solveNow() {
-  result = S.solve(model, { baro_m: baro, locks }, { candidates: wallIds, bearing_sigma_deg: sigma });
+  result = S.solve(model, { baro_m: baro, locks }, { candidates: wallIds, bearing_sigma_deg: sigma, keep_p: true });   // p starts Auto-PACE
   if (result.status === 'mismatch' && result.suspect) target = result.suspect.was_peak_id;
   else if (result.status === 'enough') target = null;
   else target = result.next_peak_id || wallIds.find(id => !locks.some(l => l.peak_id === id)) || null;
@@ -429,17 +459,17 @@ function mgrsOf(lat, lon, digits) {
   return { text: `${zone}${band} ${col}${row} ${pad(E)} ${pad(N)}`, zone, band, E, N };
 }
 // mgrs-end
-const mgrsDigits = () => result && result.r95_m < 50 ? 4 : 3;   // 10 m squares only when the fix is that good
-function fixMgrs() { return result && result.n_locks ? mgrsOf(result.estimate.lat, result.estimate.lon, mgrsDigits()).text : null; }
+const mgrsDigits = () => { const q = posNow(); return q && q.r95_m < 50 ? 4 : 3; };   // 10 m squares only when the fix is that good
+function fixMgrs() { const q = posNow(); return q ? mgrsOf(q.lat, q.lon, mgrsDigits()).text : null; }
 
 // ---------- simulated GPS comparison (not a spoofing detector) ----------
 // The phone GPS is never read. A test reading is set in Settings and compared with the terrain fix.
 let gpsMode = 'off', gpsCustom = null;
 function gpsPoint() {
   if (!model || gpsMode === 'off') return null;
-  const d = model.demo;
-  if (gpsMode === 'spoof') return S.lonLat(model, d.e_m + 2500 * Math.SQRT1_2, d.n_m + 2500 * Math.SQRT1_2);   // 2.5 km NE of the demo spot
-  if (gpsMode === 'honest') return S.lonLat(model, d.e_m - 20, d.n_m - 34.6);   // 40 m SSW of the demo spot
+  const t = sim.truth, e0 = t ? t.e : model.demo.e_m, n0 = t ? t.n : model.demo.n_m;   // the simulated walker, else the demo spot
+  if (gpsMode === 'spoof') return S.lonLat(model, e0 + 2500 * Math.SQRT1_2, n0 + 2500 * Math.SQRT1_2);   // 2.5 km NE of the true spot
+  if (gpsMode === 'honest') return S.lonLat(model, e0 - 20, n0 - 34.6);   // 40 m SSW of the true spot
   return gpsMode === 'custom' && gpsCustom ? gpsCustom : null;
 }
 function distM(lat1, lon1, lat2, lon2) {
@@ -449,6 +479,11 @@ function distM(lat1, lon1, lat2, lon2) {
 function gpsCheck() {
   const g = gpsPoint();
   if (!g || !result || result.n_locks < 2 || result.status === 'mismatch') return null;
+  if (paceLive()) {   // Auto-PACE judges the reading against its own live 95% circle (and uses it when it agrees)
+    const G = pace.st.gps, key = `${(+g.lat).toFixed(6)},${(+g.lon).toFixed(6)}`;
+    const r = G.key === key && G.verdict !== 'OFF' ? G : paceGps();
+    return r ? { lat: r.lat, lon: r.lon, verdict: r.verdict, dist_m: r.dist_m } : null;
+  }
   const dist = distM(result.estimate.lat, result.estimate.lon, g.lat, g.lon);
   // Keep the legacy REJECTED wire value for existing board and CoT consumers. It means disagreement only.
   return { lat: +g.lat.toFixed(6), lon: +g.lon.toFixed(6), verdict: dist > result.r95_m ? 'REJECTED' : 'AGREE', dist_m: Math.round(dist) };
@@ -462,8 +497,21 @@ function gpsHtml() {
 }
 
 function summaryForBoard() {
-  return { status: result.status, r95_m: Math.round(result.r95_m), lat: result.estimate.lat, lon: result.estimate.lon, n: locks.length, mgrs: fixMgrs(), gps: gpsCheck(),
+  // lat, lon and r95_m are the best position now: the Auto-PACE map once the fix screen is up, so ATAK follows the walk
+  const q = posNow() || { lat: result.estimate.lat, lon: result.estimate.lon, r95_m: result.r95_m };
+  const out = { status: result.status, r95_m: Math.round(q.r95_m), lat: q.lat, lon: q.lon, n: locks.length, mgrs: fixMgrs(), gps: gpsCheck(),
     marks: screen === 'fix' && window.RidgelineHide && spotsNow() ? window.RidgelineHide.marks(spotsNow()) : null };
+  if (paceLive()) {
+    const sg = pace.signal;
+    out.fix = { lat: result.estimate.lat, lon: result.estimate.lon, r95_m: Math.round(result.r95_m) };
+    out.pace = Object.assign(PC.summary(pace.st, Date.now()), {
+      running: sim.running, note: pace.note,
+      signal: sg ? { lat: sg.lat, lon: sg.lon, walk_min: sg.walk_min, seen_by: sg.seen_by, of: sg.of } : null,
+      truth: null,   // [lon, lat] of the simulated walker, for the board's answer check
+    });
+    if (sim.truth) { const w = S.lonLat(model, sim.truth.e, sim.truth.n); out.pace.truth = [+w.lon.toFixed(6), +w.lat.toFixed(6)]; }
+  }
+  return out;
 }
 function post() {
   // the board solves on its own, so a Lock is sent before this phone finishes solving
@@ -678,6 +726,306 @@ function routeForBoard() {
     runs: r ? r.runs.map(q => ({ cls: q.cls, path: thin(q.path) })) : [] };
 }
 
+// ---------- Auto-PACE (ridgeline/pace.js): the fix keeps living after it is taken ----------
+// The fix map is kept and rewritten by every source that still works: steps with the heading the peaks calibrated,
+// a barometer band, a GPS reading that falls inside the circle, a new fix. The tiers say what the position rests on
+// now (P GPS, A terrain fix, C steps, E re-aim). PACE_DEFAULT is the switch for the 10:30 rule (false ships it off).
+const PACE_DEFAULT = { on: true, steps: true };
+const PC = window.RidgelinePace || null;
+let pace = null, paceCanvas = null, paceOverlay = null, pacePosted = 0;
+let paceOn = !!store.get('pace', PACE_DEFAULT.on), stepsOn = !!store.get('steps', PACE_DEFAULT.steps);
+const oriBy = {};   // newest raw angles of each orientation stream
+const motion = { det: null, seen: false, last: 0, gapFrom: 0 };
+// Simulated walk: the route above at 30x, steps 5% longer than the phone assumes, heading 4 deg off (plus 1 deg noise),
+// barometer = terrain under the walker + the reference error it had at the fix. Labelled as simulated everywhere.
+const SIM = { speed: 30, speeds: [30, 120], heads: ['peaks', 'lost'], bias_deg: 4, stride_bias: 0.05, noise_deg: 1, baro_noise_m: 1 };   // 30x as specified, 120x to reach the re-aim limit within a short demo
+const sim = { mult: SIM.speeds.includes(+store.get('simx', SIM.speed)) ? +store.get('simx', SIM.speed) : SIM.speed, head: store.get('simh', 'peaks') === 'lost' ? 'lost' : 'peaks', running: false, timer: null, pts: null, k: 0, along: 0, carry: 0, last: 0, speed: 1.1, stride: 0.735, ref: 0, alt: null, truth: null, home: null, done: false };
+const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+const paceLive = () => !!(pace && screen === 'fix');
+const paceKey = () => locks.map(l => `${l.peak_id}:${l.heading_deg}`).join('|');
+function posNow() {   // the best position now: Auto-PACE on the fix screen, else the fix
+  if (paceLive()) { const s = pace.st.stats; return { lat: s.lat, lon: s.lon, e_m: s.e_m, n_m: s.n_m, r95_m: s.r95_m }; }
+  if (!result || !result.n_locks) return null;
+  const e = result.estimate;
+  return { lat: e.lat, lon: e.lon, e_m: e.e_m, n_m: e.n_m, r95_m: result.r95_m };
+}
+// start Auto-PACE from a new fix, or fold a new fix into the walked map after Re-aim
+function paceSync() {
+  if (!PC || !paceOn) { if (pace) paceDrop(); return; }
+  if (!result || !result.p || result.n_locks < 2 || result.status === 'mismatch') return;
+  const key = paceKey();
+  if (pace && pace.key === key) return;
+  if (pace && pace.refixPending) {
+    const out = PC.refix(pace.st, result, { t: Date.now(), baro_m: baro });
+    Object.assign(pace, { key, refixPending: false, alerted: false, note: out.took_new ? 'off' : 'ok', overlap: out.overlap, signal: null, signalKey: '', drawn: -1 });
+  } else {
+    simStop(); sim.truth = null; sim.done = false; sim.alt = null;
+    sim.home = { e: model.demo.e_m, n: model.demo.n_m };   // the demo Locks are taken at the demo spot
+    pace = { st: PC.create(model, result, { t: Date.now(), baro_m: baro }), key, refixPending: false, alerted: false, note: null, overlap: null, signal: null, signalKey: '', drawn: -1, html: '' };
+  }
+  paceGps();
+  paceOverlay = buildPaceOverlay();
+}
+function paceDrop() { simStop(); pace = null; paceOverlay = null; sim.truth = null; sim.done = false; sim.alt = null; }
+function paceGps() {
+  if (!pace) return null;
+  const g = gpsPoint();
+  if (!g) { PC.gpsOff(pace.st); return null; }
+  return PC.gps(pace.st, +g.lat, +g.lon);
+}
+// Walking direction as a true bearing: the stream the Locks used, turned to true north with the offset the peaks fitted
+// (true = phone - offset). Flat phone: its top edge. Held up: the camera. Another stream, no fresh sample or no fitted
+// offset: unknown, and the map spreads the walked distance in every direction.
+function walkHeading() {
+  if (!result || !Number.isFinite(result.offset_deg) || !locks.length) return null;
+  const k = locks[0].stream, o = oriBy[k];
+  if (!o || k !== orientMode || locks.some(l => l.stream !== k) || performance.now() - o.t > 1500) return null;
+  const a = rad(o.a), b = rad(o.b), g = rad(o.g);
+  const cx = -Math.cos(a) * Math.sin(g) - Math.sin(a) * Math.sin(b) * Math.cos(g), cy = -Math.sin(a) * Math.sin(g) + Math.cos(a) * Math.sin(b) * Math.cos(g);
+  const tx = -Math.sin(a) * Math.cos(b), ty = Math.cos(a) * Math.cos(b);
+  const ch = Math.hypot(cx, cy), th = Math.hypot(tx, ty);
+  if (Math.max(ch, th) < 0.3) return null;
+  const v = ch >= th ? [cx, cy] : [tx, ty];
+  return W360(deg(Math.atan2(v[0], v[1])) - result.offset_deg);
+}
+window.addEventListener('devicemotion', e => {
+  const a = e.accelerationIncludingGravity;
+  if (!a || a.x == null || a.y == null || a.z == null) return;
+  const now = performance.now();
+  motion.seen = true; motion.last = now;
+  if (!PC || !paceLive() || !stepsOn || sim.running) return;
+  if (!motion.det) motion.det = PC.stepDetector();
+  const n = motion.det.push(now / 1000, a.x, a.y, a.z);
+  if (n > 0) PC.addSteps(pace.st, n, PC.STRIDE[nav.health], walkHeading(), 'peaks');
+});
+// every 0.5 s on the fix screen: a lost step stream counts as walking up to 1 m/s in any direction, then GPS, then draw
+function paceTick() {
+  if (!paceLive() || sim.running) return;
+  const now = performance.now();
+  if (stepsOn && motion.seen && now - motion.last > 5000) {
+    const from = Math.max(motion.last, motion.gapFrom);
+    if (now - from > 1000) { PC.idle(pace.st, (now - from) / 1000); motion.gapFrom = now; }
+  }
+  PC.flush(pace.st);
+  paceGps();
+  paceAfter();
+}
+setInterval(paceTick, 500);
+function paceAfter() {
+  if (!paceLive()) return;
+  const sm = PC.summary(pace.st, Date.now());
+  if (sm.refix && !pace.alerted) { pace.alerted = true; if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]); }
+  if (!sm.refix) pace.alerted = false;
+  if (sm.refix) paceSignal();
+  paceRender(sm);
+  const now = performance.now();
+  if (pace.st.updates !== pace.posted && now - pacePosted > 1000) { pace.posted = pace.st.updates; pacePosted = now; post(); }
+}
+// the nearest SIGNAL spot (open ground seen by many summits) from the live position, where to aim at 3 peaks again
+function paceSignal() {
+  const s = pace.st.stats, key = `${Math.round(s.e_m / 150)},${Math.round(s.n_m / 150)}|${nav.health}`;
+  if (pace.signalKey === key) return pace.signal;
+  pace.signalKey = key; pace.signal = null;
+  try {
+    const out = window.RidgelineHide.candidates(model, { e_m: s.e_m, n_m: s.n_m }, { cap_deg: CAP[nav.health], injured: nav.health === 'injured', minutes: 30 });
+    const sg = (out.signal || []).slice().sort((a, b) => a.walk_min - b.walk_min || a.rank - b.rank)[0];
+    if (sg) pace.signal = Object.assign({}, sg, { dir: ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(W360(deg(Math.atan2(sg.e_m - s.e_m, sg.n_m - s.n_m))) / 45) % 8], dist_m: Math.hypot(sg.e_m - s.e_m, sg.n_m - s.n_m) });
+  } catch (e) { pace.signal = null; }
+  return pace.signal;
+}
+function buildPaceOverlay() {
+  if (!pace) return null;
+  const st = pace.st, th = PC.hpd(st), p = st.p, low = PC.summary(st).level === 'low';
+  if (!paceCanvas) { paceCanvas = document.createElement('canvas'); paceCanvas.width = model.nx; paceCanvas.height = model.ny; }
+  const ctx = paceCanvas.getContext('2d'), img = ctx.createImageData(model.nx, model.ny);
+  for (let i = 0; i < model.n; i++) {
+    const v = p[i];
+    if (!v || v < th.t95) continue;
+    img.data[i * 4] = low ? 190 : 12; img.data[i * 4 + 1] = low ? 40 : 104; img.data[i * 4 + 2] = low ? 40 : 140; img.data[i * 4 + 3] = v >= th.t50 ? 150 : 82;
+  }
+  ctx.putImageData(img, 0, 0);
+  return paceCanvas;
+}
+const BASIS = { gps: 'GPS', fix: 'Terrain fix', refix: 'New fix', steps: 'Steps', drift: 'Steps, no heading' };
+function paceHtml(sm) {
+  if (!pace) return '';
+  const mins = sm.minutes < 1 ? 'under 1 min ago' : `${Math.round(sm.minutes)} min ago`;
+  const head = sm.heading === 'sim' ? 'heading simulated' : sm.heading === 'unknown' ? 'heading unknown, spread every way' : 'heading from the peaks';
+  const baroT = sm.baro === 'off' ? 'no barometer' : `barometer band (sim)${sm.baro_used ? `, used ${sm.baro_used === 1 ? 'once' : sm.baro_used + ' times'}` : ''}`;
+  const g = sm.gps;
+  const rows = [
+    { k: 'P', n: 'GPS', on: sm.basis === 'gps', bad: g === 'REJECTED', t: g === 'OFF' ? 'Off' : g === 'AGREE' ? `Agrees, ${fmtM(sm.gps_dist_m)} off${sm.gps_used ? ', in use' : ''}` : `Disagrees, ${fmtM(sm.gps_dist_m)} off, not used` },
+    { k: 'A', n: 'Terrain fix', on: sm.basis === 'fix' || sm.basis === 'refix', t: `${mins} · ${fmtM(sm.walked_fix_m)} walked${sm.assumed_m ? `, ${fmtM(sm.assumed_m)} of it assumed` : ''}` },
+    { k: 'C', n: 'Steps', on: sm.basis === 'steps' || sm.basis === 'drift', t: `${sm.steps.toLocaleString('en-US')} steps · ${head} · ${baroT}` },
+    { k: 'E', n: 'Re-aim', on: sm.refix, bad: sm.refix, t: sm.refix ? 'Needed now' : `Not needed until ±${PC.DEFAULTS.caution_m} m or ${PC.DEFAULTS.refix_ratio}× the fix` },
+  ];
+  const lvl = { good: 'GOOD', caution: 'CAUTION', low: 'LOW' }[sm.level];
+  const sg = pace.signal;
+  const alert = sm.refix ? `<div class="pc-alert" role="alert"><b>Confidence low. Aim at 3 peaks again.</b>
+      <span>±${fmtM(sm.r95_m)} now, ±${fmtM(sm.r95_fix_m)} at the fix.${sg ? ` Nearest Signal spot, open ground seen by ${sg.seen_by} of ${sg.of} summits: ${sg.walk_min < 1 ? 'under 1' : sg.walk_min} min walk ${sg.dir}, marked on the map.` : ''}</span>
+      <div class="pc-btns"><button class="btn primary" id="pace-reaim">Re-aim now</button>${sim.truth ? '<button class="btn ghost" id="pace-simfix">Simulated re-aim</button>' : ''}</div></div>` : '';
+  const note = pace.note === 'nopeaks' ? '<p class="pc-note"><b>Too few peaks in view.</b> No spot within 600 m of the simulated walker sees three peaks. Walk on and try again.</p>'
+    : sm.basis === 'refix' && pace.note ? `<p class="pc-note">${pace.note === 'ok' ? `<b>New fix agrees with the steps.</b> Both were multiplied, overlap ${Math.round(pace.overlap * 100)}%.` : `<b>Steps were off.</b> The new fix and the walked map barely overlap (${(pace.overlap * 100).toFixed(1)}%), so the new fix is used alone.`}</p>` : '';
+  const can = !!(nav.route && nav.route.path && nav.route.path.length > 1) || simPaused();
+  const simBtn = sim.running ? 'Stop simulated walk' : simPaused() ? 'Resume simulated walk' : sim.done ? 'Simulated walk again from the fix' : 'Simulated walk';
+  return `<section class="pc" aria-label="Auto-PACE">
+    <div class="pc-head"><span>Auto-PACE · rests on</span><b class="${sm.level === 'low' ? 'low' : ''}">${BASIS[sm.basis] || sm.basis} · ${lvl}</b></div>
+    ${rows.map(r => `<div class="pc-row${r.on ? ' on' : ''}${r.bad ? ' bad' : ''}"><i>${r.k}</i><b>${r.n}</b><span>${r.t}</span></div>`).join('')}
+    ${alert}${note}
+    <div class="pc-sim"><span class="tag">SIMULATED</span><button class="btn ghost" id="sim-walk"${can || sim.running ? '' : ' disabled'}>${simBtn}</button>
+      <div class="pc-simrow"><button class="btn ghost" id="sim-speed" aria-label="Simulation speed, tap to change">×${sim.mult}</button><button class="btn ghost" id="sim-head" aria-pressed="${sim.head === 'lost'}">${sim.head === 'lost' ? 'Heading lost (pocket)' : 'Heading from the peaks'}</button></div>
+      <p class="foot">${can ? `Walks the route below at ${sim.mult}× ${sim.head === 'lost' ? 'with no usable heading, as with the phone in a pocket' : `with a ${SIM.bias_deg}° heading error`}, steps ${SIM.stride_bias * 100}% longer than assumed and a barometer read from the terrain. Not a real walk.` : 'Choose a destination with a route to walk it in simulation.'}</p></div>
+  </section>`;
+}
+function paceRender(sm) {
+  if (!paceLive() || !$('pace')) return;
+  sm = sm || PC.summary(pace.st, Date.now());
+  const html = paceHtml(sm);
+  if (html !== pace.html) {
+    pace.html = html; $('pace').innerHTML = html;
+    if ($('sim-walk')) $('sim-walk').onclick = () => { if (sim.running) simStop(); else simStart(); paceAfter(); };
+    if ($('sim-speed')) $('sim-speed').onclick = () => { const L = SIM.speeds; sim.mult = L[(L.indexOf(sim.mult) + 1) % L.length]; store.set('simx', sim.mult); paceRender(); };
+    if ($('sim-head')) $('sim-head').onclick = () => { sim.head = sim.head === 'lost' ? 'peaks' : 'lost'; store.set('simh', sim.head); paceRender(); };
+    if ($('pace-reaim')) $('pace-reaim').onclick = refixStart;
+    if ($('pace-simfix')) $('pace-simfix').onclick = simRefix;
+  }
+  if (pace.drawn === pace.st.updates) return;
+  pace.drawn = pace.st.updates;
+  const q = posNow();
+  $('pm').textContent = '±' + fmtM(q.r95_m);
+  const sub = $('pm-sub');
+  if (sub) { sub.className = 'pm-sub' + (sm.level === 'low' ? ' low' : ''); sub.textContent = sm.walked_fix_m || sm.basis === 'gps' ? `95% now · ±${fmtM(sm.r95_fix_m)} at the fix` : `95% · ${locks.length} peaks`; }
+  $('coords').textContent = `${Math.abs(q.lat).toFixed(5)}° ${q.lat >= 0 ? 'N' : 'S'}\n${Math.abs(q.lon).toFixed(5)}° ${q.lon >= 0 ? 'E' : 'W'}`;
+  $('mgrs').firstChild.textContent = fixMgrs();
+  if ($('gpsbox')) $('gpsbox').innerHTML = gpsHtml();
+  $('chip-mode').textContent = { gps: 'GPS', fix: 'TERRAIN', refix: 'TERRAIN', steps: 'STEPS', drift: 'STEPS' }[sm.basis] || 'TERRAIN';
+  paceOverlay = buildPaceOverlay();
+  drawMap($('map'), true);
+}
+// Re-aim: a new fix from the cards. Its map is multiplied into the walked one when the fix screen comes back.
+function refixStart() {
+  if (!pace) return;
+  simStop();
+  pace.refixPending = true;
+  locks = []; skip = 0; shownPm = null; solveNow(); target = model.demo.first_peak_id; go('aim'); post();
+}
+// three peaks seen from a spot, spread as widely as possible (the board's test pilot rule)
+function threePeaksFrom(e, n) {
+  const i = S.cellAt(model, e, n);
+  if (i < 0) return null;
+  const vis = model.peaks.filter(p => p.vis[i]).map(p => p.id);
+  let best = null;
+  for (let a = 0; a < vis.length; a++) for (let b = a + 1; b < vis.length; b++) for (let c = b + 1; c < vis.length; c++) {
+    const br = [vis[a], vis[b], vis[c]].map(id => S.bearingFrom(model, e, n, id)).sort((x, y) => x - y);
+    const gap = Math.min(br[1] - br[0], br[2] - br[1], 360 - br[2] + br[0]);
+    if (!best || gap > best.gap) best = { gap, ids: [vis[a], vis[b], vis[c]] };
+  }
+  return best && best.gap > 20 ? best.ids : null;
+}
+// Simulated re-aim: three Locks simulated where the simulated walker really is (aim error as set), then the same fold-in
+// the nearest spot within max_m of (e, n) on land that sees three well spread peaks, searched in 30 m rings
+function nearestThreePeaks(e, n, max_m) {
+  for (let r = 0; r <= max_m; r += 30) {
+    const k = r ? Math.max(8, Math.round(2 * Math.PI * r / 30)) : 1;
+    for (let j = 0; j < k; j++) {
+      const a = 2 * Math.PI * j / k, x = e + r * Math.sin(a), y = n + r * Math.cos(a), i = S.cellAt(model, x, y);
+      if (i < 0 || !model.land[i]) continue;
+      const ids = threePeaksFrom(x, y);
+      if (ids) return { e: x, n: y, ids };
+    }
+  }
+  return null;
+}
+// simulated steps in a straight line to (e, n), with the walk's heading mode, stride error and barometer
+function simWalkTo(e, n) {
+  const t0 = sim.truth, d = Math.hypot(e - t0.e, n - t0.n);
+  if (!(d >= 1)) return 0;
+  const brg = W360(deg(Math.atan2(e - t0.e, n - t0.n))), stride = PC.STRIDE[nav.health], N = Math.max(1, Math.round(d / sim.stride));
+  for (let k = 1; k <= N; k++) {
+    sim.truth = { e: t0.e + (e - t0.e) * k / N, n: t0.n + (n - t0.n) * k / N };
+    PC.addSteps(pace.st, 1, stride, sim.head === 'lost' ? null : W360(brg + SIM.bias_deg + gauss() * SIM.noise_deg), 'sim');
+    if (k % 40 === 0 || k === N) { sim.alt = PC.groundAt(model, sim.truth.e, sim.truth.n) + model.eye + sim.ref + gauss() * SIM.baro_noise_m; PC.baro(pace.st, sim.alt); }
+  }
+  PC.flush(pace.st);
+  return d;
+}
+function simRefix() {
+  if (!pace || !sim.truth) return;
+  simStop();
+  // Go where the phone says: the Re-aim spot, as a move from where the walker really is (its believed position is off),
+  // then aim there, or at the nearest spot that sees three peaks
+  const st = pace.st.stats, sg = pace.signal;
+  if (sg) simWalkTo(sim.truth.e + sg.e_m - st.e_m, sim.truth.n + sg.n_m - st.n_m);
+  let ids = threePeaksFrom(sim.truth.e, sim.truth.n);
+  if (!ids) {
+    const near = nearestThreePeaks(sim.truth.e, sim.truth.n, 600);
+    if (near) { simWalkTo(near.e, near.n); ids = near.ids; }
+  }
+  if (!ids) { pace.note = 'nopeaks'; pace.html = ''; paceAfter(); return; }
+  const obs = S.simulate(model, { e_m: sim.truth.e, n_m: sim.truth.n }, ids, { noise_deg: sigma, offset_deg: Number.isFinite(result.offset_deg) ? result.offset_deg : 0 });
+  if (Number.isFinite(sim.alt)) obs.baro_m = sim.alt;
+  baro = obs.baro_m;
+  const at = new Date().toISOString();
+  locks = obs.locks.map(l => ({ peak_id: l.peak_id, heading_deg: +l.heading_deg.toFixed(3), elevation_deg: +l.elevation_deg.toFixed(2), at, steady: true, stream: 'sim' }));
+  sim.home = { e: sim.truth.e, n: sim.truth.n };   // a walk again from this fix starts here
+  sim.done = true;   // the walker left the route for the Re-aim spot, so the old route is not resumed
+  pace.refixPending = true;
+  solveNow();
+  render(); post();
+}
+const simPaused = () => !!(sim.pts && sim.truth && !sim.done && !sim.running);
+function simStart() {
+  if (!pace || sim.running) return;
+  if (!simPaused()) {
+    const r = nav.route;
+    if (!r || !r.path || r.path.length < 2) return;
+    if (sim.done) {   // again: from the fix, so the walk and the map start together
+      Object.assign(pace, { st: PC.create(model, result, { t: Date.now(), baro_m: baro }), alerted: false, note: null, signal: null, signalKey: '', drawn: -1 });
+      paceGps();
+    }
+    // the walker starts where it really stands and makes the route's moves from there, as a person following
+    // the route from a fix that is a little off would
+    const raw = r.path.map(p => S.toEN(model, p[0], p[1])), home = sim.home || raw[0];
+    const pts = raw.map(q => ({ e: q.e + home.e - raw[0].e, n: q.n + home.n - raw[0].n }));
+    Object.assign(sim, { pts, k: 0, along: 0, carry: 0, truth: { e: pts[0].e, n: pts[0].n }, done: false });
+    sim.speed = r.length_m > 0 && r.time_s > 0 ? r.length_m / r.time_s : 1.1 * SPEED[nav.health];
+    sim.stride = PC.STRIDE[nav.health] * (1 + SIM.stride_bias);
+    sim.ref = (Number.isFinite(baro) ? baro : model.demo.baro_m) - (PC.groundAt(model, pts[0].e, pts[0].n) + model.eye);
+    sim.alt = PC.groundAt(model, pts[0].e, pts[0].n) + model.eye + sim.ref;
+  }
+  sim.running = true; sim.last = performance.now();
+  if (pace.note === 'nopeaks') pace.note = null;
+  pace.st.sim = true;
+  sim.timer = setInterval(simTick, 250);
+}
+function simStop() { if (sim.timer) clearInterval(sim.timer); sim.timer = null; sim.running = false; }
+function simTick() {
+  if (!paceLive() || !sim.running) { simStop(); return; }
+  const now = performance.now(), dt = Math.min(1, (now - sim.last) / 1000);
+  sim.last = now;
+  let left = dt * sim.mult * sim.speed;
+  const P = sim.pts, stride = PC.STRIDE[nav.health];
+  while (left > 1e-6 && sim.k < P.length - 1) {
+    const a = P[sim.k], b = P[sim.k + 1], seg = Math.hypot(b.e - a.e, b.n - a.n);
+    if (seg < 0.01) { sim.k++; sim.along = 0; continue; }
+    const go = Math.min(left, seg - sim.along);
+    sim.along += go; left -= go; sim.carry += go;
+    sim.truth = { e: a.e + (b.e - a.e) * sim.along / seg, n: a.n + (b.n - a.n) * sim.along / seg };
+    const n = Math.floor(sim.carry / sim.stride);
+    if (n > 0) {
+      sim.carry -= n * sim.stride;
+      PC.addSteps(pace.st, n, stride, sim.head === 'lost' ? null : W360(deg(Math.atan2(b.e - a.e, b.n - a.n)) + SIM.bias_deg + gauss() * SIM.noise_deg), 'sim');
+    }
+    if (sim.along >= seg - 1e-6) { sim.k++; sim.along = 0; }
+  }
+  sim.alt = PC.groundAt(model, sim.truth.e, sim.truth.n) + model.eye + sim.ref + gauss() * SIM.baro_noise_m;
+  PC.baro(pace.st, sim.alt);
+  if (sim.k >= P.length - 1) { simStop(); sim.done = true; }
+  PC.flush(pace.st);
+  paceGps();
+  paceAfter();
+}
+
 // ---------- map ----------
 function buildOverlay(res) {
   if (!res || !res.n_locks) return null;
@@ -701,14 +1049,22 @@ function drawMap(canvas, zoom) {
   const fullE = model.nx * model.dx, fullN = model.ny * model.dy;
   let e0 = 0, e1 = fullE, n0 = 0, n1 = fullN;
   const aspect = W / H;
+  const live = paceLive() ? pace.st : null, liveQ = live ? posNow() : null;
   if (zoom && result && result.n_locks >= 2) {
-    const r = Math.max(900, result.r95_m * 3.4), ce = result.estimate.e_m, cn = result.estimate.n_m;
+    const fr = liveQ || { e_m: result.estimate.e_m, n_m: result.estimate.n_m, r95_m: result.r95_m };   // Auto-PACE: frame the live circle
+    const r = Math.max(900, fr.r95_m * 3.4), ce = fr.e_m, cn = fr.n_m;
     let a0 = ce - r, a1 = ce + r, b0 = cn - r, b1 = cn + r;
     if (screen === 'fix') {   // the route and the destination stay in the frame
       const pts = nav.route ? nav.route.path.map(p => S.toEN(model, p[0], p[1])) : [];
       if (nav.dest) pts.push(S.toEN(model, nav.dest.lon, nav.dest.lat));
       const gc = gpsCheck(); if (gc) pts.push(S.toEN(model, gc.lon, gc.lat));
       for (const d of spotDests()) pts.push(S.toEN(model, d.lon, d.lat));
+      if (live) {   // the fix, the walked trail, the walker in a simulation and the re-aim spot stay in view too
+        pts.push({ e: result.estimate.e_m, n: result.estimate.n_m });
+        for (const t of live.trail) pts.push({ e: t[0], n: t[1] });
+        if (sim.truth) pts.push(sim.truth);
+        if (pace.signal && PC.summary(live).refix) pts.push({ e: pace.signal.e_m, n: pace.signal.n_m });
+      }
       for (const q of pts) { a0 = Math.min(a0, q.e - 300); a1 = Math.max(a1, q.e + 300); b0 = Math.min(b0, q.n - 300); b1 = Math.max(b1, q.n + 300); }
     }
     let we = a1 - a0, wn = b1 - b0;
@@ -724,7 +1080,10 @@ function drawMap(canvas, zoom) {
   lastView = { e0, e1, n0, n1 };
   ctx.fillStyle = '#d9d2bf'; ctx.fillRect(0, 0, W, H);
   ctx.drawImage(topo, 0, 0, topo.naturalWidth, topo.naturalHeight, X(0), Y(fullN), X(fullE) - X(0), Y(0) - Y(fullN));
-  if (overlay) {
+  if (live && paceOverlay) {   // the walked map replaces the fix map, moved by the sub-cell carry it holds
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(paceOverlay, 0, 0, model.nx, model.ny, X(live.off_e), Y(fullN + live.off_n), X(fullE) - X(0), Y(0) - Y(fullN));
+  } else if (overlay) {
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(overlay, 0, 0, model.nx, model.ny, X(0), Y(fullN), X(fullE) - X(0), Y(0) - Y(fullN));
   }
@@ -810,13 +1169,52 @@ function drawMap(canvas, zoom) {
     ctx.strokeText(lab, tx, y + 4 * s); ctx.fillStyle = bad ? '#b42318' : '#1e5a2c'; ctx.fillText(lab, tx, y + 4 * s);
     ctx.restore();
   }
+  const sm = live ? PC.summary(live) : null, moved = !!(sm && (sm.walked_fix_m >= 1 || sm.basis === 'gps' || sm.basis === 'refix'));
   if (result && result.n_locks >= 2) {
     const x = X(result.estimate.e_m), y = Y(result.estimate.n_m), r = result.r95_m / (e1 - e0) * W;
-    ctx.save(); ctx.strokeStyle = result.status === 'mismatch' ? '#b42318' : '#0b5f7a'; ctx.lineWidth = 2 * dpr; ctx.setLineDash([5 * dpr, 4 * dpr]);
+    ctx.save(); ctx.strokeStyle = moved ? 'rgba(43,36,24,.55)' : result.status === 'mismatch' ? '#b42318' : '#0b5f7a'; ctx.lineWidth = (moved ? 1.4 : 2) * dpr; ctx.setLineDash([5 * dpr, 4 * dpr]);
     ctx.beginPath(); ctx.arc(x, y, Math.max(6 * dpr, r), 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-    ctx.lineWidth = 2.2 * dpr; ctx.beginPath(); ctx.moveTo(x - 9 * dpr, y); ctx.lineTo(x + 9 * dpr, y); ctx.moveTo(x, y - 9 * dpr); ctx.lineTo(x, y + 9 * dpr); ctx.stroke();
+    ctx.lineWidth = (moved ? 1.4 : 2.2) * dpr; ctx.beginPath(); ctx.moveTo(x - 9 * dpr, y); ctx.lineTo(x + 9 * dpr, y); ctx.moveTo(x, y - 9 * dpr); ctx.lineTo(x, y + 9 * dpr); ctx.stroke();
+    if (moved) { ctx.font = `700 ${10 * dpr}px "Noto Sans JP",sans-serif`; ctx.fillStyle = 'rgba(43,36,24,.75)'; ctx.fillText('Fix', x + 6 * dpr, y - 6 * dpr); }
     ctx.restore();
   }
+  if (moved) drawPace(ctx, X, Y, W, e1 - e0, dpr, sm);
+}
+// Auto-PACE on the map: the walked trail, the live 95% circle (red when a re-aim is needed), the re-aim spot, the simulated walker
+function drawPace(ctx, X, Y, W, span, dpr, sm) {
+  const st = pace.st, s = dpr, low = sm.level === 'low', col = low ? '#b42318' : '#0b5f7a';
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (st.trail.length > 1) {
+    const line = () => { ctx.beginPath(); st.trail.forEach((t, i) => { if (i) ctx.lineTo(X(t[0]), Y(t[1])); else ctx.moveTo(X(t[0]), Y(t[1])); }); ctx.stroke(); };
+    ctx.strokeStyle = 'rgba(245,241,230,.9)'; ctx.lineWidth = 5 * s; line();
+    ctx.strokeStyle = '#1f2a30'; ctx.lineWidth = 2.4 * s; ctx.setLineDash([0.1, 5 * s]); line(); ctx.setLineDash([]);
+  }
+  const x = X(st.stats.e_m), y = Y(st.stats.n_m), r = Math.max(7 * s, st.stats.r95_m / span * W);
+  ctx.strokeStyle = 'rgba(245,241,230,.85)'; ctx.lineWidth = 5 * s; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = col; ctx.lineWidth = 2.6 * s; ctx.stroke();
+  ctx.lineWidth = 2.4 * s; ctx.beginPath(); ctx.moveTo(x - 10 * s, y); ctx.lineTo(x + 10 * s, y); ctx.moveTo(x, y - 10 * s); ctx.lineTo(x, y + 10 * s); ctx.stroke();
+  ctx.font = `800 ${10.5 * s}px "Noto Sans JP",sans-serif`; ctx.lineWidth = 3 * s; ctx.strokeStyle = 'rgba(245,241,230,.95)';
+  const lab = `Now ±${fmtM(st.stats.r95_m)}`, tw = ctx.measureText(lab).width, tx = Math.max(4 * s, Math.min(x - tw / 2, W - tw - 4 * s)), ty = Math.max(14 * s, y - r - 6 * s);
+  ctx.strokeText(lab, tx, ty); ctx.fillStyle = col; ctx.fillText(lab, tx, ty);
+  if (sim.truth) {   // where the simulated walker really is, so the circle can be judged
+    const sx = X(sim.truth.e), sy = Y(sim.truth.n);
+    ctx.beginPath(); ctx.moveTo(sx, sy - 6 * s); ctx.lineTo(sx + 6 * s, sy); ctx.lineTo(sx, sy + 6 * s); ctx.lineTo(sx - 6 * s, sy); ctx.closePath();
+    ctx.fillStyle = '#f5f1e6'; ctx.fill(); ctx.strokeStyle = '#1f2a30'; ctx.lineWidth = 2 * s; ctx.stroke();
+    ctx.font = `700 ${10 * s}px "Noto Sans JP",sans-serif`; ctx.lineWidth = 3 * s; ctx.strokeStyle = 'rgba(245,241,230,.95)';
+    const t = 'Simulated walker', w2 = ctx.measureText(t).width, x2 = sx + 9 * s + w2 > W - 4 * s ? sx - 9 * s - w2 : sx + 9 * s;
+    ctx.strokeText(t, x2, sy + 4 * s); ctx.fillStyle = '#1f2a30'; ctx.fillText(t, x2, sy + 4 * s);
+  }
+  const sg = pace.signal;
+  if (sm.refix && sg) {   // where to aim at 3 peaks again
+    const gx = X(sg.e_m), gy = Y(sg.n_m);
+    ctx.strokeStyle = 'rgba(245,241,230,.95)'; ctx.lineWidth = 6 * s; ctx.beginPath(); ctx.arc(gx, gy, 10 * s, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = '#b42318'; ctx.lineWidth = 3 * s; ctx.stroke();
+    ctx.beginPath(); ctx.arc(gx, gy, 3 * s, 0, Math.PI * 2); ctx.fillStyle = '#b42318'; ctx.fill();
+    ctx.font = `800 ${11 * s}px "Noto Sans JP",sans-serif`; ctx.lineWidth = 3 * s; ctx.strokeStyle = 'rgba(245,241,230,.95)';
+    const t = 'Re-aim here', w3 = ctx.measureText(t).width, x3 = gx + 14 * s + w3 > W - 4 * s ? gx - 14 * s - w3 : gx + 14 * s;
+    ctx.strokeText(t, x3, gy + 4 * s); ctx.fillStyle = '#b42318'; ctx.fillText(t, x3, gy + 4 * s);
+  }
+  ctx.restore();
 }
 
 // ---------- effects ----------
@@ -892,15 +1290,17 @@ function render() {
     });
   } else if (screen === 'fix') {
     if (NAV) computeRoute();   // the route always starts from the newest fix
-    const e = result.estimate, o = result.others[0];
-    const ns = `${Math.abs(e.lat).toFixed(5)}° ${e.lat >= 0 ? 'N' : 'S'}`, ew = `${Math.abs(e.lon).toFixed(5)}° ${e.lon >= 0 ? 'E' : 'W'}`;
+    paceSync();   // Auto-PACE starts from this fix, or folds it into the walked map after Re-aim
+    const e = result.estimate, o = result.others[0], q = posNow(), psm = pace ? PC.summary(pace.st, Date.now()) : null;
+    const ns = `${Math.abs(q.lat).toFixed(5)}° ${q.lat >= 0 ? 'N' : 'S'}`, ew = `${Math.abs(q.lon).toFixed(5)}° ${q.lon >= 0 ? 'E' : 'W'}`;
     const dir = o ? ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(W360(deg(Math.atan2(o.lon - e.lon, o.lat - e.lat))) / 45) % 8] : '';
     m.innerHTML = `<div class="eyebrow"><span>Position</span><span>SOLVED ON DEVICE</span></div>
       <section class="fix-panel" aria-label="Terrain position"><h1>You are here</h1>
       <div class="coords" id="coords"></div>
       <div class="mgrs" id="mgrs">${fixMgrs()}<small>MGRS · ${mgrsDigits() === 4 ? '10' : '100'} m squares</small></div>
-      <div class="fix-radius"><span class="big-pm" id="pm">±${fmtM(result.r95_m)}</span><small class="foot" style="margin-left:8px">95% · ${locks.length} peaks</small></div></section>
-      ${gpsHtml()}
+      <div class="fix-radius"><span class="big-pm" id="pm">±${fmtM(q.r95_m)}</span><small class="pm-sub${psm && psm.level === 'low' ? ' low' : ''}" id="pm-sub">${psm && (psm.walked_fix_m || psm.basis === 'gps') ? `95% now · ±${fmtM(psm.r95_fix_m)} at the fix` : `95% · ${locks.length} peaks`}</small></div></section>
+      <div id="pace">${psm ? paceHtml(psm) : ''}</div>
+      <div id="gpsbox">${gpsHtml()}</div>
       <div class="map big" id="map-wrap"><canvas id="map"></canvas><span class="maplab">${model.json.name} · USGS 3DEP</span></div>
       <p class="status">${o && o.mass >= 0.02 ? `<b>Second place: ${Math.round(o.mass * 100)}%</b>, ${fmtM(o.distance_m)} ${dir}. Lock one more peak to rule it out.` : '<b>One place fits.</b> No second candidate above 2%.'}</p>
       ${goHtml()}
@@ -913,6 +1313,7 @@ function render() {
     $('cot-copy').onclick = copyCot;
     setTimeout(atakRefresh, 700);   // after the post of this fix has reached the PC
     wireGo();
+    if (pace) { pace.html = ''; pace.drawn = -1; paceRender(psm); }   // wire the Auto-PACE buttons, live numbers on top
     if (!home) { home = { lon: e.lon, lat: e.lat }; store.set('home', home); }
     loadNav();
     requestAnimationFrame(() => { drawMap($('map'), true); });
@@ -989,6 +1390,7 @@ function start() {
   try { if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {}); } catch (e) { /* optional */ }
   try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {}); } catch (e) { /* optional */ }
   try { if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') DeviceOrientationEvent.requestPermission().catch(() => {}); } catch (e) { /* iOS only */ }
+  try { if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') DeviceMotionEvent.requestPermission().catch(() => {}); } catch (e) { /* iOS only, Auto-PACE steps */ }
   if (source === 'sensor' && performance.now() - sensorSeen > 1500 && !('ontouchstart' in window)) source = 'keyboard';
   solveNow(); go('aim');
 }
@@ -1019,7 +1421,7 @@ function skipTarget() {
   skip++; target = rest[skip % rest.length]; render();
 }
 function undo() { if (!locks.length) return; locks.pop(); solveNow(); render(); post(); }
-function resetFix() { locks = []; skip = 0; shownPm = null; solveNow(); target = model.demo.first_peak_id; go('aim'); post(); }
+function resetFix() { paceDrop(); locks = []; skip = 0; shownPm = null; solveNow(); target = model.demo.first_peak_id; go('aim'); post(); }
 
 // ---------- ATAK hand-off: server.py builds the CoT and serves ATAK over the cable ----------
 const atakLast = { st: 'Checking the link to ATAK…', cot: '', ok: false };
@@ -1117,7 +1519,7 @@ function frame() {
 }
 
 // ---------- settings and keys ----------
-function openSettings() { $('sheet').hidden = false; $('baro').value = Math.round(baro); $('camopt').checked = camWanted; showClearMarks(); }
+function openSettings() { $('sheet').hidden = false; $('baro').value = Math.round(baro); $('camopt').checked = camWanted; $('paceopt').checked = paceOn; $('stepsopt').checked = stepsOn; showClearMarks(); }
 function showClearMarks() {
   const b = $('clear-marks');
   if (b) { b.textContent = marks.length ? `Clear marks (${marks.length})` : 'No marks saved'; b.disabled = !marks.length; }
@@ -1129,6 +1531,9 @@ function clearMarks() {
   showClearMarks();
 }
 $('camopt').onchange = e => { camWanted = e.target.checked; store.set('cam', camWanted); if (camWanted) camStart(); else camStop(); };
+$('paceopt').checked = paceOn; $('stepsopt').checked = stepsOn;
+$('paceopt').onchange = e => { paceOn = e.target.checked; store.set('pace', paceOn); if (!paceOn) paceDrop(); if (screen === 'fix') { render(); post(); } };
+$('stepsopt').onchange = e => { stepsOn = e.target.checked; store.set('steps', stepsOn); motion.det = null; motion.gapFrom = performance.now(); };
 // Night (red), kept on this phone (store wraps localStorage in try/catch)
 function setNight(on) {
   document.documentElement.classList.toggle('night', on);
@@ -1147,6 +1552,7 @@ $('reset').onclick = () => { $('sheet').hidden = true; clearMarks(); resetFix();
 $('clear-marks').onclick = () => { clearMarks(); if (screen === 'fix') { render(); post(); } };
 function gpsChanged() {
   $('chip-gps').textContent = gpsMode === 'off' ? 'GPS UNUSED' : 'GPS TEST';
+  if (paceLive()) paceGps();   // Auto-PACE judges the new reading against its live circle before the screen is drawn
   if (screen === 'fix') render();
   if (result && result.n_locks) post();
 }
@@ -1219,7 +1625,7 @@ let offReady = false, offTimer = null, swFailed = false;
 function setOff(cls, text) { const el = $('st-off'); if (el) { el.className = 'nb ' + cls; el.lastChild.textContent = text; } }
 function checkOffline() {
   if (swFailed || !('serviceWorker' in navigator) || !window.caches) { setOff('', 'No offline copy'); return; }
-  const need = CORE.concat(window.RidgelineHide ? ['/hide.js'] : [], window.RidgelineSkyline ? ['/skyline.js'] : []);
+  const need = CORE.concat(window.RidgelineHide ? ['/hide.js'] : [], window.RidgelineSkyline ? ['/skyline.js'] : [], window.RidgelinePace ? ['/pace.js'] : []);
   Promise.all(need.map(u => caches.match(u).then(Boolean, () => false))).then(hits => {
     const n = hits.filter(Boolean).length, active = !!navigator.serviceWorker.controller;
     offReady = active && n === need.length;
@@ -1233,7 +1639,8 @@ if ('serviceWorker' in navigator) {
 }
 checkOffline();
 ping();
-window.RIDGELINE_DEBUG = { relay, checkOffline, get locks() { return locks; }, get result() { return result; }, get target() { return target; }, lock: doLock, kb, assist: () => $('assist').onclick() };
+window.RIDGELINE_DEBUG = { relay, checkOffline, get locks() { return locks; }, get result() { return result; }, get target() { return target; }, lock: doLock, kb, assist: () => $('assist').onclick(),
+  get pace() { return pace; }, sim, simStart, simStop, simRefix, refixStart, paceSummary: () => pace && PC.summary(pace.st, Date.now()) };
 </script>
 </body>
 </html>
