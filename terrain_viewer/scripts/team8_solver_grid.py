@@ -325,6 +325,34 @@ demo = dict(
     skyline=dict(az_step_deg=az_step, elevation_deg=[float(v) for v in sky], range_m=[int(v) for v in sky_range]),
 )
 
+# ------------------------------------------------------------ saved points (phone destinations)
+# The team's scenario rendezvous (sim.json) and the two largest named lakes (terrain_meta labels, Wikidata names),
+# each moved to the nearest dry cell under 18 deg so both the able and the injured route can end there.
+def nearest_dry(lon, lat, cap=18.0):
+    x, y = (lon - west) * MPLON, (lat - south) * MPLAT
+    ok = ~WATER & (SLOPE <= cap)
+    d2 = np.where(ok, (XE - x) ** 2 + (YN - y) ** 2, np.inf)
+    i = int(np.argmin(d2))
+    r, c = divmod(i, W)
+    return dict(row=r, col=c, cell=i, lon=round(west + (c + 0.5) * DX / MPLON, 6), lat=round(south + (H - r - 0.5) * DY / MPLAT, 6),
+                elev_m=round(float(Z[r, c]), 1), moved_m=round(float(np.sqrt(d2[r, c]))))
+
+
+saved = []
+try:
+    sim = json.load(open(os.path.join(DATA, "sim.json"), encoding="utf-8"))
+    rv = sim.get("rendezvous")
+    if rv:
+        saved.append(dict(id="rendezvous", name=rv.get("label", "Rendezvous"), kind="rendezvous",
+                          source="sim.json rendezvous", **nearest_dry(rv["lon"], rv["lat"])))
+except (OSError, ValueError):
+    pass
+lakes = sorted([l for l in meta.get("labels", []) if l.get("kind") == "lake" and l.get("name")], key=lambda l: -l.get("area_m2", 0))
+for l in lakes[:2]:
+    saved.append(dict(id="lake-" + l["name"].lower().replace(" ", "-"), name=l["name"] + " shore", kind="lake",
+                      source="terrain_meta labels (Wikidata name)", **nearest_dry(l["lon"], l["lat"])))
+log("saved points", [(s["name"], s["moved_m"]) for s in saved])
+
 # ------------------------------------------------------------ write
 def b64(a):
     return base64.b64encode(np.ascontiguousarray(a).tobytes()).decode("ascii")
@@ -363,6 +391,7 @@ out = dict(
     peaks=[{k: p[k] for k in ("id", "name", "verified", "source", "lon", "lat", "elev_m", "x_m", "y_m", "row", "col",
                               "tpi_m", "isolation_m", "visible_share", "name_offset_m")} for p in peaks],
     demo=demo,
+    saved_points=dict(note="Synthetic destinations saved on the phone for the demo, not real people or positions.", points=saved),
     line_of_sight=dict(eye_height_m=EYE_M, step_m=STEP, terrain="10 m grid, bilinear", skip_near_m=NEAR,
                        skip_summit_m=FAR, curvature="d^2 (1 - k) / (2 R)"),
     generated_by="terrain_viewer/scripts/team8_solver_grid.py",
