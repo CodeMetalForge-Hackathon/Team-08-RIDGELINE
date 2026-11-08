@@ -132,6 +132,13 @@ h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em;font-weight:75
 .stay b{display:block;font:850 30px/1.15 var(--font);letter-spacing:.16em;color:var(--red)}
 .stay p{margin:8px 0 0;color:var(--muted);font-size:14px;line-height:1.45}
 .key{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.spots{display:flex;flex-direction:column;gap:6px}
+.spot{display:flex;gap:10px;align-items:baseline;text-align:left;min-height:44px;border-radius:var(--r);border:1px solid var(--line2);background:transparent;padding:8px 12px;font-size:14px;line-height:1.35}
+.spot b{flex:0 0 66px;font-weight:750}
+.spot span{color:var(--muted)}
+.spot.hide b{color:#c9a8f0}.spot.signal b{color:#ff9a5c}
+.spot[aria-pressed=true]{background:var(--raise);border-color:var(--text)}
+html.night .spot.hide b,html.night .spot.signal b{color:var(--text)}
 .key i{display:inline-block;width:14px;height:4px;border-radius:2px;margin-right:4px;vertical-align:middle}
 :root{--green:#8fe3a1}
 .gps{border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:4px;font-size:14px;line-height:1.45}
@@ -202,6 +209,8 @@ html.night .gps.bad{background:rgba(255,59,40,.08)}
   </div>
 </section>
 <script src="/solver.js"></script>
+<script src="/hide.js"></script>
+<script src="/skyline.js"></script>
 <script>
 'use strict';
 const S = window.RidgelineSolver;
@@ -337,7 +346,8 @@ function gpsHtml() {
 }
 
 function summaryForBoard() {
-  return { status: result.status, r95_m: Math.round(result.r95_m), lat: result.estimate.lat, lon: result.estimate.lon, n: locks.length, mgrs: fixMgrs(), gps: gpsCheck() };
+  return { status: result.status, r95_m: Math.round(result.r95_m), lat: result.estimate.lat, lon: result.estimate.lon, n: locks.length, mgrs: fixMgrs(), gps: gpsCheck(),
+    marks: screen === 'fix' && window.RidgelineHide && spotsNow() ? window.RidgelineHide.marks(spotsNow()) : null };
 }
 function post() {
   // the board solves on its own, so a Lock is sent before this phone finishes solving
@@ -412,10 +422,35 @@ function destList() {
   if (home && far(home)) out.push({ id: 'home', lon: home.lon, lat: home.lat, label: 'Back to start' });
   marks.forEach((m, i) => { if (far(m)) out.push({ id: 'mark' + i, lon: m.lon, lat: m.lat, label: m.label }); });
   if (pin) out.push({ id: 'pin', lon: pin.lon, lat: pin.lat, label: 'Pin' });
-  return out;
+  return out.concat(spotDests());
+}
+
+// ---------- HIDE and SIGNAL (ridgeline/hide.js). Terrain only, never a promise of cover ----------
+let spotOut = null, spotKey = '';
+function spotsNow() {
+  if (!window.RidgelineHide || !result || result.n_locks < 2 || result.status === 'mismatch') return null;
+  const key = `${result.estimate.lat.toFixed(6)},${result.estimate.lon.toFixed(6)}|${nav.health}`;
+  if (key !== spotKey) {
+    spotKey = key;
+    try { spotOut = window.RidgelineHide.candidates(model, result, { cap_deg: CAP[nav.health], injured: nav.health === 'injured', minutes: 30 }); }
+    catch (e) { spotOut = null; }
+  }
+  return spotOut;
+}
+function spotDests() {
+  const h = screen === 'fix' ? spotsNow() : null;
+  return h ? [].concat(h.hide || [], h.signal || []).map(c => ({ id: c.kind.toLowerCase() + c.rank, kind: c.kind, rank: c.rank, lon: c.lon, lat: c.lat, label: (c.kind === 'HIDE' ? 'Hide ' : 'Signal ') + c.rank, why: c.why })) : [];
+}
+function spotsHtml(dl) {
+  const h = screen === 'fix' ? spotsNow() : null;
+  if (!h) return '';
+  const sp = dl.filter(d => d.kind), note = '<p class="foot">Terrain only. Trees and buildings are not in the model.</p>';
+  if (!sp.length) return `<div class="spots"><p class="leg">No Hide or Signal spot within ${h.minutes} min under ${h.cap_deg}° from here.</p>${note}</div>`;
+  return `<div class="spots" role="group" aria-label="Hide and signal">${sp.map(d => `<button class="spot ${d.kind === 'HIDE' ? 'hide' : 'signal'}" data-d="${d.id}" aria-pressed="${!!(nav.dest && nav.dest.id === d.id)}"><b>${d.label}</b><span>${d.why}</span></button>`).join('')}${note}</div>`;
 }
 function computeRoute() {
   nav.route = null; nav.stay = false;
+  if (nav.dest && nav.dest.kind) nav.dest = spotDests().find(d => d.id === nav.dest.id) || null;   // the spots move with the fix and the walking ability
   const here = fixLL();
   if (!NAV || !nav.dest || !here) return;
   const key = `${here[0].toFixed(6)},${here[1].toFixed(6)}|${nav.health}`;
@@ -481,6 +516,7 @@ function drawMap(canvas, zoom) {
       const pts = nav.route ? nav.route.path.map(p => S.toEN(model, p[0], p[1])) : [];
       if (nav.dest) pts.push(S.toEN(model, nav.dest.lon, nav.dest.lat));
       const gc = gpsCheck(); if (gc) pts.push(S.toEN(model, gc.lon, gc.lat));
+      for (const d of spotDests()) pts.push(S.toEN(model, d.lon, d.lat));
       for (const q of pts) { a0 = Math.min(a0, q.e - 300); a1 = Math.max(a1, q.e + 300); b0 = Math.min(b0, q.n - 300); b1 = Math.max(b1, q.n + 300); }
     }
     let we = a1 - a0, wn = b1 - b0;
@@ -507,6 +543,25 @@ function drawMap(canvas, zoom) {
     ctx.strokeStyle = 'rgba(35,28,18,.9)'; ctx.lineWidth = 7.5 * dpr; line(nav.route.path);
     for (const q of nav.route.runs) { ctx.strokeStyle = col[q.cls]; ctx.lineWidth = 4.5 * dpr; line(q.path); }
     ctx.restore();
+  }
+  if (screen === 'fix') {   // HIDE ring and SIGNAL flag, as on the board
+    for (const d of spotDests()) {
+      const q = S.toEN(model, d.lon, d.lat), x = X(q.e), y = Y(q.n), s = dpr;
+      ctx.save(); ctx.lineWidth = 5 * s; ctx.strokeStyle = 'rgba(245,241,230,.9)';
+      if (d.kind === 'HIDE') {
+        ctx.beginPath(); ctx.arc(x, y, 7 * s, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = 'rgba(91,47,134,.2)'; ctx.fill();
+        ctx.lineWidth = 2.2 * s; ctx.strokeStyle = '#5b2f86'; ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 16 * s); ctx.stroke();
+        ctx.lineWidth = 2 * s; ctx.strokeStyle = '#1f2326'; ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, y - 16 * s); ctx.lineTo(x + 11 * s, y - 12.5 * s); ctx.lineTo(x, y - 9 * s); ctx.closePath();
+        ctx.fillStyle = '#e0580f'; ctx.fill(); ctx.lineWidth = 1.2 * s; ctx.stroke();
+      }
+      ctx.font = `800 ${10 * s}px "Noto Sans JP",sans-serif`; ctx.lineWidth = 3 * s; ctx.strokeStyle = 'rgba(245,241,230,.95)';
+      const t = (d.kind === 'HIDE' ? 'H' : 'S') + d.rank, tx = x + (d.kind === 'HIDE' ? 9 : 4) * s, ty = d.kind === 'HIDE' ? y + 4 * s : y - 17 * s;
+      ctx.strokeText(t, tx, ty); ctx.fillStyle = d.kind === 'HIDE' ? '#5b2f86' : '#1f2326'; ctx.fillText(t, tx, ty);
+      ctx.restore();
+    }
   }
   if (screen === 'fix' && nav.dest) {
     const q = S.toEN(model, nav.dest.lon, nav.dest.lat), x = X(q.e), y = Y(q.n), s = dpr;
@@ -685,7 +740,8 @@ function goHtml() {
   const dl = destList();
   return `<section class="go" aria-label="Route out">
     <div class="go-head"><h2>Where to?</h2><div class="seg" role="group" aria-label="How well can you walk"><button data-h="healthy" aria-pressed="${nav.health === 'healthy'}">Healthy · ${CAP.healthy}°</button><button data-h="injured" aria-pressed="${nav.health === 'injured'}">Injured · ${CAP.injured}°</button></div></div>
-    <div class="dests">${dl.map(d => `<button class="dest" data-d="${d.id}" aria-pressed="${!!(nav.dest && nav.dest.id === d.id)}">${d.label}</button>`).join('')}<button class="dest pick" id="pick" aria-pressed="${nav.picking}">${nav.picking ? 'Tap the map…' : pin ? 'Move pin' : 'Pick on map'}</button></div>
+    <div class="dests">${dl.filter(d => !d.kind).map(d => `<button class="dest" data-d="${d.id}" aria-pressed="${!!(nav.dest && nav.dest.id === d.id)}">${d.label}</button>`).join('')}<button class="dest pick" id="pick" aria-pressed="${nav.picking}">${nav.picking ? 'Tap the map…' : pin ? 'Move pin' : 'Pick on map'}</button></div>
+    ${spotsHtml(dl)}
     <div class="rt" aria-live="polite">${routeHtml()}</div>
     <div class="pair"><button class="btn ghost" id="mark">Mark here</button>${pin ? `<button class="btn ghost" id="unpin">${nav.unpin ? 'Tap again to remove' : 'Remove pin'}</button>` : ''}</div>
   </section>`;
@@ -761,9 +817,9 @@ function doLock(ev) {
   if (sus) locks.splice(sus.lock_index, 1);
   locks.push({ peak_id: target, heading_deg: +v.h.toFixed(3), elevation_deg: +v.t.toFixed(2), at: new Date().toISOString(), steady: v.steady, stream: source === 'keyboard' ? 'keyboard' : orientMode });
   skip = 0;
-  post();
   sweep($('map-wrap'));
-  setTimeout(() => { solveNow(); render(); post(); }, reduce ? 0 : 120);   // second post carries the phone's own summary
+  // post only after the solve, so the board, CoT and marks always get lat, lon and r95 with the new Lock
+  setTimeout(() => { solveNow(); render(); post(); }, reduce ? 0 : 120);
 }
 function skipTarget() {
   const rest = wallIds.filter(id => !locks.some(l => l.peak_id === id));
@@ -771,7 +827,7 @@ function skipTarget() {
   skip++; target = rest[skip % rest.length]; render();
 }
 function undo() { if (!locks.length) return; locks.pop(); solveNow(); render(); post(); }
-function resetFix() { locks = []; skip = 0; shownPm = null; solveNow(); target = model.demo.first_peak_id; post(); go('aim'); }
+function resetFix() { locks = []; skip = 0; shownPm = null; solveNow(); target = model.demo.first_peak_id; go('aim'); post(); }
 
 // ---------- live scope (every frame) ----------
 function brackets(g) {
@@ -835,7 +891,7 @@ $('open-settings').onclick = openSettings;
 $('close-settings').onclick = () => { $('sheet').hidden = true; };
 $('sheet').onclick = e => { if (e.target === $('sheet')) $('sheet').hidden = true; };
 $('source').onchange = e => { source = e.target.value; samples = []; render(); };
-$('sigma').onchange = e => { const v = Number(e.target.value); if (v >= 0.5 && v <= 10) { sigma = v; if (locks.length) { solveNow(); render(); } } };
+$('sigma').onchange = e => { const v = Number(e.target.value); if (v >= 0.5 && v <= 10) { sigma = v; if (locks.length) { solveNow(); render(); post(); } } };
 $('baro').onchange = e => { const v = Number(e.target.value); if (Number.isFinite(v)) { baro = v; if (locks.length) { solveNow(); render(); post(); } } };
 $('reset').onclick = () => { $('sheet').hidden = true; resetFix(); };
 function gpsChanged() {
