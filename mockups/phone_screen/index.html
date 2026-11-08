@@ -23,6 +23,7 @@ button.danger.active{background:#3b2528;border-color:var(--red);color:var(--red)
 @media(min-width:650px) and (max-height:560px){.stage-guide+.footer{padding:0}}
 @media(max-width:420px){.footer{padding-top:8px;padding-bottom:8px}}
 @media(min-width:650px) and (max-height:560px){.stage-guide .side-content,.stage-aim .side-content{gap:6px}.stage-guide .confidence{padding:4px 0}.stage-guide .side-content>.data-note{display:none}.stage-guide .navigation-note{display:block}.stage-aim .notice,.stage-aim .sky-note,.stage-aim .lock-progress{display:none}.stage-aim .aim-values>div{display:flex;align-items:baseline;gap:8px}.stage-aim .target-meta{margin-top:0}.stage-stay .stop-symbol{float:right;width:48px;height:48px;font-size:32px;margin:0 0 0 8px}.stage-report .report-detail{padding:6px 0}.stage-report .coordinates{font-size:28px;line-height:1.2;margin:8px 0}}
+.destmap{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:var(--radius);background:#0e171e;touch-action:none;cursor:crosshair;-webkit-user-select:none;user-select:none}.destmap:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}.dest-visual{display:flex;flex-direction:column;gap:10px}.map-key{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;color:var(--muted)}.map-key b{display:inline-block;width:14px;height:5px;border-radius:2px;vertical-align:middle;margin-right:5px}.dest-list{display:flex;flex-direction:column;gap:6px}.dest-list button{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;min-height:44px;font-weight:500;font-size:17px}.dest-list button.active{border-color:var(--yellow);color:var(--yellow)}.dest-list .d{color:var(--muted);font-weight:400;white-space:nowrap;font-size:15px}.route-card{background:var(--panel);border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:10px}.route-top{display:flex;gap:14px;align-items:center}.route-arrow{width:72px;height:72px;flex-shrink:0;border:1px solid var(--line);border-radius:50%;display:grid;place-items:center}.route-arrow svg{width:38px;height:46px;transition:transform .15s}.route-next{margin:0;font-size:19px;font-weight:600;line-height:1.3}.route-stats{margin:4px 0 0;color:var(--muted);font-size:14px}.route-say{margin:0;font-size:16px;line-height:1.4}.route-bar{display:flex;gap:2px;height:8px;border-radius:4px;overflow:hidden}.pin-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:15px}.pin-row button{min-height:40px;padding:6px 12px}
 </style>
 </head>
 <body>
@@ -69,7 +70,7 @@ const deg=r=>r*180/Math.PI;
 const fmtAngle=n=>String(Math.round(wrap(n))%360).padStart(3,'0')+'°';
 const fmtDist=n=>n>=1000?(n/1000).toFixed(2)+' km':Math.round(n)+' m';
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
-let data, screen='sensors',jammed=false,injured=false,radio=false,locks=[],skip=0,heading=130,elevation=15,source='keyboard',declination=0,rawSample=null,offset=0,calibrated=false,lastSensor=0,sensorListening=false,fixTime=null,reportTime=null,notice='',renderPending=false,returnFocus=null,LIVE=null,liveRes=null,liveAim=null,liveSession='',linkStatus='Viewer link: nothing sent yet.',FRAME=0,WALL=[],baroAlt=null,baroBand=30,useTilt=true,sigmaAz=3,sigmaEl=1.5,postSeq=0;
+let data, screen='sensors',jammed=false,injured=false,radio=false,locks=[],skip=0,heading=130,elevation=15,source='keyboard',declination=0,rawSample=null,offset=0,calibrated=false,lastSensor=0,sensorListening=false,fixTime=null,reportTime=null,notice='',renderPending=false,returnFocus=null,LIVE=null,liveRes=null,liveAim=null,liveSession='',linkStatus='Viewer link: nothing sent yet.',FRAME=0,WALL=[],baroAlt=null,baroBand=30,useTilt=true,sigmaAz=3,sigmaEl=1.5,postSeq=0,home=null,dest=null,pin=null,pinLocked=false,unlockAsk=false,mapCursor=null,mapFocus=false,guideRendering=false,liveRoute=null,routeKey='';
 const finalStage=()=>data.stages.find(s=>s.id==='lock_3')||data.stages.at(-1);
 const currentStage=()=>data.stages.find(s=>s.id===(locks.length?'lock_'+Math.min(locks.length,3):'barometer'))||data.stages[0];
 function targets(){return data.target_order.filter(id=>!locks.some(o=>o.peak_id===id));}
@@ -100,8 +101,8 @@ function render(){if(!data)return;const num={sensors:1,aim:2,guide:3,stay:4,repo
   $('main').innerHTML=header('03 · ROUTE GUIDANCE','Follow the route.',3)+`<div class="body-grid"><div class="main-visual navigation-visual"><div class="arrow-dial" id="arrow-dial"><svg viewBox="0 0 120 144" role="img" aria-label="Arrow toward next route waypoint"><path d="M60 5 112 71 77 62 77 136 43 136 43 62 8 71Z" fill="#86dce9" stroke="#86dce9" stroke-linejoin="round" stroke-width="5"/></svg></div><p class="turn-label" id="turn-label"></p><p class="data-note navigation-note">Terrain-only demo route</p></div><div class="side-content"><div class="metric-row"><div><span>Next point</span><strong class="mono" id="next-distance"></strong></div><div><span>Total time</span><strong class="mono">${Math.round(route.time_s/60)}<span> min</span></strong></div></div><p class="muted">${fmtDist(route.length_m)} to rendezvous</p><div class="confidence"><span>Model 95% radius</span><strong class="mono">${Math.round(finalStage().confidence_radius_m)} m</strong></div><p class="data-note">Terrain-only demo route</p><div class="actions"><div class="mode-toggle"><button class="active" id="healthy">Able · 30°</button><button id="injury">Injured · 18°</button></div><button id="restore-radio" class="primary">Restore radio →</button></div></div></div>`;
   $('healthy').onclick=()=>announce('30° model limit selected.');$('injury').onclick=()=>setInjury(true);$('restore-radio').onclick=restoreRadio;drawOrientation();
  }else if(screen==='stay'){
-  $('main').innerHTML=header('04 · MOVEMENT PAUSED','No route at 18°.',4)+`<div class="body-grid"><div class="main-visual danger-block"><div class="stop-symbol" aria-hidden="true">!</div><h2 class="stay-title">Stay.<br>Signal.<br>Wait.</h2><p class="muted" style="margin-top:16px">Selected limit exceeded.</p></div><div class="side-content"><ol class="stay-list"><li>Stay at your current position.</li><li>Make your signal visible.</li><li>Wait for contact.</li></ol><div class="actions"><div class="mode-toggle"><button id="healthy">Able · 30°</button><button id="injury" class="danger active">Injured · 18°</button></div><button id="restore-radio" class="primary">Restore radio →</button></div></div></div>`;
-  $('healthy').onclick=()=>setInjury(false);$('injury').onclick=()=>{};$('restore-radio').onclick=restoreRadio;
+  $('main').innerHTML=header('04 · MOVEMENT PAUSED','No route at '+(injured?18:30)+'°.',4)+`<div class="body-grid"><div class="main-visual danger-block"><div class="stop-symbol" aria-hidden="true">!</div><h2 class="stay-title">Stay.<br>Signal.<br>Wait.</h2><p class="muted" style="margin-top:16px">${LIVE&&dest?htmlEsc('No safe way to '+dest.name+' without water or ground steeper than '+(injured?18:30)+'°.'):'Selected limit exceeded.'}</p></div><div class="side-content"><ol class="stay-list"><li>Stay at your current position.</li><li>Make your signal visible.</li><li>Wait for contact.</li></ol><div class="actions"><div class="mode-toggle"><button id="healthy" class="${injured?'':'active'}">Able · 30°</button><button id="injury" class="${injured?'danger active':''}">Injured · 18°</button></div>${LIVE?'<button id="back-dest">Pick another destination</button>':''}<button id="restore-radio" class="primary">Restore radio →</button></div></div></div>`;
+  $('healthy').onclick=()=>setInjury(false);$('injury').onclick=()=>{if(!injured)setInjury(true);};if($('back-dest'))$('back-dest').onclick=()=>{dest=null;liveRoute=null;routeKey='';navigate('guide');postLive('route');};$('restore-radio').onclick=restoreRadio;
  }else if(screen==='report'){
   const pos=fixPos();
   $('main').innerHTML=header('05 · CONTACT RESTORED','Ready to report.',5)+`<div class="body-grid"><div class="main-visual report-card"><p class="cyan">Position estimate</p><div class="coordinates mono">${Math.abs(pos.lat).toFixed(5)}° ${pos.lat>=0?'N':'S'}<br>${Math.abs(pos.lon).toFixed(5)}° ${pos.lon>=0?'E':'W'}</div><div class="report-detail"><span class="muted">Model 95% radius</span><strong class="cyan mono">${Math.round(fixRadius())} m</strong></div><div class="report-detail"><span class="muted">Fix time UTC</span><strong class="mono">${fixTime?new Date(fixTime).toISOString().slice(11,19):'Unavailable'}</strong></div><div class="report-detail"><span class="muted">Movement</span><strong class="${injured?'red':'cyan'}">${injured?'Holding position':'Able · 30°'}</strong></div></div><div class="side-content"><p class="muted">Preview only. Nothing sent.</p><p class="data-note">${LIVE?'Synthetic position from the live solver. Model 95% region, not field calibrated.':'Synthetic position. Uncalibrated model uncertainty.'}</p><div class="actions"><button id="report-copy" class="primary">Copy demo report</button><button id="back-guide">Back to guidance</button></div><p id="notice" class="notice" role="status">${notice}</p></div></div>`;
@@ -112,9 +113,9 @@ function render(){if(!data)return;const num={sensors:1,aim:2,guide:3,stay:4,repo
 function toggleGPS(){jammed=!jammed;if(screen==='sensors')render();else announce(jammed?'GPS off. Terrain mode active.':'GPS restored in demo. Terrain replay retained.');}
 function skipTarget(){if(screen!=='aim')return;skip++;liveAim=null;announce('Choose another visible peak.');render();}
 function lock(){if(LIVE)return liveLock();if(screen!=='aim'||!aligned())return;const t=target();const observation={peak_id:t.id,peak_name:t.name,bearing_true_deg:Number(heading.toFixed(3)),elevation_deg:Number(elevation.toFixed(3)),timestamp:new Date().toISOString()};locks.push(observation);window.dispatchEvent(new CustomEvent('phone-observation',{detail:{...observation}}));skip=0;if(locks.length>=3){fixTime=observation.timestamp;navigate(injured?'stay':'guide');}else{notice='Peak locked. Aim at the next one.';render();}}
-function setInjury(value){if(!fixReady())return;injured=value;navigate(injured?'stay':'guide');}
+function setInjury(value){if(!fixReady())return;injured=value;if(LIVE){goGuide();return;}navigate(injured?'stay':'guide');}
 function restoreRadio(){if(!fixReady())return;radio=true;reportTime=new Date().toISOString();navigate('report');}
-function report(){return{demo:true,transmitted:false,position:fixPos(),confidence_radius_m:fixRadius(),confidence:LIVE?'live solver, model 95 percent region, '+(liveRes?.confidence||'none'):'uncalibrated model 95 percent',fix_timestamp:fixTime,report_timestamp:reportTime,movement:injured?'stay_signal_wait':'able',slope_limit_deg:injured?18:30,solver:LIVE&&liveRes?LIVE.solver.summary(liveRes):undefined,observations:locks.map(x=>({...x}))};}
+function report(){return{demo:true,transmitted:false,position:fixPos(),confidence_radius_m:fixRadius(),confidence:LIVE?'live solver, model 95 percent region, '+(liveRes?.confidence||'none'):'uncalibrated model 95 percent',fix_timestamp:fixTime,report_timestamp:reportTime,movement:injured?'stay_signal_wait':'able',slope_limit_deg:injured?18:30,solver:LIVE&&liveRes?LIVE.solver.summary(liveRes):undefined,observations:locks.map(x=>({...x})),destination:LIVE&&dest?{name:dest.name,kind:dest.kind,lon:dest.lon,lat:dest.lat,locked:dest.kind==='pin'&&pinLocked,route:liveRoute?.ok?{length_m:liveRoute.length_m,time_s:liveRoute.time_s,cap_deg:liveRoute.cap_deg}:null}:undefined};}
 async function copyReport(){try{await navigator.clipboard.writeText(JSON.stringify(report(),null,2));announce('Demo report copied. Not transmitted.');}catch{announce('Clipboard unavailable. Report is visible here.');}}
 function bearing(a,b){const x=Math.sin(rad(b.lon-a.lon))*Math.cos(rad(b.lat));const y=Math.cos(rad(a.lat))*Math.sin(rad(b.lat))-Math.sin(rad(a.lat))*Math.cos(rad(b.lat))*Math.cos(rad(b.lon-a.lon));return wrap(deg(Math.atan2(x,y)));}
 function distance(a,b){const dlat=rad(b.lat-a.lat),dlon=rad(b.lon-a.lon);const h=Math.sin(dlat/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dlon/2)**2;return 6371000*2*Math.atan2(Math.sqrt(h),Math.sqrt(Math.max(0,1-h)));}
@@ -167,12 +168,12 @@ function liveLock(){if(screen!=='aim'||!usable())return;const t=liveTarget();con
 function afterSolve(r){if(!r)return;const w=r.wrong_aim;if(w){notice=w.message;if(w.peak_id)liveAim=w.peak_id;return;}if(r.enough_or_one_more==='enough'){fixTime=locks.at(-1).timestamp;notice='Enough. Fix ready. Enter uses it.';return;}const locked=new Set(locks.map(l=>l.peak_id)),wall=WALL.filter(id=>!locked.has(id)),s=r.suggested_next;liveAim=s&&wall.includes(s.peak_id)?s.peak_id:wall[0]||s?.peak_id||null;notice=liveAim?'Locked. Next: '+livePeak(liveAim).name+'.':'Locked.';}
 function liveReaim(){const w=liveRes?.wrong_aim;if(w&&Number.isInteger(w.index)){locks.splice(w.index,1);liveAim=w.peak_id;}else{const l=locks.pop();liveAim=l?.peak_id||null;}fixTime=null;liveSolve();notice=liveAim?'Re-aim at '+livePeak(liveAim).name+', then Lock.':'Lock removed.';postLive('reaim');render();}
 function liveUndo(){if(!locks.length)return;const l=locks.pop();fixTime=null;afterSolve(liveSolve());liveAim=l.peak_id;notice='Removed the lock on '+l.peak_name+'.';postLive('undo');render();}
-function useFix(){if(!fixReady())return;navigate(injured?'stay':'guide');}
+function useFix(){if(!fixReady())return;if(LIVE){if(!home&&liveRes?.best)home={lon:liveRes.best.lon,lat:liveRes.best.lat};goGuide();return;}navigate(injured?'stay':'guide');}
 function fixReady(){return LIVE?!!(liveRes?.best&&locks.length>=3):locks.length>=3;}
 function fixPos(){return LIVE?(liveRes?.best?{lat:liveRes.best.lat,lon:liveRes.best.lon}:{lat:NaN,lon:NaN}):finalStage().estimate;}
 function fixRadius(){return LIVE?(liveRes?.hdr95?liveRes.hdr95.radius_m:NaN):finalStage().confidence_radius_m;}
 function relive(){if(!LIVE)return;if(locks.length){afterSolve(liveSolve());postLive('settings');}if(data)render();}
-async function postLive(event){if(!LIVE||typeof location==='undefined'||location.protocol==='file:')return;const body={event,session:liveSession,seq:++postSeq,source,locks:locks.map(x=>({...x})),baro:liveBaro(),opts:liveOpts(),result:liveRes?LIVE.solver.summary(liveRes):null,sent_at:new Date().toISOString()};try{const r=await fetch('/lock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});linkStatus=r.ok?'Viewer link: '+event+' sent at '+new Date().toLocaleTimeString()+'.':'Viewer link: server answered '+r.status+'. Run python tools/live_server.py.';}catch{linkStatus='Viewer link offline. The fix still works on this phone.';}$('link-status').textContent=linkStatus;}
+async function postLive(event){if(!LIVE||typeof location==='undefined'||location.protocol==='file:')return;const body={event,session:liveSession,seq:++postSeq,source,locks:locks.map(x=>({...x})),baro:liveBaro(),opts:liveOpts(),result:liveRes?LIVE.solver.summary(liveRes):null,route:routeSummary(),sent_at:new Date().toISOString()};try{const r=await fetch('/lock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});linkStatus=r.ok?'Viewer link: '+event+' sent at '+new Date().toLocaleTimeString()+'.':'Viewer link: server answered '+r.status+'. Run python tools/live_server.py.';}catch{linkStatus='Viewer link offline. The fix still works on this phone.';}$('link-status').textContent=linkStatus;}
 function renderLiveAim(){
  const t=liveTarget(),r=liveRes,n=locks.length,kb=source==='keyboard',enough=r?.enough_or_one_more==='enough',w=r?.wrong_aim||null,s=r?.suggested_next;
  const meter=n===0?'0 of 3':w?'Check aim':enough?'Enough':n<3?n+' of 3':'One more',cls=w?'red':enough?'enough':n>=3?'more':'';
@@ -182,12 +183,114 @@ function renderLiveAim(){
  $('main').innerHTML=header('02 · TERRAIN FIX','Point at the peak.',2)+'<div class="body-grid"><div class="main-visual"><div class="target-name">'+t.name+'</div><div class="target-meta"><span>'+(kb?'Simulated view':'Aim at its photo')+'</span><span>'+Math.round(t.elev_m)+' m summit</span></div><div class="sky-wrap" id="sky-wrap"><span class="sky-tag">'+(kb?'Keyboard simulation':'Phone frame, no compass')+'</span><svg id="sky" viewBox="0 0 600 300" role="img" aria-label="Skyline and central aiming reticle"></svg></div><p class="sky-note">'+(kb?'The solver gets only heading differences, tilt and altitude.':'Relative heading. The solver removes the offset.')+'</p></div><div class="side-content"><div class="aim-values"><div><p class="label">Heading · phone frame</p><strong class="mono" id="heading-value"></strong></div><div><p class="label">Tilt</p><strong class="mono pitch" id="pitch-value"></strong></div></div><p class="aim-direction" id="aim-direction"></p><div><div class="meter"><strong id="lock-count" class="'+cls+'">'+meter+'</strong><span>'+n+' locked'+more+'</span></div><div class="lock-progress" style="margin-top:10px">'+segs+'</div></div>'+fix+(w?'<div class="wrong-box" role="alert"><strong>Re-aim</strong><span>'+w.message+'</span></div>':'')+'<div class="actions">'+(enough?'<button id="use-fix" class="primary">Use this fix →</button>':'')+(w?'<button id="reaim" class="yellow">'+(w.name?'Re-aim at '+w.name:'Remove the last lock')+'</button>':'<button id="lock" class="'+(enough?'':'yellow')+'">Lock '+t.name+'</button>')+'<button id="skip">I can\'t see it</button></div><p id="notice" class="notice" role="status">'+(notice||'← → turn · ↑ ↓ tilt · Enter lock')+'</p></div></div>';
  if($('lock'))$('lock').onclick=lock;if($('reaim'))$('reaim').onclick=liveReaim;if($('use-fix'))$('use-fix').onclick=useFix;$('skip').onclick=skipTarget;bindDrag();drawLive();
 }
+// ---------------------------------------------------------------- live destination and safe route (shared/route.js)
+// Home point (the first live fix, the landing spot), saved points from solver_grid.json, or a pin on the map. A tap
+// drops the pin, a long press (0.7 s) locks it, unlocking takes two taps. The route keeps off water and off ground
+// steeper than 30° (able) or 18° (injured, half speed). No safe route: Stay. Signal. Wait.
+const RCOL=['#e3ab06','#ea7a1c','#d4386c'];   // easy, moderate, steep: the judge map's route colours
+function htmlEsc(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function capNow(){return injured?18:30;}
+function fromPt(){const b=liveRes?.best;return b?{lon:b.lon,lat:b.lat}:null;}
+function savedList(){return(LG().json.saved_points?.points||[]).map(p=>({kind:'saved',id:p.id,name:p.name,lon:p.lon,lat:p.lat}));}
+function destChoices(){const out=[];if(home)out.push({kind:'home',id:'home',name:'Home point, the landing spot',lon:home.lon,lat:home.lat});out.push(...savedList());if(pin)out.push({kind:'pin',id:'pin',name:pinLocked?'Pin on the map, locked':'Pin on the map',lon:pin.lon,lat:pin.lat});return out;}
+function metresTo(p,q){const g=LG();return Math.hypot((q.lon-p.lon)*g.mPerDeg[0],(q.lat-p.lat)*g.mPerDeg[1]);}
+function kmText(m){return m>=1000?(m/1000).toFixed(1)+' km':Math.max(10,Math.round(m/10)*10)+' m';}
+function planNow(){
+ const f=fromPt();if(!dest||!f||!LIVE.route){liveRoute=null;routeKey='';return null;}
+ if(dest.kind==='pin'&&pin){dest.lon=pin.lon;dest.lat=pin.lat;}
+ const key=[capNow(),f.lon.toFixed(5),f.lat.toFixed(5),dest.lon.toFixed(5),dest.lat.toFixed(5)].join('|');
+ if(key!==routeKey){routeKey=key;liveRoute=metresTo(f,dest)<60?{ok:true,here:true,path:[[f.lon,f.lat],[dest.lon,dest.lat]],runs:[],legs:[],dist:[0],length_m:0,time_s:0,climb_m:0,max_slope_deg:0,cap_deg:capNow(),say:'You are already there.'}
+  :LIVE.route.planRoute(LG(),f,dest,injured?LIVE.route.LIMITS.injured:LIVE.route.LIMITS.able);}
+ return liveRoute;
+}
+function goGuide(){const r=planNow();navigate(dest&&r&&!r.ok?'stay':'guide');postLive('route');}
+function pickDest(d){dest=d?{...d}:null;unlockAsk=false;goGuide();}
+function afterPin(msg){unlockAsk=false;const r=planNow();if(r&&!r.ok)navigate('stay');else render();announce(msg);postLive('route');}
+function tapMap(ll){if(pinLocked){announce('The pin is locked. To move it: Unlock pin, then Unlock.');return;}pin=ll;mapCursor={...ll};dest={kind:'pin',id:'pin',name:'Pin on the map',lon:ll.lon,lat:ll.lat};afterPin('Pin dropped. Press and hold to lock it.');}
+function longPress(ll){if(pinLocked){announce('The pin is already locked.');return;}pin=ll;pinLocked=true;mapCursor={...ll};dest={kind:'pin',id:'pin',name:'Pin on the map, locked',lon:ll.lon,lat:ll.lat};if(navigator.vibrate)navigator.vibrate(40);afterPin('Pin locked. Unlocking takes two taps.');}
+function routeSummary(){
+ if(!LIVE||!dest||(screen!=='guide'&&screen!=='stay'))return null;   // while re-aiming the old route is stale
+ const r=liveRoute,base={dest:{name:dest.name,kind:dest.kind,lon:dest.lon,lat:dest.lat,locked:dest.kind==='pin'&&pinLocked},from:fromPt(),cap_deg:capNow(),injured};
+ if(!r)return{...base,ok:false,reason:LIVE.route?'not_planned':'no_planner'};
+ if(!r.ok)return{...base,ok:false,reason:r.reason,say:r.say};
+ const step=Math.max(1,Math.ceil(r.path.length/160)),seg=(i0,i1)=>{const p=[];for(let i=i0;i<i1;i+=step)p.push(r.path[i].slice(0,2));p.push(r.path[i1].slice(0,2));return p;};
+ return{...base,ok:true,here:!!r.here,reached:r.reached!==false,gap_m:r.gap_m||0,length_m:r.length_m,time_s:r.time_s,climb_m:r.climb_m,max_slope_deg:r.max_slope_deg,say:r.say,next:r.legs[0]?.say||null,
+  segments:r.runs.length?r.runs.map(u=>({cls:u.cls,path:seg(u.i0,u.i1)})):[{cls:0,path:r.path.map(p=>p.slice(0,2))}]};
+}
+let mapBase=null,mapBaseCap=0;
+function mapImage(cap){
+ if(mapBase&&mapBaseCap===cap)return mapBase;
+ const g=LG(),W=g.cols,H=g.rows,c=document.createElement('canvas');c.width=W;c.height=H;
+ const x=c.getContext('2d'),im=x.createImageData(W,H),d=im.data,Lx=-.5,Ly=.5,Lz=.7071;
+ for(let r=0;r<H;r++)for(let q=0;q<W;q++){
+  const i=r*W+q,zx=(g.elev[r*W+Math.min(W-1,q+1)]-g.elev[r*W+Math.max(0,q-1)])/(2*g.dx),zy=(g.elev[Math.max(0,r-1)*W+q]-g.elev[Math.min(H-1,r+1)*W+q])/(2*g.dy);
+  const sh=Math.max(0,Math.min(1,(-zx*Lx-zy*Ly+Lz)/Math.sqrt(zx*zx+zy*zy+1))),v=26+118*sh;let R=v*.86,G=v*.95,B=v*1.02;
+  if(g.water[i]){R=29;G=74;B=104;}else if(g.slope[i]>cap){R=R*.55+122*.45;G=G*.55+59*.45;B=B*.55+64*.45;}
+  d[4*i]=R;d[4*i+1]=G;d[4*i+2]=B;d[4*i+3]=255;
+ }
+ x.putImageData(im,0,0);mapBase=c;mapBaseCap=cap;return c;
+}
+function mapXY(lon,lat,W,H){const g=LG();return[(lon-g.bounds[0])*g.mPerDeg[0]/(g.cols*g.dx)*W,H-(lat-g.bounds[1])*g.mPerDeg[1]/(g.rows*g.dy)*H];}
+function drawMap(){
+ const cv=$('destmap');if(!cv||!LIVE)return;const g=LG(),x=cv.getContext('2d'),W=cv.width,H=cv.height,P=(lo,la)=>mapXY(lo,la,W,H),mpp=g.cols*g.dx/W,k=W/690;
+ x.imageSmoothingEnabled=true;x.drawImage(mapImage(capNow()),0,0,W,H);x.lineCap='round';x.lineJoin='round';
+ const r=liveRoute;
+ if(r&&r.ok&&!r.here&&r.path.length>1){
+  x.strokeStyle='#0b1117';x.lineWidth=10*k;x.beginPath();r.path.forEach((p,i)=>{const[a,b]=P(p[0],p[1]);i?x.lineTo(a,b):x.moveTo(a,b);});x.stroke();
+  (r.runs.length?r.runs:[{cls:0,i0:0,i1:r.path.length-1}]).forEach(u=>{x.strokeStyle=RCOL[u.cls];x.lineWidth=6*k;x.beginPath();for(let i=u.i0;i<=u.i1;i++){const[a,b]=P(r.path[i][0],r.path[i][1]);i===u.i0?x.moveTo(a,b):x.lineTo(a,b);}x.stroke();});
+ }
+ const sq=(lo,la,t,col)=>{const[a,b]=P(lo,la),h=11*k;x.fillStyle='#0b1117';x.fillRect(a-h,b-h,2*h,2*h);x.strokeStyle=col;x.lineWidth=2.5*k;x.strokeRect(a-h+1,b-h+1,2*h-2,2*h-2);x.fillStyle=col;x.font='700 '+Math.round(15*k)+'px Consolas,monospace';x.textAlign='center';x.textBaseline='middle';x.fillText(t,a,b+1);};
+ savedList().forEach((p,i)=>sq(p.lon,p.lat,String(i+1),dest&&dest.id===p.id?'#ffda73':'#f5f7f7'));
+ if(home)sq(home.lon,home.lat,'H',dest&&dest.kind==='home'?'#ffda73':'#f5f7f7');
+ const f=fromPt();
+ if(f){const[a,b]=P(f.lon,f.lat),rr=Math.max(5*k,(liveRes?.hdr95?.radius_m||0)/mpp);x.fillStyle='rgba(134,220,233,.2)';x.strokeStyle='#86dce9';x.lineWidth=2*k;x.beginPath();x.arc(a,b,rr,0,7);x.fill();x.stroke();x.fillStyle='#86dce9';x.beginPath();x.arc(a,b,5*k,0,7);x.fill();}
+ if(pin){const[a,b]=P(pin.lon,pin.lat);x.strokeStyle='#ffda73';x.lineWidth=3*k;x.beginPath();x.moveTo(a,b);x.lineTo(a,b-14*k);x.stroke();x.fillStyle=pinLocked?'#ffda73':'#0b1117';x.beginPath();x.arc(a,b-22*k,9*k,0,7);x.fill();x.stroke();if(pinLocked){x.fillStyle='#0b1117';x.fillRect(a-4*k,b-25*k,8*k,7*k);}}
+ if(mapFocus&&mapCursor){const[a,b]=P(mapCursor.lon,mapCursor.lat),o=4*k,l=14*k;x.strokeStyle='#f5f7f7';x.lineWidth=2*k;x.beginPath();x.moveTo(a-l,b);x.lineTo(a-o,b);x.moveTo(a+o,b);x.lineTo(a+l,b);x.moveTo(a,b-l);x.lineTo(a,b-o);x.moveTo(a,b+o);x.lineTo(a,b+l);x.stroke();}
+}
+function bindMap(){
+ const cv=$('destmap');if(!cv)return;const g=LG();
+ const toLL=ev=>{const rc=cv.getBoundingClientRect(),u=(ev.clientX-rc.left)/rc.width,v=(ev.clientY-rc.top)/rc.height;return{lon:g.bounds[0]+u*g.cols*g.dx/g.mPerDeg[0],lat:g.bounds[1]+(1-v)*g.rows*g.dy/g.mPerDeg[1]};};
+ let hold=null,down=null,kHold=null;const cancel=()=>{if(hold){clearTimeout(hold);hold=null;}};
+ cv.onpointerdown=ev=>{ev.preventDefault();down={x:ev.clientX,y:ev.clientY,ll:toLL(ev)};cancel();hold=setTimeout(()=>{hold=null;const ll=down&&down.ll;down=null;if(ll)longPress(ll);},700);};
+ cv.onpointermove=ev=>{if(down&&Math.hypot(ev.clientX-down.x,ev.clientY-down.y)>12){cancel();down=null;}};
+ cv.onpointerup=()=>{if(hold){cancel();const ll=down&&down.ll;down=null;if(ll)tapMap(ll);}};
+ cv.onpointercancel=cv.onpointerleave=()=>{cancel();down=null;};
+ cv.oncontextmenu=ev=>ev.preventDefault();
+ cv.onfocus=()=>{mapFocus=true;if(!mapCursor)mapCursor=pin?{...pin}:fromPt();drawMap();};
+ cv.onblur=()=>{if(guideRendering)return;mapFocus=false;drawMap();};
+ cv.onkeydown=ev=>{
+  const k=ev.key;
+  if(k.startsWith('Arrow')){ev.preventDefault();ev.stopPropagation();const st=ev.shiftKey?1:3,dl=st*g.dx/g.mPerDeg[0],dp=st*g.dy/g.mPerDeg[1],c=mapCursor||fromPt();if(!c)return;mapCursor={lon:c.lon+(k==='ArrowRight'?dl:k==='ArrowLeft'?-dl:0),lat:c.lat+(k==='ArrowUp'?dp:k==='ArrowDown'?-dp:0)};drawMap();return;}
+  if(k==='Enter'||k===' '){ev.preventDefault();ev.stopPropagation();if(ev.repeat||kHold)return;const ll={...(mapCursor||fromPt())};kHold=setTimeout(()=>{kHold='done';longPress(ll);},700);}
+ };
+ cv.onkeyup=ev=>{if(ev.key!=='Enter'&&ev.key!==' ')return;ev.preventDefault();ev.stopPropagation();if(kHold&&kHold!=='done'){clearTimeout(kHold);kHold=null;tapMap({...(mapCursor||fromPt())});}kHold=null;};
+}
+function drawGuideArrow(){
+ const el=$('route-arrow');if(!el||!liveRoute?.ok||liveRoute.here)return;
+ const f=fromPt(),p=LIVE.route.aheadPoint(liveRoute,90);if(!f||!p)return;
+ const th=wrap(frameHeading()-(liveRes?.heading_offset_deg||0));   // true heading, from the solver's frame offset: no compass
+ el.style.transform='rotate('+Math.round(delta(LIVE.route.bearing(f,p),th))+'deg)';
+}
 function renderLiveGuide(){
- const r=liveRes,b=r?.best;
- $('main').innerHTML=header('03 · FIX','Fix ready.',3)+'<div class="body-grid"><div class="main-visual report-card"><p class="cyan">You are here</p><div class="coordinates mono">'+(b?fmtLL(b.lat,'N','S')+'<br>'+fmtLL(b.lon,'E','W'):'No fix')+'</div><div class="report-detail"><span class="muted">95% radius</span><strong class="cyan mono">± '+(r?.hdr95?r.hdr95.radius_m:'–')+' m</strong></div><div class="report-detail"><span class="muted">Confidence</span><strong>'+(r?.confidence||'none')+'</strong></div><div class="report-detail"><span class="muted">Locks</span><strong class="mono">'+locks.length+'</strong></div></div><div class="side-content"><p class="muted">Route guidance from the live fix is not built yet.</p><div class="actions"><div class="mode-toggle"><button class="active" id="healthy">Able · 30°</button><button id="injury">Injured · 18°</button></div><button id="back-aim">Back to the peaks</button><button id="restore-radio" class="primary">Restore radio →</button></div><p id="notice" class="notice" role="status">'+notice+'</p></div></div>';
- $('healthy').onclick=()=>announce('30° model limit selected.');$('injury').onclick=()=>setInjury(true);$('back-aim').onclick=()=>navigate('aim');$('restore-radio').onclick=restoreRadio;
+ const r=liveRes,R=planNow(),choices=destChoices(),g=LG(),f=fromPt();
+ const card=!LIVE.route?'<p class="route-say muted">The route planner did not load (shared/route.js).</p>'
+  :!dest?'<p class="route-say muted">Pick where to go. The route keeps off water and off ground steeper than '+capNow()+'°.</p>'
+  :R&&R.ok&&R.here?'<div class="route-card"><p class="route-next" id="route-next">You are at '+htmlEsc(dest.name)+'.</p></div>'
+  :R&&R.ok?'<div class="route-card"><div class="route-top"><div class="route-arrow"><svg id="route-arrow" viewBox="0 0 120 144" aria-hidden="true"><path d="M60 5 112 71 77 62 77 136 43 136 43 62 8 71Z" fill="#86dce9"/></svg></div><div><p class="route-next" id="route-next">'+htmlEsc(R.legs[0]?.say||'Go')+'</p><p class="route-stats mono" id="route-stats">'+kmText(R.length_m)+' · '+LIVE.route.fmtTime(R.time_s)+' · climb '+R.climb_m+' m · max '+Math.round(R.max_slope_deg)+'°</p></div></div><div class="route-bar" aria-hidden="true">'+(R.runs.length?R.runs:[{cls:0,len:1}]).map(u=>'<span style="flex:'+Math.max(1,u.len)+';background:'+RCOL[u.cls]+'"></span>').join('')+'</div><p class="route-say" id="route-say">'+htmlEsc(R.say)+'</p></div>':'';
+ const pinRow=pin?(pinLocked?(unlockAsk?'<span>Unlock the pin?</span><button id="unlock-yes">Unlock</button><button id="unlock-no">Keep</button>':'<span style="color:var(--yellow)">Pin locked</span><button id="unlock-pin">Unlock pin</button>'):'<span class="muted">Press and hold the map to lock the pin.</span>'):'<span class="muted">Tap the map to drop a pin, press and hold to lock it.</span>';
+ guideRendering=true;
+ $('main').innerHTML=header('03 · DESTINATION',dest?'Follow the route.':'Where to?',3)+'<div class="body-grid"><div class="main-visual dest-visual">'+card+'<canvas id="destmap" class="destmap" width="690" height="'+Math.round(690*g.rows*g.dy/(g.cols*g.dx))+'" tabindex="0" aria-label="Map of '+htmlEsc(g.json.name)+'. Tap to drop a pin, press and hold to lock it. Keyboard: arrow keys move the cursor, Enter drops the pin, hold Enter to lock it."></canvas><div class="map-key" aria-hidden="true"><span><b style="background:#86dce9"></b>You ± '+(r?.hdr95?r.hdr95.radius_m:'–')+' m</span><span><b style="background:'+RCOL[0]+'"></b>Easy ≤10°</span><span><b style="background:'+RCOL[1]+'"></b>Moderate</span><span><b style="background:'+RCOL[2]+'"></b>Steep</span><span><b style="background:#7a3b40"></b>Over '+capNow()+'°</span></div></div><div class="side-content"><div class="dest-list" role="group" aria-label="Destination">'+choices.map(c=>'<button data-dest="'+c.id+'" class="'+(dest&&dest.id===c.id?'active':'')+'" aria-pressed="'+!!(dest&&dest.id===c.id)+'">'+htmlEsc(c.name)+'<span class="d">'+(f?kmText(metresTo(f,c)):'')+'</span></button>').join('')+'</div><div class="pin-row">'+pinRow+'</div><div class="actions"><div class="mode-toggle"><button class="'+(injured?'':'active')+'" id="healthy">Able · 30°</button><button class="'+(injured?'danger active':'')+'" id="injury">Injured · 18°</button></div><button id="back-aim">Back to the peaks</button><button id="restore-radio" class="primary">Restore radio →</button></div><p id="notice" class="notice" role="status">'+notice+'</p></div></div>';
+ guideRendering=false;
+ choices.forEach(c=>{const el=document.querySelector('[data-dest="'+c.id+'"]');if(el)el.onclick=()=>pickDest(c);});
+ if($('unlock-pin'))$('unlock-pin').onclick=()=>{unlockAsk=true;render();$('unlock-yes')?.focus();};
+ if($('unlock-yes'))$('unlock-yes').onclick=()=>{pinLocked=false;unlockAsk=false;if(dest?.kind==='pin')dest.name='Pin on the map';render();announce('Pin unlocked. Tap the map to move it.');postLive('route');};
+ if($('unlock-no'))$('unlock-no').onclick=()=>{unlockAsk=false;render();};
+ $('healthy').onclick=()=>setInjury(false);$('injury').onclick=()=>setInjury(true);$('back-aim').onclick=()=>{navigate('aim');postLive('re-aim');};$('restore-radio').onclick=restoreRadio;
+ bindMap();drawMap();drawGuideArrow();
+ if(mapFocus)$('destmap').focus({preventScroll:true});
 }
 function drawLive(){
+ if(screen==='guide'){drawGuideArrow();return;}
  if(screen!=='aim'||!$('sky'))return;
  const t=liveTarget(),kb=source==='keyboard',fh=frameHeading(),center=150,scale=5;
  $('heading-value').textContent=fmtAngle(fh);$('pitch-value').textContent=elevation.toFixed(0)+'°';
@@ -228,8 +331,9 @@ fetch('./phone_state.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error
 <script type="module">
 // Live solver loader. Needs the repo root on HTTP (python tools/live_server.py), otherwise the replay above stays on.
 const ready = window.RIDGELINE_LIVE_READY, failed = window.RIDGELINE_LIVE_FAILED;
-Promise.all([import('../../shared/solver.js'), fetch('../../terrain_viewer/data/moran/solver_grid.json', {cache: 'no-cache'}).then(r => { if (!r.ok) throw new Error('solver_grid.json ' + r.status); return r.json(); })])
-  .then(([solver, json]) => ready({solver, grid: solver.loadGrid(json)}))
+Promise.all([import('../../shared/solver.js'), fetch('../../terrain_viewer/data/moran/solver_grid.json', {cache: 'no-cache'}).then(r => { if (!r.ok) throw new Error('solver_grid.json ' + r.status); return r.json(); }),
+  import('../../shared/route.js').catch(err => { console.warn('RIDGELINE route planner', err); return null; })])
+  .then(([solver, json, route]) => ready({solver, route, grid: solver.loadGrid(json)}))
   .catch(err => { console.warn('RIDGELINE live solver', err); failed(err); });
 </script>
 </body>
