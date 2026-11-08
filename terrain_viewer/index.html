@@ -149,6 +149,9 @@ button.hold span{position:relative}
 #hint .presets{display:flex;gap:4px;margin-left:4px}
 #hint .presets button{height:26px;padding:0 9px;font-size:12px}
 #hint.locked{border-color:var(--ink);color:var(--ink)}
+#hint .act{height:26px;padding:0 9px;font-size:12px;margin-left:4px;flex:none}
+#hint b{color:var(--ink);font-weight:700}
+#hint.arm{border-color:var(--ink);color:var(--ink)}
 #banner{left:calc(50% + 30px);top:124px;transform:translateX(-50%);padding:8px 16px;display:none;border-color:var(--danger);color:var(--ink-2);white-space:nowrap}
 #banner b{color:var(--danger);font-weight:700;margin-right:10px}
 #toast{position:fixed;left:calc(50% + 30px);bottom:84px;transform:translate(-50%,8px);padding:8px 14px;border-radius:8px;background:var(--ink);color:#fff;font:500 13px/18px var(--ui);opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:5;max-width:560px;text-align:center}
@@ -189,6 +192,11 @@ button.hold span{position:relative}
 body.narrow #info,body.narrow #views,body.narrow #walkbar,body.narrow #banner,body.narrow #credit,body.narrow #hint{display:none!important}
 body.narrow #phone{right:auto;left:50%;top:8px;transform:translateX(-50%)}
 body.narrow #steps{left:50%;bottom:8px}
+/* on a narrow screen the phone covers the map, so the Map button swaps the phone for the map, its hint and the pin */
+#mapBtn{display:none}
+body.narrow #mapBtn{display:inline-flex}
+body.narrow.maponly #phone{display:none!important}
+body.narrow.maponly #hint{display:flex!important;left:50%;top:8px;max-width:calc(100vw - 16px);flex-wrap:wrap}
 #loading.err{font:400 14px/22px var(--ui);color:var(--ink-2);padding:24px;text-align:center}
 #loading.err b{color:var(--ink);font-weight:600}
 #loading.err a{color:var(--water)}
@@ -300,6 +308,7 @@ html.still *{transition:none!important;animation:none!important}
   <button data-step="6"><span class="n">6</span>Walk</button>
   <button data-step="7">Reveal</button>
   <button id="next" aria-label="Next step"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M5 2l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+  <button id="mapBtn" aria-pressed="false" title="Swap the phone for the map, to drop a pin">Map</button>
 </nav>
 
 <div id="phone" class="panel" role="region" aria-label="Survivor phone, no map">
@@ -412,7 +421,7 @@ const RV = S.rendezvous ? {lon: S.rendezvous.lon, lat: S.rendezvous.lat, label: 
 const state = {step: 0, view: '3d', health: 'healthy', aim: 2, scen: null, picked: false,
   dest: null, locked: false, route: null, rt: null, rtKey: '', start: null, home: null, marks: [], trail: [],
   t: 0, playing: true, speed: 300, heading: 0, vs: null, tex: {}, loaded: false,
-  fixD: 0, fixes: 0, refixUntil: 0, drift: [0, 0], lastD: 0, trailD: 0, presets: []};
+  fixD: 0, fixes: 0, refixUntil: 0, drift: [0, 0], lastD: 0, trailD: 0, presets: [], armPilot: false, mapOnly: false};
 
 // one landing: what the pilot sees and reads there, and the fix solved from those readings alone
 let scenSeq = 0;
@@ -429,7 +438,7 @@ function land(lon, lat, picked) {
   sc.skyHi = Math.max(sc.skyLo + 40, Math.ceil(Math.max(0, ...vis.map(p => p.elev_deg))) + 8);
   sc.ms = Math.round(performance.now() - t0);
   Object.values(state.tex).forEach(c => { if (c && c.width) c.width = c.height = 1; });   // let the old textures go
-  Object.assign(state, {scen: sc, tex: {}, picked: !!picked, home: est, start: est, marks: [], trail: [], rt: null, rtKey: '', route: null,
+  Object.assign(state, {scen: sc, tex: {}, picked: !!picked, home: est, start: est, marks: [], trail: [], rt: null, rtKey: '', route: null, routeNote: null,
     locked: false, dest: RV && !NAV.isWater(RV.lon, RV.lat) ? {...RV} : null});
   window.TEAM8_SCEN = {ms: sc.ms, solve_ms: sol.ms, cells: sol.cells, err_m: sc.err, r95_m: fin && Math.round(fin.r95), inside95: sc.inside,
     peaks: sg.peaks.map(p => p.name), visible: vis.map(p => p.name)};
@@ -441,14 +450,16 @@ const aimedAt = s => { const sc = state.scen; return s >= 5 ? sc.np : Math.max(0
 // ---------------------------------------------------------------- route bookkeeping (start, destination, health)
 function computeRoute() {
   const sc = state.scen;
-  state.route = null;
+  state.route = null; state.routeNote = null;
   if (!sc.fin || !state.dest) return;
   const from = state.start || sc.est, key = `${from[0].toFixed(6)},${from[1].toFixed(6)}|${state.health}`;
   if (state.rtKey !== key) { state.rt = NAV.reach(from[0], from[1], CAP[state.health], SPEED[state.health], 9 * 3600); state.rtKey = key; }
   const pp = NAV.pathTo(state.rt, state.dest.lon, state.dest.lat);
   const r = pp && NAV.buildRoute(pp, state.rt);
   if (r && !(r.length_m < 25 && !r.reached)) { r.say = NAV.describe(r); state.route = r; }
+  else if (r && (r.why === 'water' || r.why === 'island')) state.routeNote = r.note;   // already at the closest shore: not a STAY case
 }
+const AT_SHORE = () => !R() && !!state.routeNote;
 const R = () => state.route;
 function routeAt(t) {
   const r = R(); if (!r) return null;
@@ -636,6 +647,7 @@ function fitUI() {
   }
 }
 function padding() {
+  if (window.innerWidth < 760) return {top: 120, bottom: 56, left: 16, right: 16};   // narrow: only the hint and the steps sit on the map
   const w = Math.max(400, window.innerWidth), h = Math.max(400, window.innerHeight), z = Math.min(1, w / 1440, h / 760);
   return {top: Math.round(130 * z), bottom: Math.round(110 * z), left: Math.round(410 * z), right: Math.round((w > 1180 ? 350 : 290) * z)};
 }
@@ -807,9 +819,9 @@ function layers() {
       getWidth: 8, widthUnits: 'pixels', jointRounded: true, capRounded: true, parameters: top}));
     out.push(new PathLayer({id: 'route', data: r.runs, getPath: d => d.path.map(lift), getColor: d => [...RUN_COLOR[d.cls], walking ? 120 : 255],
       getWidth: 4.5, widthUnits: 'pixels', jointRounded: true, capRounded: true, updateTriggers: {getColor: walking}, parameters: top}));
-    if (!r.reached) {   // the spot itself could not be reached: a thin red line from the end of the route to it
-      out.push(new LineLayer({id: 'gap', data: [0], getSourcePosition: () => lift(r.path[r.path.length - 1]), getTargetPosition: () => [state.dest.lon, state.dest.lat, NAV.zAt(NAV.xOf(state.dest.lon), NAV.yOf(state.dest.lat)) + 8],
-        getColor: [...RED, 200], getWidth: 2, widthUnits: 'pixels', parameters: top}));
+    if (r.why === 'steep' && r.tail) {   // the last stretch over land the walker cannot do: a thin red line along the land, never across water
+      out.push(new PathLayer({id: 'gap', data: [{path: r.tail.map(lift)}], getPath: d => d.path, getColor: [...RED, 200], getWidth: 2, widthUnits: 'pixels',
+        jointRounded: true, parameters: top}));
     }
     if (walking) {
       out.push(new TripsLayer({id: 'trail', data: [{path: r.path.map(lift), timestamps: r.timestamps}], getPath: d => d.path, getTimestamps: d => d.timestamps,
@@ -837,8 +849,12 @@ function layers() {
     const d = state.dest, z = NAV.zAt(NAV.xOf(d.lon), NAV.yOf(d.lat)) + 9;
     out.push(new ScatterplotLayer({id: 'dest', data: [d], getPosition: () => [d.lon, d.lat, z], getRadius: 8, radiusUnits: 'pixels', filled: true,
       getFillColor: state.locked ? INK : [255, 255, 255], stroked: true, getLineColor: INK, lineWidthMinPixels: 2.5, updateTriggers: {getFillColor: state.locked}, parameters: top}));
+    // the pin says how far it is on foot, like the phone's Where to?
+    const r = R(), txt = d.label + (r ? (r.reached ? ` · ${fmtM(r.length_m)} · ${fmtT(r.time_s)}` : r.why === 'steep' ? ` · ${fmtM(r.length_m)}, then too steep`
+      : r.why === 'island' ? ` · across water, ${fmtM(r.length_m)} to the shore` : ` · ${fmtM(r.length_m)} to the shore`)
+      : AT_SHORE() ? ' · at the shore' : sc.fin ? ' · no safe way' : '') + (state.locked ? ' · locked' : '');
     out.push(new TextLayer({id: 'dest-label', data: [d], ...TXT, getPosition: () => [d.lon, d.lat, z], getPixelOffset: [0, -14], getAlignmentBaseline: 'bottom',
-      getText: () => d.label + (state.locked ? ' · locked' : ''), getSize: 13, fontWeight: 700, getColor: INK, updateTriggers: {getText: [state.locked, d.label]}, parameters: top}));
+      getText: () => txt, getSize: 13, fontWeight: 700, getColor: INK, updateTriggers: {getText: txt}, parameters: top}));
   }
   if (step >= 5 && state.home && sc.est) {   // the start, kept as home
     out.push(new TextLayer({id: 'home', data: [state.home], ...TXT, getPosition: h => [h[0], h[1], h[2] + 9], getText: () => 'H', getSize: 12, fontWeight: 700,
@@ -904,11 +920,12 @@ function stepCopy() {
     case 4: return [`Peak C · ${P[2].name}`, `${P[2].name} is ${rel(2)}. Three angles pin you down: the pencil lines from the three peaks cross where you are.`];
     case 5:
       if (!state.dest) return ['Pick where to go', 'Click the map where you want to go. The route avoids water and cliffs and stays under your slope limit.'];
+      if (!r && AT_SHORE()) return ['At the shore', state.routeNote];
       if (!r) return ['No safe route', `With ${state.health === 'injured' ? `an injured ankle (${CAP.injured}° limit, half speed)` : `the ${CAP.healthy}° limit`} there is no safe way from here. Stay, signal, wait.`];
       return [`Go to: ${state.dest.label}`, `${fmtM(r.length_m)}, about ${fmtT(r.time_s)}, avoiding water and cliffs. The colours say how hard each stretch is. ${state.locked ? 'Locked, so a stray tap cannot move it.' : 'Hold the lock so a stray tap cannot move it.'}`];
     case 6: return r ? ['Walk', 'Steps and heading move the fix. The circle grows with distance; aiming at a peak again shrinks it. Mark what matters on the way, it keeps its error circle.']
       : ['Stay put', 'No safe way out under this limit. The phone keeps the fix and beacons it when any signal returns.'];
-    default: return ['Reveal', sc.est ? `The pilot really landed ${sc.err} m from the fix, ${sc.inside ? 'inside' : 'outside'} the 95% area (±${Math.round(sc.fin.r95)} m). Drop the pilot anywhere else and try again.` : 'No fix from this spot.'];
+    default: return ['Reveal', sc.est ? `The pilot really landed ${sc.err} m from the fix, ${sc.inside ? 'inside' : 'outside'} the 95% area (±${Math.round(sc.fin.r95)} m). Press Move the pilot to try another spot.` : 'No fix from this spot.'];
   }
 }
 let countRaf = 0, countFrom = null, countKey = '';
@@ -963,7 +980,7 @@ function updatePanels() {
   if (destMode) updateDest();
   $('walkbar').style.display = s === 6 && R() ? 'flex' : 'none';
   if (s === 6 && R()) { const end = routeEnd(); $('scrub').value = Math.round(state.t / end * 1000); $('clock').textContent = `${fmtT(state.t)} of ${fmtT(end)}`; }
-  const ban = $('banner'), noRoute = (s === 5 || s === 6) && !!state.dest && !R();
+  const ban = $('banner'), noRoute = (s === 5 || s === 6) && !!state.dest && !R() && !AT_SHORE();
   ban.style.display = noRoute ? 'block' : 'none';
   ban.innerHTML = noRoute ? `<b>No safe route under ${CAP[state.health]}°</b>Stay, signal, wait.` : '';
   document.querySelectorAll('[data-health]').forEach(b => press(b, b.dataset.health === state.health));
@@ -980,11 +997,11 @@ function updateDest() {
     const tot = r.runs.reduce((a, q) => a + q.len, 0) || 1;
     $('routeBar').innerHTML = r.runs.map(q => `<i style="width:${(q.len / tot * 100).toFixed(2)}%;background:var(--${['easy', 'mod', 'steep'][q.cls]})"></i>`).join('');
     $('destSay').className = '';
-    $('destSay').textContent = NB((r.reached ? '' : `That spot cannot be reached safely (water, cliffs, or over ${r.cap_deg}°). The route stops ${fmtM(r.gap_m)} short, at the closest safe point. `) + r.say);
+    $('destSay').textContent = NB((r.note ? r.note + ' ' : '') + r.say);
   } else {
     $('destStats').textContent = ''; $('routeBar').innerHTML = '';
-    $('destSay').className = d ? 'stop' : '';
-    $('destSay').textContent = d ? `No safe way there under ${CAP[state.health]}°. Stay, signal, wait.` : 'Click the map where you want to go.';
+    $('destSay').className = d && !AT_SHORE() ? 'stop' : '';
+    $('destSay').textContent = AT_SHORE() ? state.routeNote : d ? `No safe way there under ${CAP[state.health]}°. Stay, signal, wait.` : 'Click the map where you want to go.';
   }
   const lb = $('lockBtn');
   lb.querySelector('span').textContent = state.locked ? 'Locked · unlock' : 'Hold to lock';
@@ -998,15 +1015,26 @@ function updateDest() {
 }
 const CROSS = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7 0.5V4M7 10V13.5M0.5 7H4M10 7H13.5" stroke="currentColor" stroke-width="1.3"/></svg>';
 function updateHint() {
-  const s = state.step, h = $('hint');
-  h.classList.toggle('locked', s >= 5 && state.locked);
+  // a click on the map always drops the pin and routes to it; moving the pilot is its own button (or Shift-click)
+  const s = state.step, h = $('hint'), r = R(), d = state.dest;
+  h.classList.toggle('locked', s >= 5 && state.locked && !state.armPilot);
+  h.classList.toggle('arm', state.armPilot);
+  const presets = state.presets.length ? `<span class="presets">${state.presets.map((p, i) => `<button data-preset="${i}" title="${esc(p.note)}">${esc(p.name)}</button>`).join('')}</span>` : '';
   let html;
-  if (s <= 4) html = `${CROSS}<span>Click the map to drop the pilot anywhere</span>` + (state.presets.length ? `<span class="presets">${state.presets.map((p, i) => `<button data-preset="${i}" title="${esc(p.note)}">${esc(p.name)}</button>`).join('')}</span>` : '');
-  else if (s === 7) html = `${CROSS}<span>Click the map to drop the pilot somewhere new</span>`;
-  else html = state.locked ? `${CROSS}<span>Destination locked. Unlock it to pick another spot.</span>` : `${CROSS}<span>Click the map to pick where to go</span>`;
+  if (state.armPilot) html = `${CROSS}<span>Click the map where the pilot comes down</span>${presets}<button class="act" data-arm="0">Cancel</button>`;
+  else {
+    let say;
+    if (s >= 5 && state.locked) say = 'Destination locked. Unlock it to pick another spot.';
+    else if (s >= 5 && d && r) say = `<b>${esc(d.label)}</b> ${fmtM(r.length_m)}${r.reached ? `, about ${fmtT(r.time_s)} on foot` : r.why === 'steep' ? ', then too steep' : ' to the closest shore'}. Click elsewhere to move the pin.`;
+    else if (s >= 5 && d && AT_SHORE()) say = 'You are at the closest shore already. Click elsewhere to move the pin.';
+    else if (s >= 5 && d) say = 'No safe way to that pin. Click elsewhere to try another.';
+    else say = 'Click the map to drop a pin. The route and the distance appear.';
+    html = `${CROSS}<span>${say}</span><button class="act" data-arm="1" title="Then click the map where the pilot comes down. Shift-click does the same.">Move the pilot</button>`;
+  }
   if (h.dataset.html !== html) {
     h.innerHTML = html; h.dataset.html = html;
-    h.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => { const p = state.presets[+b.dataset.preset]; dropPilot(p.lon, p.lat, false); });
+    h.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => { state.armPilot = false; const p = state.presets[+b.dataset.preset]; dropPilot(p.lon, p.lat, false); });
+    h.querySelectorAll('[data-arm]').forEach(b => b.onclick = () => { state.armPilot = b.dataset.arm === '1'; render(); });
   }
 }
 let toastT = 0;
@@ -1085,6 +1113,7 @@ function updatePhone(now) {
   } else if (s === 5) {
     coords = sc.est; sig = SIG0();
     if (r) { big = fmtM(r.length_m); say = `About ${fmtT(r.time_s)}. ${r.legs[0] ? r.legs[0].say : ''}.`; arrowTo = phoneHeading(); btn = 'Start walking'; }
+    else if (AT_SHORE()) { big = 'Here'; say = state.routeNote; btn = 'Back'; }
     else if (state.dest) stop = true;
     else { big = 'Where to?'; say = 'Pick a destination on the map.'; btn = 'Back'; }
   } else if (s === 6) {
@@ -1195,11 +1224,16 @@ function dropPilot(lon, lat, picked) {
   if (!sc.np) toast('No peak is in view from there. Try more open ground.');
   autoplay(sc.fin ? sc.fixStep : 1);
 }
-function mapClick(lon, lat) {
+function mapClick(lon, lat, shift) {
   if (!NAV.inside(lon, lat)) return;
-  if (state.step <= 4 || state.step === 7) { dropPilot(lon, lat, true); return; }
-  if (!state.scen.fin) { toast('No fix yet. Drop the pilot where a peak is in view.'); return; }
+  if (state.armPilot || shift) {   // Move the pilot, or Shift-click: the pilot comes down here and the fix starts over
+    if (NAV.isWater(lon, lat)) { toast('That is water. Drop the pilot on land.'); return; }
+    state.armPilot = false; dropPilot(lon, lat, true); return;
+  }
+  // any other click drops the pin, at any step: the route and its distance come from the fix
+  if (!state.scen.fin) { toast('No fix from this spot, so no route yet. Press Move the pilot and put them where a peak is in view.'); return; }
   if (state.locked) { toast('The destination is locked. Unlock it to pick another spot.'); return; }
+  clearTimeout(autoT);
   setDest(lon, lat, NAV.isWater(lon, lat) ? 'Pin, in the water' : 'Pin', 'pin');
 }
 function backToStart() {
@@ -1252,11 +1286,11 @@ function lockNow(on) {
       deckgl.setProps({viewState});
       updateCollar();
     },
-    onClick: info => {
+    onClick: (info, ev) => {
       if (state.view === 'eye') { toast('Switch to Map or 3D to pick a spot.'); return; }
       const p = deckgl.pickObject({x: info.x, y: info.y, radius: 2, layerIds: ['terrain'], unproject3D: true});
       const c = (p && p.coordinate) || info.coordinate;
-      if (c) mapClick(c[0], c[1]);
+      if (c) mapClick(c[0], c[1], !!(ev && ev.srcEvent && ev.srcEvent.shiftKey));
     },
     onAfterRender: () => {
       if (state.loaded) return;
@@ -1320,6 +1354,13 @@ document.querySelectorAll('[data-aim]').forEach(b => b.onclick = () => {   // re
 document.querySelectorAll('[data-speed]').forEach(b => b.onclick = () => { state.speed = +b.dataset.speed; document.querySelectorAll('[data-speed]').forEach(x => press(x, x === b)); });
 $('prev').onclick = () => go(state.step - 1, -1);
 $('next').onclick = () => go(state.step + 1, 1);
+$('mapBtn').onclick = () => {   // narrow screens only: the phone or the map, one at a time
+  state.mapOnly = !state.mapOnly;
+  document.body.classList.toggle('maponly', state.mapOnly);
+  $('mapBtn').textContent = state.mapOnly ? 'Phone' : 'Map';
+  $('mapBtn').setAttribute('aria-pressed', String(state.mapOnly));
+  fitUI(); frame(true); render();
+};
 $('play').onclick = () => { state.playing = !state.playing; if (state.playing && R() && state.t >= routeEnd()) { resetWalk(); state.trail = []; } };
 $('refix').onclick = () => { if (R()) refix(routeAt(state.t)); };
 $('markBtn').onclick = markHere;
@@ -1351,6 +1392,7 @@ window.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight') go(state.step + 1, 1);
   else if (e.key === 'ArrowLeft') go(state.step - 1, -1);
   else if (e.key === ' ') { e.preventDefault(); state.playing = !state.playing; }
+  else if (e.key === 'Escape' && state.armPilot) { state.armPilot = false; render(); }
   else if (e.key === 'm' && state.step >= 5) markHere();
   else if (e.key === 'h' && state.step >= 5) backToStart();
   else if (e.key === 'q' || e.key === 'e') { state.heading = wrap(state.heading + (e.key === 'q' ? -5 : 5)); if (state.view === 'eye') { state.vs = {...state.vs, bearing: state.heading}; deckgl.setProps({viewState: state.vs}); } updatePhone(performance.now()); }

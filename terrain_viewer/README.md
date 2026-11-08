@@ -4,9 +4,10 @@ GPS-denied land navigation, judge view. A person with no GPS is located from a p
 and the angles between three summits (phone gyro plus tilt, no compass), then walked out on slopes that are safe
 for their condition. One HTML page, deck.gl 9.3.11 shipped locally, no network and no API keys at run time.
 
-Click anywhere on the map to drop the pilot there. The page works out what the phone would read at that spot,
-with noise, and solves the fix from those readings alone in about 0.2 s, in the browser. Click again to pick where
-to go, and the route is planned in the browser too.
+Click anywhere on the map, at any step, to drop a pin. The route from the fix appears at once, with its distance and
+walking time on the pin, planned in the browser around water, cliffs and slopes over the limit. Press `Move the pilot`
+(or Shift-click) and click land to put the pilot somewhere else: the page works out what the phone would read at that
+spot, with noise, and solves the fix from those readings alone in about 0.2 s, in the browser.
 
 The map is painted in the team's relief style, the same as Noah's route plots (elevation tint, relief shading, water,
 contours, a 1 km UTM grid), with the collar of a printed sheet (scale bar and declination), and any mountain on Earth
@@ -49,13 +50,15 @@ appears in the picker. Needs rasterio, numpy, scipy, contourpy and Pillow. Downl
 | 2 Peak A | aim at the first summit and press. The tilt gives its distance, a pencil ring | skyline strip, the peak boxed, an arrow to it |
 | 3 Peak B | the angle from A to B on the gyro. The heading is unknown, so only angles between peaks count | the next peak boxed |
 | 4 Peak C | the third angle, the pencil lines cross, the fix as ±r m with the meter A B C | lat, lon, MGRS |
-| 5 Go to | click anywhere for the goal. The route is coloured by how hard each stretch is, with one sentence | distance, time, arrow |
+| 5 Go to | a click anywhere drops the pin, from any step. The pin shows the distance and walking time, the route is coloured by how hard each stretch is. A pin in a lake or on an island stops at the closest shore and says so, with no line across the water | distance, time, arrow |
 | 6 Walk | trail, breadcrumbs, a dead-reckoning circle that grows and re-fixes | compass tape, arrow, next instruction |
 | Reveal | the true spot and its distance from the fix | error in metres |
 
-* **Drop anywhere.** In steps 0 to 4 and Reveal, a click on land drops the pilot there and the readings come in
-  one by one. `Demo spot`, `Spot 2` and `Spot 3` are fixed spots for a safe live demo (Spot 2 and 3 are picked
-  after load: three peaks spread at least 60° and a fix that holds up).
+* **Move the pilot.** Press `Move the pilot` (or Shift-click) and click land: the pilot comes down there and the
+  readings come in one by one. `Demo spot`, `Spot 2` and `Spot 3` are fixed spots for a safe live demo (Spot 2 and 3
+  are picked after load: three peaks spread at least 60° and a fix that holds up).
+* **Narrow screens.** Under 760 px wide the phone covers the map, so the `Map` button at the end of the steps swaps
+  the phone for the map, the hint and the pin.
 * **The meter.** A B C fill as the peaks are aimed at. The chip says `Enough peaks`, `aim at one more`, or how much
   of the probability sits on another spot.
 * **Aim ±1° 2° 4°.** Re-lands the same spot with a steadier or shakier hand.
@@ -134,6 +137,8 @@ summits outside the tile.
 | `lib/deck.gl@9.3.11/` | deck.gl standalone bundle and its MIT license |
 | `lib/fonts/fonts.css` | Noto Sans JP and B612 Mono as data URLs, because Chrome blocks font files on `file://` |
 | `screenshots/` | 1600 x 900 headless captures |
+| `tests/nav_water.test.mjs` | nothing the route planner draws lies on water, for pins in lakes, on islands, on shores and on land, on all three tiles. Run `node --test terrain_viewer/tests/nav_water.test.mjs` from the repo root (about 25 s) |
+| `tests/nav_harness.mjs` | loads `team8_nav.js` and a tile's `bundle.js` in Node, with a small PNG decoder in place of the browser canvas |
 
 The first version (one tile, dark theme, PR #2), the one-summit version (PR #4) and the printed-sheet colours (land
 cover tints and brown contours, up to PR #5) stay in the git history.
