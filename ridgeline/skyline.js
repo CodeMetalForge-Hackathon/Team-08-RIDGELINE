@@ -12,7 +12,7 @@
  *   peakId  for example result.next_peak_id
  *   opts    half_fov_deg 15, step_deg 0.25 (121 samples, the middle one is daz 0), eye_m (grid.eye),
  *           az_center_deg (default the true bearing to the peak), min_range_m 45, step_m 15,
- *           summit_radius_m 45 (0 turns the summit cones off, see below)
+ *           summit_radius_m 45 (0 leaves the summits as flat as the 30 m grid has them, see below)
  *   returns {
  *     az_center, fov_deg                     window center in degrees true, full window width
  *     samples: [{daz, elev_deg, dist_m}]     daz from -15 to +15, left to right as the eye sees it; the
@@ -60,7 +60,7 @@
     step_m: 15,             // march step near the eye, half a grid cell
     step_grow: 0.004,       // farther out the step grows to r x 0.004, about the spacing between rays
     max_range_m: 40000,     // rays stop at the tile edge first
-    summit_radius_m: 45,    // known summits come back as cones of this radius (0 = off)
+    summit_radius_m: 45,    // the height the 30 m mean took off a known summit fades out over this radius (0 = off)
     summit_skip_m: 45,      // the last meters before the summit are not "nearer terrain" (export_grid.py)
   });
 
@@ -99,7 +99,7 @@
     return { e: ((from.lon - w) / (ea - w)) * m.nx * m.dx, n: ((from.lat - s) / (no - s)) * m.ny * m.dy };
   }
 
-  // Highest tangent (rise over run) seen along one ray, and its distance. Terrain plus summit cones.
+  // Highest tangent (rise over run) seen along one ray, and its distance. Terrain plus the restored summits.
   function rayMax(m, ctx, az, rMax, out) {
     const se = Math.sin(az * D2R), ce = Math.cos(az * D2R);
     const nx = m.nx, z = m.elev, c = ctx.curv, z0 = ctx.z0, step = ctx.step, grow = ctx.grow;
@@ -168,7 +168,7 @@
     const nSide = Math.max(1, Math.round(o.half_fov_deg / o.step_deg));
     const half = o.half_fov_deg, dStep = half / nSide;
 
-    // Summits the 30 m mean flattened, put back as cones. Only those that can touch a ray in the window.
+    // Summits the 30 m mean flattened, to be put back. Only those that can touch a ray in the window.
     const coneR = Math.max(0, o.summit_radius_m);
     const cones = [];
     if (coneR > 0) {

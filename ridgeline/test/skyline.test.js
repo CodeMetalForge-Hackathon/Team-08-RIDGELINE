@@ -107,7 +107,7 @@ test('a summit the visibility mask calls visible is not hidden behind nearer ter
   assert.ok(b >= 0.9, 'hidden agreement ' + b);
 });
 
-test('with the summit cones off it matches the wall cards horizon within 0.1 deg', () => {
+test('with the summit lift off it matches the wall cards horizon within 0.1 deg', () => {
   let worst = 0;
   for (const w of demo.wall) {
     const pr = K.profile(m, from, w.peak_id, { summit_radius_m: 0 });
