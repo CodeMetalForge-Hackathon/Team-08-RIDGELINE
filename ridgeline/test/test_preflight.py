@@ -6,13 +6,23 @@ Run from the repo root:
 from __future__ import annotations
 
 import importlib.util
+import json
+import socket
+import subprocess
+import sys
+import tempfile
+import time
 import unittest
+import urllib.request
 from pathlib import Path
 
-_spec = importlib.util.spec_from_file_location(
-    'ridgeline_preflight', Path(__file__).resolve().parents[1] / 'scripts' / 'preflight.py')
+RIDGELINE = Path(__file__).resolve().parents[1]
+_spec = importlib.util.spec_from_file_location('ridgeline_preflight', RIDGELINE / 'scripts' / 'preflight.py')
 pf = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(pf)
+_spec = importlib.util.spec_from_file_location('ridgeline_server_module', RIDGELINE / 'server.py')
+srv = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(srv)
 
 
 class Parsers(unittest.TestCase):
@@ -48,6 +58,76 @@ class Parsers(unittest.TestCase):
         server = [r for r in rows if r[1] == 'server'][0]
         self.assertEqual(server[0], pf.FAIL)
         self.assertIn('python -I ridgeline/server.py', server[2])
+
+    def test_build_check_catches_a_server_on_old_code(self):
+        now = 10_000.0
+        build = {'code': 'abc', 'started': now - 600, 'folder': 'C:/elsewhere/Team-8'}
+        level, say = pf.check_build(None, 'abc', now)          # server from before /api/build existed
+        self.assertEqual(level, pf.FAIL)
+        self.assertIn('python -I ridgeline/server.py', say)
+        self.assertEqual(pf.check_build(build, 'abc', now),
+                         (pf.PASS, 'the server runs the code in this folder (started 10 min ago)'))
+        level, say = pf.check_build(build, 'def', now)         # pulled or edited after the server started
+        self.assertEqual(level, pf.FAIL)
+        self.assertIn('started from C:/elsewhere/Team-8', say)
+        self.assertIn('python -I ridgeline/server.py', say)
+        self.assertEqual(pf.check_build(build, None, now)[0], pf.WARN)
+
+    def test_code_id_ignores_line_endings_and_sees_edits(self):
+        with tempfile.TemporaryDirectory() as d:
+            a, c = Path(d) / 'server.py', Path(d) / 'cot.py'
+            a.write_bytes(b'x = 1\n')
+            c.write_bytes(b'y = 2\n')
+            first = srv.code_id((a, c))
+            a.write_bytes(b'x = 1\r\n')
+            self.assertEqual(srv.code_id((a, c)), first)
+            c.write_bytes(b'y = 3\n')
+            self.assertNotEqual(srv.code_id((a, c)), first)
+        self.assertEqual(pf.repo_code_id(), srv.code_id())
+
+
+def free_port() -> int:
+    with socket.socket() as s:
+        s.bind(('127.0.0.1', 0))
+        return s.getsockname()[1]
+
+
+class AgainstARealServer(unittest.TestCase):
+    """The server from this folder on a free port (never 8768), CoT off."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.port = free_port()
+        cls.log = tempfile.TemporaryFile()
+        cls.proc = subprocess.Popen([sys.executable, '-I', str(RIDGELINE / 'server.py'), '--port', str(cls.port),
+                                     '--cot-port', '0'], cwd=str(RIDGELINE.parent), stdout=cls.log,
+                                    stderr=subprocess.STDOUT)
+        for _ in range(100):
+            if pf.get(f'http://127.0.0.1:{cls.port}/api/state', timeout=0.5)[0] == 200:
+                break
+            time.sleep(0.1)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.proc.terminate()
+        try:
+            cls.proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            cls.proc.kill()
+        cls.log.close()
+
+    def test_build_reports_the_code_on_disk(self):
+        with urllib.request.urlopen(f'http://127.0.0.1:{self.port}/api/build', timeout=3) as r:
+            build = json.loads(r.read())
+        self.assertEqual(build['code'], srv.code_id())
+        self.assertEqual(Path(build['folder']), RIDGELINE.parent)
+
+    def test_preflight_passes_the_server_and_its_code(self):
+        rows = {what: level for level, what, _ in pf.server_checks(self.port)}
+        self.assertEqual(rows['server'], pf.PASS)
+        self.assertEqual(rows['code'], pf.PASS)
+        self.assertEqual(rows['last run'], pf.PASS)
+        self.assertEqual(rows['atak feed'], pf.INFO)            # --cot-port 0
 
 
 if __name__ == '__main__':
