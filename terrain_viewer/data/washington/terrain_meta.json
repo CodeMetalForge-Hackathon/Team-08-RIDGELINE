@@ -487,5 +487,21 @@
   "ESA WorldCover 10 m 2021 v200 (© ESA WorldCover project 2021, contains modified Copernicus Sentinel data processed by the ESA WorldCover consortium), CC BY 4.0",
   "Place names and coordinates from Wikidata, CC0",
   "Magnetic declination from the World Magnetic Model 2025 (NOAA NCEI and BGS), public domain"
- ]
+ ],
+ "map_style": {
+  "name": "team relief",
+  "source": "Noah's plotting.py, Sprint2-NavAlgorithm",
+  "tint_m": [
+   600,
+   1714
+  ],
+  "tint": [
+   "#3f7d3a",
+   "#8fba62",
+   "#cfba78",
+   "#9a7550",
+   "#5b5550"
+  ],
+  "water": "#3b8ed0"
+ }
 }
