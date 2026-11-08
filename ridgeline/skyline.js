@@ -35,7 +35,8 @@
  * Model, the same as solver.js and the wall cards: eye 1.7 m above the bilinear ground, earth curvature
  * with refraction (drop d^2 / 2 rEff, k 0.13), one ray every step_deg marched every 15 m from 45 m out to
  * the tile edge on the 30 m grid. The 30 m grid is a block mean of the 5 m terrain, which flattens sharp
- * summits by several meters, so the 23 known summits are put back as 45 m cones at their true height.
+ * summits by up to about 20 m (0.45 deg low at Bivouac Peak from the demo spot), so the 23 known summits
+ * are put back as cones, true height at the top, down to the grid level 45 m out.
  * Terrain beyond the tile edge is not in the data, so a ray that leaves the tile early can draw too low.
  */
 (function (root, factory) {
@@ -79,6 +80,19 @@
     return elevAt(m, (f + 0.5) * m.dx, (m.ny - g - 0.5) * m.dy);
   }
 
+  // Highest point of the tile (grid or summit), once per grid.
+  const tops = typeof WeakMap === 'function' ? new WeakMap() : null;
+  function zTop(m) {
+    let v = tops && tops.get(m);
+    if (v !== undefined) return v;
+    v = -Infinity;
+    const z = m.elev;   // Math.max over chunks runs as a builtin, a plain loop is slow before the JIT warms up
+    for (let i = 0; i < z.length; i += 8192) v = Math.max(v, Math.max.apply(null, z.subarray(i, Math.min(z.length, i + 8192))));
+    for (const p of m.peaks) if (p.elev_m > v) v = p.elev_m;
+    if (tops) tops.set(m, v);
+    return v;
+  }
+
   function toEN(m, from) {
     if (Number.isFinite(from.e_m) && Number.isFinite(from.n_m)) return { e: from.e_m, n: from.n_m };
     const [w, s, ea, no] = m.bounds;
@@ -92,14 +106,30 @@
     const lastF = m.nx - 1, lastG = m.ny - 1;
     const fx0 = ctx.e0 / m.dx - 0.5, gy0 = m.ny - ctx.n0 / m.dy - 0.5;
     const dfx = se / m.dx, dgy = -ce / m.dy;
+    // The stretch of the ray inside the interpolation area, so the loop needs no edge checks.
+    let lo = ctx.rMin, hi = rMax;
+    if (dfx > 1e-12) { lo = Math.max(lo, -fx0 / dfx); hi = Math.min(hi, (lastF - fx0) / dfx); }
+    else if (dfx < -1e-12) { lo = Math.max(lo, (lastF - fx0) / dfx); hi = Math.min(hi, -fx0 / dfx); }
+    else if (fx0 < 0 || fx0 > lastF) hi = -1;
+    if (dgy > 1e-12) { lo = Math.max(lo, -gy0 / dgy); hi = Math.min(hi, (lastG - gy0) / dgy); }
+    else if (dgy < -1e-12) { lo = Math.max(lo, (lastG - gy0) / dgy); hi = Math.min(hi, -gy0 / dgy); }
+    else if (gy0 < 0 || gy0 > lastG) hi = -1;
+    hi -= 1e-6;
+    // Past the stop distance even the highest point of the tile would sit below the best angle so far.
+    const H = ctx.zTop - z0;
     let best = -Infinity, bestR = 0;
-    for (let r = ctx.rMin; r <= rMax; r += (r * grow > step ? r * grow : step)) {
+    for (let r = lo; r <= hi; r += (r * grow > step ? r * grow : step)) {
       const f = fx0 + dfx * r, g = gy0 + dgy * r;
-      if (f < 0 || g < 0 || f >= lastF || g >= lastG) break;
       const c0 = f | 0, r0 = g | 0, ax = f - c0, ay = g - r0, i = r0 * nx + c0;
-      const a = z[i] + (z[i + 1] - z[i]) * ax, b = z[i + nx] + (z[i + nx + 1] - z[i + nx]) * ax;
-      const t = (a + (b - a) * ay - z0 - r * r * c) / r;
-      if (t > best) { best = t; bestR = r; }
+      const z00 = z[i], z10 = z[i + nx], a = z00 + (z[i + 1] - z00) * ax;
+      const t = (a + (z10 + (z[i + nx + 1] - z10) * ax - a) * ay - z0 - r * r * c) / r;
+      if (t > best) {
+        best = t; bestR = r;
+        if (H > 0) {
+          const q = Math.sqrt(t * t + 4 * c * H), stop = t >= 0 ? (2 * H) / (t + q) : (q - t) / (2 * c);
+          if (stop < hi) hi = stop;
+        }
+      }
     }
     const R = ctx.coneR;
     for (let k = 0; k < ctx.cones.length; k++) {
@@ -108,8 +138,8 @@
       if (along < ctx.rMin || along > rMax) continue;
       const side = Math.abs(q.de * ce - q.dn * se);
       if (side >= R) continue;
-      const h = groundAt(m, ctx.e0 + se * along, ctx.n0 + ce * along);
-      const t = (h + q.lift * (1 - side / R) - z0 - along * along * c) / along;
+      // Cone from the true summit down to the grid level at R. Where the grid is higher the march has it.
+      const t = (q.top - q.slope * side - z0 - along * along * c) / along;
       if (t > best) { best = t; bestR = along; }
     }
     out.t = best; out.r = bestR;
@@ -147,10 +177,12 @@
         const room = half + Math.atan2(coneR, dq) * R2D + 0.5;
         if (Math.abs(wrap180(Math.atan2(de, dn) * R2D - azc)) > room) continue;
         const lift = q.elev_m - groundAt(m, q.e_m, q.n_m);
-        if (lift > 0) cones.push({ de, dn, lift });
+        if (lift > 0) cones.push({ de, dn, top: q.elev_m, slope: lift / coneR });
       }
     }
-    const ctx = { e0: pos.e, n0: pos.n, z0, curv, step: o.step_m, grow: o.step_grow, rMin: o.min_range_m, coneR, cones };
+    const ctx = {
+      e0: pos.e, n0: pos.n, z0, curv, zTop: zTop(m), step: o.step_m, grow: o.step_grow, rMin: o.min_range_m, coneR, cones,
+    };
     const hit = { t: -Infinity, r: 0.5 };
 
     // Is the summit itself in sight? Nearer terrain only, up to summit_skip_m before the top.
