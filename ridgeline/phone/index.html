@@ -9,7 +9,7 @@
 <link rel="icon" href="/phone/icon-192.png">
 <link rel="apple-touch-icon" href="/phone/icon-192.png">
 <style>
-:root{color-scheme:light;--bg:#f4f1e8;--panel:#faf8f0;--raise:#e9e4d6;--line:#cec8b9;--line2:#a49c8c;--text:#16130d;--muted:#625e53;--faint:#716a5f;--cyan:#16130d;--amber:#795817;--red:#a52d22;--r:3px;--font:"Noto Sans JP","Noto Sans",system-ui,sans-serif;--mono:"B612 Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;--easy:#e3ab06;--mod:#ea7a1c;--steep:#d4386c;--green:#365c38;--action:#cfba78}
+:root{color-scheme:light;--bg:#f4f1e8;--panel:#faf8f0;--raise:#e9e4d6;--line:#cec8b9;--line2:#81796a;--text:#16130d;--muted:#625e53;--faint:#716a5f;--cyan:#16130d;--amber:#795817;--red:#a52d22;--r:3px;--font:"Noto Sans JP","Noto Sans",system-ui,sans-serif;--mono:"B612 Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;--easy:#e3ab06;--mod:#ea7a1c;--steep:#d4386c;--green:#365c38;--action:#cfba78}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);-webkit-tap-highlight-color:transparent}
 body{min-height:100svh}
@@ -211,7 +211,9 @@ h1{font-size:32px;line-height:1.13;letter-spacing:-.025em}
 .coords{font-weight:400;font-size:24px;line-height:1.35}
 .big-pm{color:var(--text)}
 .sheet .in{border-radius:3px 3px 0 0}
-.sheet select,.sheet input{min-height:44px}
+.sheet select,.sheet input:not([type=checkbox]){min-height:44px}
+.sheet .check{min-height:44px}
+#close-settings{min-height:44px!important}
 .seg button{min-height:44px}
 .seg button[aria-pressed=true]{box-shadow:inset 0 -3px var(--text)}
 .dest{border-radius:var(--r)}

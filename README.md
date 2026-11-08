@@ -107,7 +107,7 @@ For optional ATAK setup and CoT details, see [Hand-off to ATAK](ridgeline/README
 
 ⑥ Optional, pending a real-phone rehearsal, choose the spoofed **Test GPS** reading in Settings to show **GPS REJECTED**. This uses synthetic GPS data, not a live spoofing experiment. Inspect the CoT feed at [the local endpoint](http://localhost:8768/api/cot), without claiming it has been displayed in real ATAK.
 
-For a laptop dry run, arrows aim and Enter Locks. **A** is keyboard-only demo assist that aims at the current card, followed by a pause for the aim to settle. A board map click generates a simulated three-Lock trial. Clearly label either fallback as simulation.
+For a laptop dry run, arrows aim and Enter Locks. **A** is keyboard-only demo assist that aims at the current card. After Enter, wait for the target name to change before pressing A for the next observation. Rapid Locks within the 120 ms update window can record the same target more than once; this known input issue is not fixed by the visual redesign. A board map click generates a simulated three-Lock trial. Clearly label either fallback as simulation.
 
 ## What we measured
 
@@ -119,8 +119,8 @@ For a laptop dry run, arrows aim and Enter Locks. **A** is keyboard-only demo as
 | Misidentified wall cards | Three earlier hand-held trials with cards in the wrong order | Each flagged a mismatch and requested another observation of the last card |
 | Solver simulation | 200 fixes at the demo position with Gaussian 3° aim error and random constant heading offset | Median error 98 m, 90th percentile 184 m, truth inside the 95% bubble in 99.0%, slowest solve 156 ms |
 | Solver simulation across the tile | 120 random positions with three visible peaks | Median error 132 m, 90th percentile 540 m, truth inside the bubble in 99.2% |
-| JavaScript checks | Solver, visibility suggestions, walkable start, expected skyline | Recorded 21 of 21 passing, comprising 6 solver, 9 hide and 6 skyline tests |
-| CoT checks | Stand-in TAK client and local push listener | Recorded 10 of 10 passing, including fix, uncertainty, route, marks, rejected GPS point, reconnect and reset deletes. Lock relay under 0.25 s with the test client connected |
+| JavaScript checks, rerun after design and route integration on Nov 8 | Solver, visibility suggestions, walkable start, expected skyline and route water checks | 28 of 28 passing, comprising 6 solver, 9 hide, 6 skyline and 7 route tests |
+| CoT checks, rerun after integration on Nov 8 | Stand-in TAK client and local push listener | 10 of 10 passing, including fix, uncertainty, route, marks, rejected GPS point, reconnect and reset deletes. Previously recorded Lock relay under 0.25 s with the test client connected |
 
 Source is [the detailed test log](ridgeline/README.md#test-results-gate-a), dated Nov 8, 2026. Rerun checks after integration. Simulation results are not hand-held accuracy measurements, and the 42 m result is one wall trial, not guaranteed accuracy. No outdoor trial, battery test or real RF spoofing test is recorded.
 
@@ -133,7 +133,7 @@ Source is [the detailed test log](ridgeline/README.md#test-results-gate-a), date
 | Solver assumes 3° aim error and a constant heading offset | Characterize real sensor streams and handling. At 10° simulated aim error, the nominal 95% area held truth only about half the time |
 | GPS REJECTED uses synthetic data and is unverified on the real phone | Rehearse the phone flow, then evaluate independent real positioning inputs and failure cases |
 | CoT passed stand-in client tests, but real ATAK-CIV is untested | Verify connection, rendering and deletion in actual ATAK. Replace the local unencrypted demo link with suitable field transport |
-| Water avoidance awaits final integration and phone verification | Validate planner and map masks, blocked destinations and unreachable routes. Terrain visibility does not model trees, buildings or current hazards |
+| Water avoidance passes merged automated tests but awaits phone verification | Validate planner and map masks, blocked destinations and unreachable routes. Terrain visibility does not model trees, buildings or current hazards |
 | Night mode, Lock vibration and airplane mode with the cable are unverified on the phone | Complete a device acceptance pass including camera, offline startup and the entire demo |
 | No field endurance, size, weight or cost measurements | Profile battery and storage on target hardware. Porting the dependency-free solver to an embedded runtime is a next step, not a demonstrated result |
 
@@ -154,7 +154,7 @@ Pre-existing libraries, frameworks, SDKs and datasets used across this repositor
 | Wikidata | CC0 1.0 | Summit, lake and glacier names in `terrain_viewer/` |
 | World Magnetic Model WMM2025 (NOAA NCEI and BGS) | U.S. Government data, public domain | Magnetic declination per tile, coefficients in `terrain_viewer/scripts/wmm/` |
 | deck.gl 9.3.11 | MIT | 3D terrain rendering in `terrain_viewer/`, shipped locally in `terrain_viewer/lib/` |
-| Noto Sans JP, B612 Mono (via Fontsource) | SIL OFL 1.1 | Fonts in `terrain_viewer/`, license texts in `terrain_viewer/lib/fonts/` |
+| Noto Sans JP, B612 Mono (via Fontsource) | SIL OFL 1.1 | Fonts in `terrain_viewer/` and the phone display, license texts in `terrain_viewer/lib/fonts/` |
 | loaders.gl 4.4.3 terrain worker | MIT | Terrain decoding in `mockups/map_3d/`, shipped in `mockups/map_3d/lib/` |
 | NumPy, SciPy, rasterio, contourpy, pyserial | BSD-3-Clause | Offline data prep scripts (contour lines with contourpy), and the USB reader in `mockups/sighting_box/` |
 | Pillow | MIT-CMU (HPND) | Writing map images in the data prep scripts |
