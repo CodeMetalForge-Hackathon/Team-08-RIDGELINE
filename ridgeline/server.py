@@ -8,12 +8,23 @@ The phone posts its observations (barometer and Locks) to /api/state after every
 The board long-polls /api/wait (it returns the moment a Lock arrives) and runs the same solver.js,
 so both show the same answer.
 Nothing leaves this PC. The server binds to 127.0.0.1 only.
+
+ATAK (Cursor on Target, events built by cot.py)
+  TAK Server mode, always on:  ATAK connects to 127.0.0.1:--cot-port (default 8087) over plain TCP, no SSL.
+    Phone over USB: adb reverse tcp:8087 tcp:8087, then in ATAK add a TAK Server 127.0.0.1, port 8087, TCP.
+    ATAK gets the current fix on connect, every change, and a resend every 15 s.
+  Push mode, optional:  --atak-push 127.0.0.1:4242 (with adb forward tcp:4242 tcp:4242) opens one short TCP
+    connection per event to an ATAK TCP input, on every change and every 15 s.
+  GET /api/cot   the current events, one per line
+  GET /api/atak  {mode, clients, connected, sent, last_sent, last_error, ...}
 """
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import math
+import socket
 import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +33,10 @@ from urllib.parse import parse_qs
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
+# python -I does not put this folder on sys.path, so cot.py is loaded by its path
+_spec = importlib.util.spec_from_file_location('ridgeline_cot', HERE / 'cot.py')
+cot = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(cot)
 FILES = {
     '/': HERE / 'phone' / 'index.html',
     '/board': HERE / 'board' / 'index.html',
@@ -91,6 +106,235 @@ def clean_route(route) -> dict | None:
     }
 
 
+class Atak:
+    """Feeds ATAK with Cursor on Target, off the request threads so the Lock relay to the board stays fast.
+
+    One watcher thread wakes on every STATE change (and every RESEND_S), rebuilds the events with cot.py
+    and writes them to every connected ATAK (TAK Server mode) and to the push target (push mode).
+    Uids that disappear get a t-x-d-d delete event.
+    """
+    RESEND_S = 15.0
+    IO_TIMEOUT_S = 5.0
+    PUSH_TIMEOUT_S = 2.0
+    MAX_PENDING = 1 << 20    # bytes of unfinished input kept per client
+
+    def __init__(self, host: str, port: int, push: tuple[str, int] | None = None):
+        self.host, self.port, self.push = host, port, push
+        self.lock = threading.Lock()
+        self.clients = {}        # id -> {'sock', 'peer', 'wlock'}
+        self.current = []        # the events ATAK should hold now (xml strings)
+        self.uids = []
+        self.fix = None
+        self.listening = False
+        self.sent = 0
+        self.last_sent = None
+        self.last_error = None
+        self.last_error_at = None
+        self.bind_error = None
+        self.push_ok_at = None
+        self._push_cv = threading.Condition()
+        self._push_deletes = []
+        self._push_due = False
+
+    # ---- threads ----
+    def start(self) -> None:
+        if self.port:
+            threading.Thread(target=self._listen, name='atak-listen', daemon=True).start()
+        if self.push:
+            threading.Thread(target=self._push_loop, name='atak-push', daemon=True).start()
+        threading.Thread(target=self._watch, name='atak-watch', daemon=True).start()
+
+    def _watch(self) -> None:
+        seen, last_full = None, 0.0
+        while True:
+            with CHANGED:
+                CHANGED.wait_for(lambda: STATE['version'] != seen,
+                                 timeout=max(0.05, last_full + self.RESEND_S - time.monotonic()))
+                changed = STATE['version'] != seen
+                seen = STATE['version']
+                snap = cot.snapshot(STATE) if changed else cot.KEEP
+            try:
+                if self._tick(snap, time.monotonic() - last_full >= self.RESEND_S):
+                    last_full = time.monotonic()
+            except Exception as error:   # the ATAK feed must never take the server down
+                self._error(f'build: {error!r}')
+                last_full = time.monotonic()
+
+    def _tick(self, snap, periodic: bool) -> bool:
+        """Send when the fix changed or a resend is due. True when a full set went out."""
+        changed = snap is not cot.KEEP and snap != self.fix
+        if changed:
+            self.fix = snap
+        if not changed and not periodic:
+            return False
+        now = time.time()
+        events = cot.build(self.fix, now)
+        keep = {uid for uid, _ in events}
+        gone = [uid for uid in self.uids if uid not in keep]
+        payload = [cot.delete_event(uid, now) for uid in gone] + [x for _, x in events]
+        with self.lock:
+            self.uids = [uid for uid, _ in events]
+            self.current = [x for _, x in events]
+            clients = list(self.clients.values())
+        for client in clients:
+            self._send(client, payload)
+        if self.push and (payload or gone):
+            with self._push_cv:
+                self._push_deletes += [u for u in gone if u not in self._push_deletes]
+                self._push_due = True
+                self._push_cv.notify()
+        return True
+
+    def _listen(self) -> None:
+        try:
+            srv = socket.create_server((self.host, self.port))
+        except OSError as error:
+            self.bind_error = f'CoT port {self.port} not open: {error}'
+            self._error(self.bind_error)
+            print(self.bind_error, flush=True)
+            return
+        self.listening = True
+        while True:
+            try:
+                sock, addr = srv.accept()
+            except OSError as error:
+                self._error(f'accept: {error}')
+                time.sleep(0.5)
+                continue
+            sock.settimeout(self.IO_TIMEOUT_S)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            client = {'sock': sock, 'peer': f'{addr[0]}:{addr[1]}', 'wlock': threading.Lock(), 'id': id(sock)}
+            # register and send the current set under the client's write lock, so a change that lands
+            # meanwhile reaches this client after the older set, never before it
+            with client['wlock']:
+                with self.lock:
+                    self.clients[client['id']] = client
+                    first = list(self.current)
+                self._write(client, first)
+            threading.Thread(target=self._read, args=(client,), name='atak-read', daemon=True).start()
+
+    def _read(self, client: dict) -> None:
+        """Read and drop what ATAK sends (its own position and so on), answer pings with a pong."""
+        buf = b''
+        try:
+            while True:
+                try:
+                    data = client['sock'].recv(65536)
+                except socket.timeout:
+                    continue
+                if not data:
+                    break
+                msgs, buf = cot.split_stream(buf + data)
+                if any(cot.is_ping(m) for m in msgs):
+                    self._send(client, [cot.pong(time.time())], count=False)
+                if len(buf) > self.MAX_PENDING:
+                    buf = b''
+        except OSError:
+            pass
+        self._drop(client)
+
+    def _push_loop(self) -> None:
+        """Push mode: an ATAK TCP input reads one event per connection, so each event gets its own."""
+        host, port = self.push
+        while True:
+            with self._push_cv:
+                self._push_cv.wait_for(lambda: self._push_due)
+                deletes, self._push_deletes, self._push_due = self._push_deletes, [], False
+            now = time.time()
+            with self.lock:
+                payload = [cot.delete_event(uid, now) for uid in deletes] + list(self.current)
+            done = 0
+            for event in payload:
+                try:
+                    with socket.create_connection((host, port), timeout=self.PUSH_TIMEOUT_S) as s:
+                        s.sendall(event.encode('utf-8'))
+                        s.shutdown(socket.SHUT_WR)
+                    done += 1
+                except OSError as error:
+                    self._error(f'push {host}:{port}: {error}')
+                    break
+            with self.lock:
+                self.sent += done
+                if done:
+                    self.last_sent = time.time()
+                if done == len(payload):
+                    self.push_ok_at = time.time()
+                    self._clear_error('push')
+
+    # ---- sending ----
+    def _send(self, client: dict, events: list, count: bool = True) -> None:
+        with client['wlock']:
+            self._write(client, events, count)
+
+    def _write(self, client: dict, events: list, count: bool = True) -> None:
+        """Write events back to back. ATAK splits the stream at </event>, so nothing goes between them."""
+        if not events:
+            return
+        try:
+            client['sock'].sendall(''.join(events).encode('utf-8'))
+        except OSError as error:
+            self._error(f"send to {client['peer']}: {error}")
+            self._drop(client)
+            return
+        if count:
+            with self.lock:
+                self.sent += len(events)
+                self.last_sent = time.time()
+                self._clear_error('send')
+
+    def _drop(self, client: dict) -> None:
+        with self.lock:
+            self.clients.pop(client['id'], None)
+        try:
+            client['sock'].close()
+        except OSError:
+            pass
+
+    def _error(self, message: str) -> None:
+        with self.lock:
+            self.last_error, self.last_error_at = message[:200], time.time()
+
+    def _clear_error(self, kind: str) -> None:
+        """A later success clears an old send or push error (the board shows last_error in red). Call under lock."""
+        if self.last_error and self.last_error.startswith(kind) and self.last_error != self.bind_error:
+            self.last_error = self.last_error_at = None
+
+    # ---- HTTP views ----
+    def cot_text(self) -> str:
+        with self.lock:
+            return ''.join(x + '\n' for x in self.current)
+
+    def status(self) -> dict:
+        now = time.time()
+        with self.lock:
+            pushing = bool(self.push_ok_at and now - self.push_ok_at < 2 * self.RESEND_S + 5)
+            return {
+                'mode': '+'.join(m for m, on in (('server', bool(self.port)), ('push', bool(self.push))) if on) or 'off',
+                'clients': len(self.clients),
+                'connected': bool(self.clients) or pushing,
+                'sent': self.sent,
+                'last_sent': self.last_sent,
+                'last_error': self.last_error,
+                'last_error_at': self.last_error_at,
+                'listening': self.listening,
+                'cot_port': self.port or None,
+                'push': f'{self.push[0]}:{self.push[1]}' if self.push else None,
+                'peers': [c['peer'] for c in self.clients.values()],
+                'events': len(self.current),
+                'uids': list(self.uids),
+            }
+
+
+ATAK: Atak | None = None
+
+
+def host_port(text: str) -> tuple[str, int]:
+    host, _, port = text.rpartition(':')
+    if not host or not port.isdigit() or not 0 < int(port) < 65536:
+        raise argparse.ArgumentTypeError('use HOST:PORT, for example 127.0.0.1:4242')
+    return host.strip('[]'), int(port)
+
+
 class Handler(SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):
         if self.command == 'POST':
@@ -127,6 +371,14 @@ class Handler(SimpleHTTPRequestHandler):
                 CHANGED.wait_for(lambda: STATE['version'] != since, timeout=20)
                 body = json.dumps(STATE)
             self._send(200, body.encode('utf-8'), 'application/json')
+            return
+        if path == '/api/cot':
+            # the CoT events ATAK should hold now, one per line (empty when there is no fix)
+            self._send(200, (ATAK.cot_text() if ATAK else '').encode('utf-8'), 'text/plain; charset=utf-8')
+            return
+        if path == '/api/atak':
+            self._json(ATAK.status() if ATAK else {'mode': 'off', 'clients': 0, 'connected': False, 'sent': 0,
+                                                   'last_sent': None, 'last_error': None})
             return
         if path in FILES:
             self._file(FILES[path])
@@ -176,12 +428,23 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main() -> None:
+    global ATAK
     ap = argparse.ArgumentParser()
     ap.add_argument('--port', type=int, default=8768)
     ap.add_argument('--host', default='127.0.0.1')
+    ap.add_argument('--cot-port', type=int, default=8087,
+                    help='TCP port ATAK connects to as a TAK Server (plain TCP, no SSL). 0 turns it off.')
+    ap.add_argument('--atak-push', type=host_port, default=None, metavar='HOST:PORT',
+                    help='also push every change to an ATAK TCP input, e.g. 127.0.0.1:4242 after adb forward tcp:4242 tcp:4242')
     args = ap.parse_args()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
+    ATAK = Atak(args.host, args.cot_port, args.atak_push)
+    ATAK.start()
     print(f'RIDGELINE on http://localhost:{args.port}  (board: /board)', flush=True)
+    if args.cot_port:
+        print(f'ATAK: TAK Server (TCP, no SSL) on {args.host}:{args.cot_port}  (phone: adb reverse tcp:{args.cot_port} tcp:{args.cot_port})', flush=True)
+    if args.atak_push:
+        print(f'ATAK: pushing to {args.atak_push[0]}:{args.atak_push[1]}', flush=True)
     server.serve_forever()
 
 
