@@ -44,6 +44,11 @@ h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em;font-weight:75
 .pair{display:flex;gap:8px}.pair>*{flex:1;min-width:0}
 .target-label{font-size:12px;letter-spacing:.16em;color:var(--muted)}
 .target{font-size:34px;line-height:1.1;font-weight:800;color:var(--amber);letter-spacing:-.01em}
+.tgt-row{display:flex;align-items:flex-end;gap:12px}.tgt-row>div{flex:1;min-width:0}
+.sky{margin:0;flex:0 0 128px;display:flex;flex-direction:column;gap:3px}
+.sky svg{display:block;width:128px;height:48px;border-bottom:1px solid var(--line2)}
+.sky figcaption{font-size:11px;line-height:1.25;letter-spacing:.06em;color:var(--muted);text-align:right}
+.sky figcaption b{display:block;font-weight:700;letter-spacing:.14em;color:var(--text)}
 .hint{font-size:15px;color:var(--muted);min-height:22px}
 .hint b{color:var(--text);font-weight:600}
 .dots{display:flex;gap:6px}
@@ -686,7 +691,7 @@ function render() {
     else msg = target ? `<b>Close, not sure yet.</b> One more peak: ${nameOf(target)}.` : `<b>No more cards.</b> This is the best fix.`;
     const pmText = done ? '±' + fmtM(result.r95_m) : '—';
     m.innerHTML = `<div class="eyebrow"><span>02 · TERRAIN FIX</span><span class="dots">${[0, 1, 2].map(i => `<span class="${i < done ? (st === 'mismatch' && sus && sus.lock_index === i ? 'bad' : 'on') : ''}"></span>`).join('')}</span></div>
-      <div><div class="target-label">${target ? 'AIM AT · CARD ' + cardNo(target) : 'FIX COMPLETE'}</div><div class="target">${target ? nameOf(target) : 'Position found'}</div><div class="hint" id="hint"></div></div>
+      <div><div class="tgt-row"><div><div class="target-label">${target ? 'AIM AT · CARD ' + cardNo(target) : 'FIX COMPLETE'}</div><div class="target">${target ? nameOf(target) : 'Position found'}</div></div>${skyHtml()}</div><div class="hint" id="hint"></div></div>
       <div class="scope" id="scope"><video id="cam" playsinline muted autoplay aria-hidden="true"></video><svg viewBox="0 0 300 300" aria-hidden="true">
         <circle class="ring" cx="150" cy="150" r="118"/><circle class="ring" cx="150" cy="150" r="70"/>
         <path class="hair" d="M150 22V112M150 188V246M22 150H112M188 150H278"/>
@@ -829,6 +834,17 @@ function skipTarget() {
 function undo() { if (!locks.length) return; locks.pop(); solveNow(); render(); post(); }
 function resetFix() { locks = []; skip = 0; shownPm = null; solveNow(); target = model.demo.first_peak_id; go('aim'); post(); }
 
+// ---------- expected skyline toward the next peak (ridgeline/skyline.js) ----------
+// From the current estimate, after the 2nd Lock, so the person can compare the shape with what they see.
+function skyHtml() {
+  if (!window.RidgelineSkyline || !result || locks.length < 2 || !target) return '';
+  let sk, g;
+  try { sk = window.RidgelineSkyline.profile(model, result.estimate, target); g = sk && window.RidgelineSkyline.svgPath(sk, 160, 60); } catch (e) { return ''; }
+  if (!g) return '';
+  const dot = g.peakX == null ? '' : `<circle cx="${(+g.peakX).toFixed(1)}" cy="${(+g.peakY).toFixed(1)}" r="3.2" style="fill:${sk.peak.hidden ? 'none' : 'var(--amber)'};stroke:var(--amber)" stroke-width="1.4"/>`;
+  return `<figure class="sky" aria-label="Expected skyline toward ${nameOf(target)} from the current fix"><svg viewBox="0 0 160 60" preserveAspectRatio="none" aria-hidden="true"><path d="${g.d}" style="fill:var(--line2)"/><path d="${g.line}" fill="none" style="stroke:var(--cyan)" stroke-width="1.2" vector-effect="non-scaling-stroke"/>${dot}</svg><figcaption><b>EXPECTED SHAPE</b>from the current fix</figcaption></figure>`;
+}
+
 // ---------- live scope (every frame) ----------
 function brackets(g) {
   const L = 24, c = 150;
@@ -955,6 +971,7 @@ Promise.all([fetch('/data/moran.json', { cache: 'no-store' }).then(r => { if (!r
     model = S.load(json);
     wall = model.demo.wall; wallIds = wall.map(w => w.peak_id);
     baro = model.demo.baro_m; target = model.demo.first_peak_id;
+    setTimeout(() => { try { if (window.RidgelineSkyline) window.RidgelineSkyline.profile(model, model.demo, model.demo.first_peak_id); } catch (e) { /* warm-up only */ } }, 300);
     if (!('ondeviceorientation' in window) || !('ontouchstart' in window)) { source = 'keyboard'; $('source').value = 'keyboard'; }
     render(); requestAnimationFrame(frame);
     window.addEventListener('resize', () => { if ($('map')) drawMap($('map'), screen === 'fix' || locks.length >= 2); });
