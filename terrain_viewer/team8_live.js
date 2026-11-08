@@ -14,7 +14,9 @@
 (function () {
 'use strict';
 const POLL_MS = 500, GRID_URL = 'data/moran/solver_grid.json', D2R = Math.PI / 180;
+const EVAL_URL = 'data/moran/solver_eval.json';   // written by tests/solver.test.mjs
 const L = {on: false, reveal: false, seq: 0, st: null, G: null, grid: null, ctx: null, fails: 0, lagMs: null, warned: false};
+const T = {ev: null, open: false, auto: false, el: null, key: '', why: '', retryAt: 0};   // the trust card
 let timer = 0;
 
 function start(ctx) {
@@ -56,6 +58,7 @@ async function take(st) {
     return;
   }
   try { await loadGrid(); } catch (err) { c.toast('Live phone: cannot read ' + GRID_URL); return; }
+  loadEval();
   const prev = L.st, wasOn = L.on;
   L.st = {session: st.session || null, event: st.event || 'lock', locks: Array.isArray(st.locks) ? st.locks : [], result: st.result || null,
     baro: st.baro || null, opts: st.opts || null, source: st.source || null, sent_at: st.sent_at || null,
@@ -271,9 +274,10 @@ function panels() {
   if (h.dataset.html !== key) {
     h.dataset.html = key;   // updateHint in index.html redraws the hint when this differs from its own text
     h.classList.remove('locked');
-    h.innerHTML = `${c.CROSS}<span>Live from the phone · ${n} lock${n === 1 ? '' : 's'}</span><span class="presets">${G.fix ? `<button data-live="reveal">${L.reveal ? 'Hide the spot' : 'Reveal'}</button>` : ''}<button data-live="leave" title="Back to the judge demo, click the map to drop a pilot">Leave live view</button></span>`;
-    h.querySelectorAll('[data-live]').forEach(b => b.onclick = () => b.dataset.live === 'reveal' ? toggleReveal() : leave());
+    h.innerHTML = `${c.CROSS}<span>Live from the phone · ${n} lock${n === 1 ? '' : 's'}</span><span class="presets">${G.fix ? `<button data-live="reveal">${L.reveal ? 'Hide the spot' : 'Reveal'}</button>` : ''}${T.ev && T.ev !== 'loading' ? `<button data-live="trust" class="${T.open ? 'act' : ''}" aria-pressed="${T.open}" title="How far to trust the fix: 200 simulated fixes">Trust</button>` : ''}<button data-live="leave" title="Back to the judge demo, click the map to drop a pilot">Leave live view</button></span>`;
+    h.querySelectorAll('[data-live]').forEach(b => b.onclick = () => b.dataset.live === 'reveal' ? toggleReveal() : b.dataset.live === 'trust' ? toggleTrust() : leave());
   }
+  drawTrust();
   return true;
 }
 
@@ -303,21 +307,125 @@ function phone() {
   return true;
 }
 
+// ---------------------------------------------------------------- trust card (P1.4), from solver_eval.json
+// What 200 simulated fixes from the demo spot say about the live ±N m: the share of test fixes that came that close,
+// how the error shrinks with each peak, wrong-aim and heading-frame results, solve time, and what the test leaves out.
+async function loadEval() {
+  if (T.ev || T.ev === 'loading' || performance.now() < T.retryAt) return T.ev;
+  T.ev = 'loading';
+  try {
+    const r = await fetch(EVAL_URL, {cache: 'no-cache'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    T.ev = await r.json(); T.why = '';
+  } catch (err) {
+    T.ev = null; T.why = String(err && err.message || err); T.retryAt = performance.now() + 5000;   // the next phone event tries again
+    console.warn('Live phone: no trust card, cannot read ' + EVAL_URL + ': ' + T.why);
+    return null;
+  }
+  if (L.on && L.ctx) { L.ctx.$('hint').dataset.html = ''; L.ctx.render(); }   // the Trust button appears
+  return T.ev;
+}
+const TRUST_CSS = [
+  '.t8-trust{position:fixed;left:392px;bottom:92px;width:336px;z-index:6;background:var(--card);border:1px solid var(--rule);border-radius:var(--r);box-shadow:var(--shadow);padding:13px 16px 12px;color:var(--ink);font:400 13px/1.45 var(--ui)}',
+  '.t8-trust[hidden]{display:none}',
+  '.t8-trust .ey{margin:0 0 3px;font:600 10.5px/1.2 var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}',
+  '.t8-trust h3{margin:0;font:700 16px/1.3 var(--ui)}.t8-trust svg{display:block;width:100%;height:auto;margin:6px 0 0}.t8-trust .cap{margin:0 0 6px;color:var(--ink-2)}',
+  '.t8-trust .key{margin:0 0 4px;color:var(--mute);font-size:11.5px}.t8-trust .key b{display:inline-block;width:16px;height:0;border-top:2px solid var(--ink);vertical-align:middle;margin:0 3px 0 6px}',
+  '.t8-trust .key b.k2{border-top:1.3px solid #958e7f}.t8-trust .key b.k1{border-top:1.3px dashed #b3ab9b}',
+  '.t8-trust .key i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#c62828;vertical-align:middle;margin:0 3px 0 8px}',
+  '.t8-trust dl{display:grid;grid-template-columns:1fr auto;gap:1px 12px;margin:0;padding:6px 0;border-top:1px solid var(--rule-2);border-bottom:1px solid var(--rule-2)}',
+  '.t8-trust dt{color:var(--ink-2)}.t8-trust dd{margin:0;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}',
+  '.t8-trust .fine{margin:6px 0 0;color:var(--mute);font-size:11.5px;line-height:1.4}',
+  '.t8-trust .x{position:absolute;top:8px;right:8px;width:26px;height:26px;padding:0;justify-content:center}',
+  '@media(max-width:1100px){.t8-trust{left:12px;bottom:84px;width:min(336px,calc(100vw - 24px))}}'].join('\n');
+function trustEl() {
+  if (T.el) return T.el;
+  const st = document.createElement('style');
+  st.textContent = TRUST_CSS;
+  document.head.appendChild(st);
+  const el = document.createElement('section');
+  el.id = 'trustCard'; el.className = 't8-trust'; el.hidden = true; el.setAttribute('aria-label', 'How far to trust the fix');
+  document.body.appendChild(el);
+  T.el = el;
+  return el;
+}
+function toggleTrust(force) {
+  T.open = typeof force === 'boolean' ? force : !T.open;
+  if (L.ctx) { L.ctx.$('hint').dataset.html = ''; L.ctx.render(); }
+  drawTrust();
+}
+const pc = v => (v * 100 < 10 && v > 0 ? (v * 100).toFixed(1) : Math.round(v * 100)) + '%';
+function trustChart(ev, r95, err) {
+  const W = 308, H = 104, x0 = 30, x1 = W - 10, y0 = 10, y1 = 86;
+  const sets = [1, 2, 3].map(n => (ev.by_locks || []).find(b => b.locks === n)).filter(b => b && Array.isArray(b.errors_m) && b.errors_m.length);
+  if (!sets.length) return '';
+  const top = Math.max(200, ...sets.filter(b => b.locks === 3).map(b => Math.ceil(b.errors_m[b.errors_m.length - 1] / 50) * 50));
+  const X = m => x0 + Math.min(1, m / top) * (x1 - x0), Y = f => y1 - f * (y1 - y0);
+  const curve = e => { let d = `M${X(0).toFixed(1)} ${Y(0)}`; e.forEach((m, i) => { d += `H${X(m).toFixed(1)}V${Y((i + 1) / e.length).toFixed(1)}`; }); return d + `H${X(top)}`; };
+  const style = {1: 'stroke="#c4bdae" stroke-width="1.3" stroke-dasharray="3 2"', 2: 'stroke="#958e7f" stroke-width="1.3"', 3: 'stroke="#1f1d1a" stroke-width="2.2"'};
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Share of 200 simulated fixes within a distance of the truth, with 1, 2 and 3 peaks">`;
+  [0.5, 0.9].forEach(f => { s += `<path d="M${x0} ${Y(f)}H${x1}" stroke="#e5dfd2" stroke-dasharray="2 3"/><text x="${x0 - 4}" y="${Y(f) + 3.5}" text-anchor="end" font-size="9.5" fill="#6b665b">${f * 100}%</text>`; });
+  s += `<path d="M${x0} ${y0}V${y1}H${x1}" fill="none" stroke="#d5cebf"/>`;
+  for (let m = 0; m <= top; m += 50) s += `<text x="${m === top ? X(m) + 4 : X(m)}" y="${y1 + 12}" text-anchor="${m === top ? 'end' : 'middle'}" font-size="9.5" fill="#6b665b">${m}${m === top ? ' m' : ''}</text>`;
+  sets.forEach(b => { s += `<path d="${curve(b.errors_m)}" fill="none" ${style[b.locks]}/>`; });
+  const three = sets.find(b => b.locks === 3);
+  if (three && Number.isFinite(r95)) {
+    const f = three.errors_m.filter(m => m <= r95).length / three.errors_m.length;
+    s += `<path d="M${X(r95)} ${y0 - 2}V${y1}" stroke="#d9481c" stroke-width="1.5" stroke-dasharray="4 2"/><circle cx="${X(r95)}" cy="${Y(f)}" r="3" fill="#d9481c"/>`;
+    s += `<text x="${X(r95) + 4}" y="${y1 - 4}" font-size="10" fill="#a8330c" font-weight="700">${r95} m</text>`;
+  }
+  if (three && Number.isFinite(err)) {
+    const f = three.errors_m.filter(m => m <= err).length / three.errors_m.length;
+    s += `<circle cx="${X(err)}" cy="${Y(f)}" r="4.5" fill="#c62828" stroke="#fff" stroke-width="1.5"><title>this fix, ${err} m off</title></circle>`;   // the key and the caption name it
+  }
+  return s + '</svg>';
+}
+function drawTrust() {
+  const ev = T.ev;
+  if (!ev || ev === 'loading' || !L.on) { if (T.el) T.el.hidden = true; return; }
+  const el = trustEl(), G = L.G || {}, r95 = Number.isFinite(G.r95) ? G.r95 : null, err = L.reveal && Number.isFinite(G.err) ? G.err : null;
+  el.hidden = !T.open;
+  const key = [T.open, r95, err].join('|');
+  if (!T.open || key === T.key) return;
+  T.key = key;
+  const t3 = ev.three_locks || {}, by = n => (ev.by_locks || []).find(b => b.locks === n) || {}, wa = ev.wrong_aim || {}, ti = ev.timing || {}, nz = ev.noise || {};
+  const fr = Array.isArray(ev.frame_independence) ? ev.frame_independence : [];
+  const E = Array.isArray(t3.errors_m) && t3.errors_m.length ? t3.errors_m : null;
+  const within = r95 !== null && E ? E.filter(m => m <= r95).length / E.length : null, p95 = E ? E[Math.ceil(0.95 * E.length) - 1] : null;
+  // ±N m is the radius of a circle with the 95% region's area. The region is not a circle around the fix, so a circle
+  // of that radius holds fewer than 95% of the test fixes: say so, and give the radius that did hold 19 in 20.
+  const cap = (within !== null ? `${pc(within)} of the 3-peak test fixes were within ${r95} m of the truth, 19 in 20 within ${p95} m. ` : E ? `19 in 20 of the 3-peak test fixes were within ${p95} m of the truth. ` : '')
+    + `The 95% region is not a circle, it held the truth in ${pc(t3.truth_in_95_share)}.${err !== null ? ` This fix is ${err} m off.` : ''}`;
+  const ms = v => (Number.isFinite(v) ? (v < 10 ? v.toFixed(1) : Math.round(v)) : '?');
+  el.innerHTML = `<button class="x" data-trust="close" aria-label="Close">×</button><p class="ey">Tested · ${ev.trials} simulated fixes</p>`
+    + `<h3>${r95 !== null ? `How far to trust ±${r95} m` : 'How far to trust the fix'}</h3>${trustChart(ev, r95, err)}`
+    + `<p class="key">Fixes this close<b></b>3 peaks<b class="k2"></b>2<b class="k1"></b>1${err !== null ? '<i></i>this fix' : ''}</p><p class="cap">${cap}</p><dl>`
+    + `<dt>Median error, 1 · 2 · 3 peaks</dt><dd>${by(1).median_err_m} · ${by(2).median_err_m} · ${by(3).median_err_m} m</dd>`
+    + `<dt>Wrong peak flagged · named</dt><dd>${pc(wa.detectable_noisy_flagged_share)} · ${pc(wa.detectable_noisy_named_share)}</dd>`
+    + `<dt>False alarm, no wrong peak</dt><dd>${pc(wa.false_alarm_share_without_swap)}</dd>`
+    + `<dt>Same cell in any heading frame</dt><dd>${fr.filter(f => f.err_m === 0).length} of ${fr.length}</dd>`
+    + `<dt>Solve time, median · max</dt><dd>${ms(ti.median_ms)} · ${ms(ti.max_ms)} ms</dd></dl>`
+    + `<p class="fine">Synthetic: one 30 m DEM makes the locks and the model (noise ${nz.heading_sigma_deg}° heading, ${nz.elevation_sigma_deg}° tilt, ${nz.baro_sigma_m} m barometer). No DEM, lens or sensor bias, no misjudged summits, no real phone.</p>`;
+  el.querySelector('[data-trust="close"]').onclick = () => toggleTrust(false);
+}
+
 function eyePos() { const G = L.G; return G && G.fix ? [G.fix[0], G.fix[1], G.fix[2]] : null; }
 function toggleReveal() {
   const c = L.ctx;
   if (!L.G || !L.G.fix) { c.toast('No fix from the phone yet.'); return; }
   L.reveal = !L.reveal;
+  if (L.reveal && !T.auto && T.ev && T.ev !== 'loading') { T.auto = true; T.open = true; c.$('hint').dataset.html = ''; }   // the first Reveal opens the trust card once
   c.frame(); c.render();
 }
 function leave(quiet) {
   const c = L.ctx;
   L.on = false; L.reveal = false;
+  if (T.el) T.el.hidden = true;
   if (quiet) return;
   c.toast('Left the live view. The next lock on the phone brings it back.');
   c.frame(); c.render();
 }
 
-window.TEAM8_LIVE = {start, layers, framePts, panels, phone, eyePos, toggleReveal, leave,
-  get on() { return L.on; }, get reveal() { return L.reveal; }, get state() { return L.st; }, get geometry() { return L.G; }};
+window.TEAM8_LIVE = {start, layers, framePts, panels, phone, eyePos, toggleReveal, leave, toggleTrust,
+  get trust() { return {loaded: !!T.ev && T.ev !== 'loading', state: typeof T.ev === 'object' && T.ev ? 'ok' : String(T.ev), open: T.open, why: T.why}; }, get on() { return L.on; }, get reveal() { return L.reveal; }, get state() { return L.st; }, get geometry() { return L.G; }};
 })();
