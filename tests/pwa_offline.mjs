@@ -82,7 +82,7 @@ async function main() {
     if ((await json(`${base}/health`)).pid !== server.pid) throw new Error(`port ${port} is answered by another server`);
     chrome = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${dport}`, `--user-data-dir=${prof}`, '--no-first-run', '--no-default-browser-check',
       '--window-size=430,932', 'about:blank'], {stdio: 'ignore'});
-    await waitHttp(`http://127.0.0.1:${dport}/json/version`, 15000);
+    await waitHttp(`http://127.0.0.1:${dport}/json/version`, 40000);
     res.chrome = (await json(`http://127.0.0.1:${dport}/json/version`)).Browser;
     let t = null;
     for (let i = 0; i < 40 && !t; i++) { t = (await json(`http://127.0.0.1:${dport}/json/list`)).find(x => x.type === 'page'); if (!t) await sleep(150); }

@@ -80,7 +80,7 @@ async function openPage(url, w, h, name, port, extra = []) {
   const prof = mkdtempSync(join(tmpdir(), 'ridgeline-e2e-')); profiles.push(prof);
   procs.push(spawn(CHROME, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${prof}`, '--no-first-run', '--no-default-browser-check',
     '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--enable-unsafe-swiftshader', `--window-size=${w},${h}`, ...extra, 'about:blank'], {stdio: 'ignore'}));
-  await waitHttp(`http://127.0.0.1:${port}/json/version`, 15000);
+  await waitHttp(`http://127.0.0.1:${port}/json/version`, 40000);
   let t = null;
   for (let i = 0; i < 40 && !t; i++) { t = (await json(`http://127.0.0.1:${port}/json/list`)).find(x => x.type === 'page'); if (!t) await sleep(150); }
   const p = await Page.open(t.webSocketDebuggerUrl, name);
@@ -168,7 +168,7 @@ async function main() {
     const camUp = `(() => { const v = document.getElementById('cam'); return !!(camOn && camStream && v && !v.hidden && v.srcObject === camStream && camStream.getVideoTracks().length > 0 && camStream.getVideoTracks()[0].readyState === 'live' && document.getElementById('sky-wrap').classList.contains('cam-on')); })()`;   // headless Chrome does not always decode the fake frames into the element, so frames are not required
     const camOff = `!camOn && camStream === null && document.getElementById('cam').hidden && !document.getElementById('sky-wrap').classList.contains('cam-on')`;
     await phone.eval(`document.getElementById('cam-toggle').click()`);
-    await phone.until(camUp, 8000);
+    await phone.until(camUp, 25000);   // Chrome's media process can take a while to start on a busy machine
     res.checks.camera = {notice: await phone.eval(`document.getElementById('notice').textContent`), size: await phone.eval(`[document.getElementById('cam').videoWidth, document.getElementById('cam').videoHeight]`),
       track: await phone.eval(`camStream.getVideoTracks()[0].label`), settings: await phone.eval(`(({width, height, frameRate}) => ({width, height, frameRate}))(camStream.getVideoTracks()[0].getSettings())`),
       focus_on_main: await phone.eval(`document.activeElement === document.getElementById('main')`), skyline_hidden: await phone.eval(`getComputedStyle(document.getElementById('sky')).visibility === 'hidden'`)};
@@ -313,6 +313,23 @@ async function main() {
     // leaving and coming back
     await viewer.eval(`document.querySelector('[data-live="leave"]').click()`);
     res.checks.viewer_left_live = await viewer.eval(`!TEAM8_LIVE.on`);
+    // P1.1 is the teammate's judge flow (PR #5): a click on the map drops a pilot there, makes noisy locks from that
+    // spot, solves and shows the error. Checked here so the live mode is known not to break it: a real mouse click at
+    // the screen point of the demo spot (solver_grid.json, with its ground height). The viewer keeps its state private,
+    // so a new drop is seen as a new window.TEAM8_SCEN, which the viewer writes on every drop.
+    {
+      await viewer.eval('window.__scen0 = window.TEAM8_SCEN || null');
+      const pt = await viewer.eval(`fetch('data/moran/solver_grid.json').then(r => r.json()).then(g => { const d = g.demo;
+        const [x, y] = TEAM8_DECK.getViewports()[0].project([d.lon, d.lat, d.elev_m]); return {lon: d.lon, lat: d.lat, x: Math.round(x), y: Math.round(y)}; })`);
+      await viewer.press(pt.x, pt.y, 60);
+      const how = await viewer.until(`!!window.TEAM8_SCEN && window.TEAM8_SCEN !== window.__scen0`, 5000).then(() => 'mouse click', () => 'no drop: the mouse click did not reach the map');
+      await sleep(2500);   // let the autoplay walk through the locks to the fix
+      res.checks.judge_click = {how, at_px: [pt.x, pt.y], ...(await viewer.eval(`({live_on: TEAM8_LIVE.on,
+        fix: window.TEAM8_SCEN && {err_m: TEAM8_SCEN.err_m, r95_m: TEAM8_SCEN.r95_m, inside95: TEAM8_SCEN.inside95, visible_peaks: TEAM8_SCEN.visible.length, solve_ms: TEAM8_SCEN.solve_ms},
+        title: document.getElementById('stepTitle').textContent, big: document.getElementById('fixBig').textContent})`))};
+      log('  judge click:', JSON.stringify(res.checks.judge_click));
+      await viewer.shot('viewer_11_judge_click.png');
+    }
     res.checks.phone_errors = phone.errors; res.checks.viewer_errors = viewer.errors;
     const ms = res.locks.map(l => l.viewer_update_ms);
     res.summary = {locks: res.locks.length, viewer_update_ms_max: Math.max(...ms), viewer_update_ms_median: ms.slice().sort((a, b) => a - b)[Math.floor(ms.length / 2)],
@@ -330,6 +347,8 @@ async function main() {
     res.summary.camera = !!(cam && /fake_device/.test(cam.track) && cam.focus_on_main && cam.skyline_hidden && cam.off_ends_tracks && cam.off_ends_tracks && cam.ended_noticed && cam.on_after_two_locks && cam.stopped_off_aim);
     const tr = res.checks.trust;
     res.summary.trust_card = !!(tr && tr.open && tr.curves >= 3 && tr.marks_this_fix && new RegExp('±' + res.checks.reveal.r95_m + ' m').test(tr.title) && /19 in 20/.test(tr.caption) && tr.closes);
+    const jc = res.checks.judge_click;
+    res.summary.judge_click = !!(jc && jc.how === 'mouse click' && !jc.live_on && jc.fix && Number.isFinite(jc.fix.err_m) && Number.isFinite(jc.fix.r95_m));
     log('summary', JSON.stringify(res.summary));
   } catch (err) {
     res.error = String(err && err.stack || err);
@@ -355,7 +374,7 @@ async function main() {
   const s = res.summary;
   const ok = s && s.within_1s && s.wrong_aim_flagged && !s.page_errors && s.same_r95_phone_and_viewer && s.target_is_flagged_peak && s.second_wrong_flagged &&
     s.relock_replaced && s.phone_used_fix && s.route_shown_on_viewer_ms < 1500 && s.injured_stay_signal_wait && s.pin_locked_by_long_press &&
-    s.unlock_needs_two_actions && s.keyboard_pin && s.camera && s.trust_card;
+    s.unlock_needs_two_actions && s.keyboard_pin && s.camera && s.trust_card && s.judge_click;
   if (!ok) { console.error('E2E FAILED'); process.exitCode = 1; } else log('E2E PASSED, results in', OUT);
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });
