@@ -2,6 +2,17 @@
 
 For the team's rehearsals and the judging slot. Every number here is in the [README](../README.md) or the [technical README](../ridgeline/README.md). Lines in [brackets] are used only when that part is in the build or was verified before judging. Speaking pace is about 130 words a minute.
 
+## The four judging criteria, one line each
+
+The judges score these four. Both runs say each line word for word at least once, so every criterion has a sentence a judge can write down.
+
+| Criterion | What the judges see | The line | 90-second run | 10-minute run |
+| --- | --- | --- | --- | --- |
+| Real-world relevance | A downed pilot with GPS jammed, only a phone | GPS is the first thing jammed or spoofed. RIDGELINE gives an isolated person a position from what they can see. | 0:00 | 0:00 |
+| Working Live Demonstration | A judge aims the phone in airplane mode at the three wall cards | Take the phone. Aim at the three peaks and press Lock each time. | 0:15 | 1:45 |
+| Deployability | The phone they already carry, offline, the fix going to ATAK as Cursor on Target | It runs on the phone you already carry, with no signal, and sends the fix to ATAK. | 1:10 | 9:15 |
+| Ideation | Angles between peaks instead of a compass, terrain checking GPS, a fix that admits when it is getting old | We never trust one source. Terrain checks GPS, and the phone tells you when its own answer is getting old. | 1:10 | 5:30 and 9:15 |
+
 ## Before the judges arrive
 
 ① Restart the server on the final build from the repo root (`python -I ridgeline/server.py`), then run `python -I ridgeline/scripts/preflight.py` and fix anything it marks FAIL.
@@ -16,11 +27,11 @@ For the team's rehearsals and the judging slot. Every number here is in the [REA
 
 | Time | Who | Say | Do |
 | --- | --- | --- | --- |
-| 0:00 to 0:15 | Seika | GPS is the first thing jammed or spoofed. Picture a downed pilot in the mountains. No GPS, no signal, only a phone. RIDGELINE gives them a position from what they can see. | Show the phone in airplane mode. |
+| 0:00 to 0:15 | Seika | GPS is the first thing jammed or spoofed. Picture a downed pilot in the mountains, no signal, only a phone. RIDGELINE gives an isolated person a position from what they can see. | Show the phone in airplane mode. |
 | 0:15 to 0:40 | Seika, then Judge | Take the phone. Aim at the three peaks and press Lock each time. The phone tells you which peak is next. | Hand the phone to a judge standing on the floor mark. The judge Locks the three cards. |
 | 0:40 to 1:00 | Teammate | Each Lock adds a line on the big screen and the bubble shrinks. It only uses the angles between peaks, so no compass needed. It solves on the phone in a tenth of a second. | Point at the board, then press R to reveal the true spot and the error in meters. |
 | 1:00 to 1:10 | Teammate | Our real-phone wall test landed 42 meters off, inside a 293 meter circle. Cards stand in for peaks and the height is simulated. | Leave the reveal on the board. |
-| 1:10 to 1:30 | Seika | Where to gives a route that stays off water and steep ground, or says Stay, Signal, Wait. [Walk away and the circle grows until the phone asks you to aim again.] It runs on the phone you already carry, with no signal, and sends the fix to ATAK. | Tap Where to on the phone. Open `localhost:8768/api/cot` on the PC to show the Cursor on Target events. |
+| 1:10 to 1:30 | Seika | Where to gives a route off water and steep ground. We never trust one source. Terrain checks GPS, and the phone tells you when its own answer is getting old. It runs on the phone you already carry, with no signal, and sends the fix to ATAK. | Tap Where to on the phone. Open `localhost:8768/api/cot` on the PC to show the Cursor on Target events. |
 
 ## 10-minute version
 
@@ -35,13 +46,13 @@ For the team's rehearsals and the judging slot. Every number here is in the [REA
 | 3:45 to 4:30 | Seika | Now the answer. On this real phone our wall tests landed 42 meters off inside a 293 meter circle, and 90 meters off inside 278. With the cable pulled and the page reloaded from the phone's own copy, it still solved, 212 meters off inside 298. | Press R on the board to reveal the true spot and today's error. |
 | 4:30 to 5:00 | Teammate | Where to offers Rendezvous, Back to start, your marks, or a pin. Removing a pin takes two taps, so it does not move by accident. Routes stay off water and slopes over 30 degrees. | Tap Where to and pick Rendezvous. |
 | 5:00 to 5:30 | Teammate | Switch to Injured and the limit drops to 18 degrees, with one sentence on why. If there is no safe way, it says Stay, Signal, Wait. Hide spots are folds in the ground that few summits can see. Signal spots are open ground that many can see. Terrain only, no trees or buildings. | Switch to Injured. Show the Hide and Signal spots. |
-| 5:30 to 6:00 | Seika | We never trust one source. Terrain checks GPS. A test reading 2.48 kilometers away fell outside our circle, so the phone said GPS disagrees and did not use it. One 61 meters away was consistent. We do not know why a reading disagrees, so we call it a disagreement, not a spoofing detector. | Settings, Test GPS, far point, then near point. |
+| 5:30 to 6:00 | Seika | We never trust one source. Terrain checks GPS, and the phone tells you when its own answer is getting old. A test reading 2.48 kilometers away fell outside our circle, so the phone said GPS disagrees and did not use it. One 61 meters away was consistent. We do not know why a reading disagrees, so we call it a disagreement, not a spoofing detector. | Settings, Test GPS, far point, then near point. |
 | 6:00 to 6:30 | Seika | In 200 simulated fixes with 3 degrees of aim error, the truth was inside the circle 99% of the time. Read the same Locks as compass bearings with a 7 degree compass bias and you get 204 meters and 54%. We get 103 meters and 98%. | Press T on the board for the Trust view. Say that these are simulations. |
 | 6:30 to 7:30 | Teammate | [Mentor Brendan asked for Auto-PACE. After the fix the phone keeps its probability map. Walk, and the circle grows. The barometer and the lakes pull it back in. GPS inside the circle is used, outside it is not. The screen shows the PACE tier it relies on. This walk is simulated, at 30 times speed. At the limit the phone buzzes and says Confidence low, aim at 3 peaks again.] Without Auto-PACE, say instead that the phone keeps the last fix and says how old it is. | [Tap Simulated walk and let the circle grow until the prompt.] |
 | 7:30 to 8:00 | Seika | Mentor Logan told us not to build another drone or another command and control tool, and to feed the tools people already use. So the fix, its 95% circle, the route and the marks go out as Cursor on Target for ATAK. | Open `localhost:8768/api/cot` on the PC. |
 | 8:00 to 8:30 | Seika | We tested that feed with a stand-in TAK client. Real ATAK display is not verified yet. [We showed it in ATAK on this phone this morning.] Mentor Matt said confidence should always show and drop when the fix may be drifting. The phone always shows its radius, and ATAK reads how old the fix is. | Point at the remarks line, Position as of, minutes ago. |
 | 8:30 to 9:15 | Teammate | Four of us built this. Rohan, the peak selection rule and the topography and localization prototype. Noah, the terrain data, the map colours on every screen and a route planner prototype. Douglas, the simulated accelerometer and inertial path prototype. Seika, the phone app, the live demo and the measurement record. | Each person raises a hand. |
-| 9:15 to 10:00 | Seika | Our honest limits. Cards stand in for mountains, the height is simulated, we have not tested outdoors, real ATAK is unverified, and battery life is not measured. Next come outdoor trials with real ground truth, a real barometer, real ATAK, weather and voice guidance. GPS is the first thing jammed or spoofed. RIDGELINE runs on the phone you already carry, with no signal, and we never trust one source. Thank you. | Hand the phone back and take questions. |
+| 9:15 to 10:00 | Seika | Our honest limits. Cards stand in for mountains, the height is simulated, we have not tested outdoors, real ATAK is unverified, and battery life is not measured. Next come outdoor trials with real ground truth, a real barometer, real ATAK, weather and voice guidance. GPS is the first thing jammed or spoofed. It runs on the phone you already carry, with no signal, and sends the fix to ATAK. We never trust one source. Thank you. | Hand the phone back and take questions. |
 
 ## If asked
 
