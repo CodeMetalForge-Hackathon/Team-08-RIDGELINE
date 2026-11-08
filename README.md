@@ -232,7 +232,8 @@ Pre-existing libraries, frameworks, SDKs and datasets used across this repositor
 - [x] README sections above are filled in with measured results and explicit limits
 - [ ] Confirm each team member's role
 - [ ] Run the exact submitted revision and record remaining phone checks
-- [ ] Check for secrets, CUI, ITAR and unconsented personal data (use `.env`, see `.gitignore`)
-- [ ] Large files use Git LFS or external links
+- [x] No keys, tokens or `.env` files are tracked (checked Nov 8). Terrain and map data are the public datasets listed in Credits
+- [ ] Final look for CUI, ITAR and unconsented personal data in the mockup images
+- [x] No large files. The largest tracked file is 3.7 MB, so Git LFS is not needed (checked Nov 8)
 - [ ] Final commit is on `main` before Sun Nov 8, 12:00 PM EST
 - [ ] `git tag submission && git push origin submission`
