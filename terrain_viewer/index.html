@@ -153,6 +153,13 @@ button.hold span{position:relative}
 #hint b{color:var(--ink);font-weight:700}
 #hint.arm{border-color:var(--ink);color:var(--ink)}
 #banner{left:calc(50% + 30px);top:124px;transform:translateX(-50%);padding:8px 16px;display:none;border-color:var(--danger);color:var(--ink-2);white-space:nowrap}
+/* Noah's precomputed snow routes (data/<id>/snow_overlay.js), shown only while the Snow toggle is on */
+#snowInfo{right:24px;top:24px;width:340px;padding:10px 14px 11px;font-size:13px;line-height:18px;color:var(--ink-2)}
+#snowInfo .srow{display:flex;align-items:center;gap:8px;margin-top:6px}
+#snowInfo .srow span{flex:1;min-width:0}
+#snowInfo .srow b{font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+#snowInfo .sw{width:22px;height:12px;flex:none}
+#snowSrc{margin-top:7px;padding-top:6px;border-top:1px solid var(--rule-2);font-size:12px;line-height:16px;color:var(--mute)}
 #banner b{color:var(--danger);font-weight:700;margin-right:10px}
 #toast{position:fixed;left:calc(50% + 30px);bottom:84px;transform:translate(-50%,8px);padding:8px 14px;border-radius:8px;background:var(--ink);color:#fff;font:500 13px/18px var(--ui);opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:5;max-width:560px;text-align:center}
 #toast.on{opacity:1;transform:translate(-50%,0)}
@@ -279,6 +286,15 @@ html.still *{transition:none!important;animation:none!important}
   <div class="group" role="group" aria-label="Aiming error">
     <span class="glab">Aim ±</span><button data-aim="1" aria-pressed="false">1°</button><button data-aim="2" class="act" aria-pressed="true">2°</button><button data-aim="4" aria-pressed="false">4°</button>
   </div>
+  <span class="vr snowui" aria-hidden="true" hidden></span>
+  <div class="group snowui" role="group" aria-label="Snow" hidden><button id="snowBtn" aria-pressed="false" title="Precomputed by Noah's route planner from Open-Meteo snow depth">Snow · Noah's planner</button></div>
+</div>
+<div id="snowInfo" class="panel" role="status" hidden>
+  <div class="eyebrow">Snow · Noah's planner</div>
+  <div class="srow"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M3 6H19" stroke="#1f1d1a" stroke-width="10" stroke-linecap="round"/><path d="M3 6H19" stroke="#ffd60a" stroke-width="7" stroke-linecap="round"/></svg><span>Dry ground</span><b id="snowDry"></b></div>
+  <div class="srow"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><path d="M3 6H19" stroke="#1f1d1a" stroke-width="6.5" stroke-linecap="round"/><path d="M3 6H19" stroke="#29b6f6" stroke-width="4" stroke-linecap="round"/></svg><span>Today's snow</span><b id="snowWet"></b></div>
+  <div class="srow"><svg class="sw" viewBox="0 0 22 12" aria-hidden="true"><rect x="1" y="1" width="20" height="10" rx="2" fill="rgb(70,135,215)" fill-opacity=".5"/></svg><span id="snowNote"></span></div>
+  <div id="snowSrc"></div>
 </div>
 
 <div id="hint" class="panel" role="status"></div>
@@ -341,7 +357,9 @@ html.still *{transition:none!important;animation:none!important}
   if (!pick || !window.deck) { TEAM8_MAIN(); return; }
   const add = (src, next) => { const sc = document.createElement('script'); sc.src = src; sc.onload = sc.onerror = next; document.body.appendChild(sc); };
   // then the lower-detail ring around the tile (data/<id>_context/), drawn only: the solver never reads it
-  add(`data/${pick.id}/bundle.js`, pick.context ? () => add(`data/${pick.context}/bundle.js`, TEAM8_MAIN) : TEAM8_MAIN);
+  // Noah's precomputed snow overlay (data/<id>/snow_overlay.js, window.TEAM8_SNOW), only where one was exported; the page works without it
+  const SNOW_AREAS = ['moran'], main = SNOW_AREAS.includes(pick.id) ? () => add(`data/${pick.id}/snow_overlay.js`, TEAM8_MAIN) : TEAM8_MAIN;
+  add(`data/${pick.id}/bundle.js`, pick.context ? () => add(`data/${pick.context}/bundle.js`, main) : main);
 })();
 function TEAM8_MAIN() {
 'use strict';
@@ -358,6 +376,20 @@ const {Deck, MapView, FirstPersonView, LinearInterpolator, WebMercatorViewport,
   TerrainLayer, TripsLayer, PathLayer, LineLayer, ScatterplotLayer, TextLayer} = deck;
 
 const M = D.meta, S = D.sim, B = M.bounds;
+// Noah's route planner, run offline (snow_overlay.js): a dry route, a snow route and a snow-depth image on the same bounds.
+// Shown only when the Snow toggle is on; nothing is computed in the browser
+const SNOW = (() => {
+  const s = window.TEAM8_SNOW;
+  return s && s.area === M.id && s.depth && s.dry && s.snow && s.depth.bounds.every((v, i) => Math.abs(v - B[i]) < 1e-6) ? s : null;
+})();
+const SNOW_PATHS = SNOW && (() => {
+  const up = p => [p[0], p[1], p[2] + 8], d = SNOW.dry.path, w = SNOW.snow.path;
+  return {dry: [{path: d.map(up)}], snow: [{path: w.map(up)}],
+    ends: [{p: up(d[0]), label: 'Demo fix'}, {p: up(d[d.length - 1]), label: 'Rendezvous'}]};
+})();
+let SNOW_IMG = null;
+// redraw when the image arrives only if the scene is already up; before that, the first render picks it up
+if (SNOW) { const im = new Image(); im.onload = () => { SNOW_IMG = im; if (state.snow && state.scen) render(); }; im.src = SNOW.depth.png; }
 const DECL = (M.declination && M.declination.deg) || 0;
 const DECL_TXT = `${Math.abs(DECL).toFixed(1)}° ${DECL >= 0 ? 'E' : 'W'}`;
 const CAP = {healthy: 30, injured: 18}, SPEED = {healthy: 1, injured: 0.5};
@@ -426,7 +458,7 @@ const RV = S.rendezvous ? {lon: S.rendezvous.lon, lat: S.rendezvous.lat, label: 
 const state = {step: 0, view: '3d', health: 'healthy', aim: 2, scen: null, picked: false,
   dest: null, locked: false, route: null, rt: null, rtKey: '', start: null, home: null, marks: [], trail: [],
   t: 0, playing: true, speed: 300, heading: 0, vs: null, tex: {}, loaded: false,
-  fixD: 0, fixes: 0, refixUntil: 0, drift: [0, 0], lastD: 0, trailD: 0, presets: [], armPilot: false, mapOnly: false};
+  fixD: 0, fixes: 0, refixUntil: 0, drift: [0, 0], lastD: 0, trailD: 0, presets: [], armPilot: false, mapOnly: false, snow: false};
 
 // one landing: what the pilot sees and reads there, and the fix solved from those readings alone
 let scenSeq = 0;
@@ -607,6 +639,13 @@ function texKey() {
 }
 function texture(key) {
   if (state.tex[key]) return state.tex[key];
+  if (key.endsWith('+snow')) {   // the same sheet with Noah's snow depth tinted over it, bluer is deeper
+    const base = texture(key.slice(0, -5));
+    if (!SNOW_IMG) return base;
+    const cs = canvas(TW, TH), xs = cs.getContext('2d');
+    xs.drawImage(base, 0, 0); xs.imageSmoothingEnabled = true; xs.drawImage(SNOW_IMG, 0, 0, TW, TH);
+    return (state.tex[key] = cs);
+  }
   const sc = state.scen, c = canvas(TW, TH), x = c.getContext('2d');
   x.drawImage(COLOR, 0, 0, TW, TH);
   const m = /^p(\d)$/.exec(key), k = m ? +m[1] : sc.fixStep, late = !m;
@@ -815,7 +854,7 @@ function layers() {
   // default material and lights, which darkened the map to about 0.72 and shaded it twice
   const out = CTX ? [new TerrainLayer({id: 'terrain-context', elevationData: CTX.img.terrain, texture: CTX_TEX, bounds: CTX.meta.bounds,
     elevationDecoder: CTX.meta.elevation_decoder, meshMaxError: 2.0, material: {unlit: true}, loaders: [GridTerrainLoader], pickable: false})] : [];
-  out.push(new TerrainLayer({id: 'terrain', elevationData: D.img.terrain, texture: texture(texKey()), bounds: BOUNDS,
+  out.push(new TerrainLayer({id: 'terrain', elevationData: D.img.terrain, texture: texture(texKey() + (SNOW && state.snow ? '+snow' : '')), bounds: BOUNDS,
     elevationDecoder: DECODER, meshMaxError: 2.0, material: {unlit: true}, loaders: [GridTerrainLoader], pickable: !eye}));
   const aimedN = aimedAt(step), aimed = sc.sg.peaks.slice(0, aimedN).map((p, i) => ({...p, letter: 'ABC'[i]}));
   const aimedNames = new Set(aimed.map(p => p.name)), nextP = step <= 4 && aimedN < sc.np ? sc.sg.peaks[aimedN] : null;
@@ -849,6 +888,17 @@ function layers() {
       getSize: 11, getColor: [70, 66, 59], fontWeight: 600, getPixelOffset: t => t.o, parameters: ON_TOP}));
   }
   if (eye) return out;
+  if (SNOW && state.snow) {   // Noah's planner, precomputed: the dry route wide in yellow, the snow route thin in blue on top of it
+    // billboard: a flat ribbon along this canyon floor did not draw in the tilted 3D view, a camera-facing one does
+    const line = (id, data, color, w) => new PathLayer({id, data, getPath: d => d.path, getColor: color, getWidth: w, widthUnits: 'pixels',
+      billboard: true, jointRounded: true, capRounded: true, parameters: top});
+    out.push(line('snow-dry-casing', SNOW_PATHS.dry, [31, 29, 26, 235], 13), line('snow-dry', SNOW_PATHS.dry, [255, 214, 10, 255], 10),
+      line('snow-wet-casing', SNOW_PATHS.snow, [31, 29, 26, 235], 6.5), line('snow-wet', SNOW_PATHS.snow, [41, 182, 246, 255], 4));
+    out.push(new ScatterplotLayer({id: 'snow-ends', data: SNOW_PATHS.ends, getPosition: e => e.p, getRadius: 6, radiusUnits: 'pixels',
+      filled: true, getFillColor: [255, 255, 255, 240], stroked: true, getLineColor: [31, 29, 26], lineWidthMinPixels: 2, parameters: top}));
+    out.push(new TextLayer({id: 'snow-ends-label', data: SNOW_PATHS.ends, ...TXT, getPosition: e => e.p, getText: e => e.label, getSize: 12.5,
+      fontWeight: 700, getColor: INK, getPixelOffset: [0, 12], getAlignmentBaseline: 'top', parameters: top}));   // below the dot: the landing label sits above
+  }
   const T = sc.truth;
   // where the judge dropped the pilot; the phone never sees it
   if (step < 7) {
@@ -1393,6 +1443,15 @@ document.querySelectorAll('[data-health]').forEach(b => b.onclick = () => {
   if (state.step === 6) resetWalk();
   render();
 });
+if (SNOW) {   // the Snow toggle exists only where this area has Noah's precomputed overlay; off by default
+  document.querySelectorAll('.snowui').forEach(e => { e.hidden = false; });
+  $('snowDry').textContent = NB(`${fmtT(SNOW.dry.minutes * 60)} · ${SNOW.dry.km.toFixed(1)} km`);
+  $('snowWet').textContent = NB(`${fmtT(SNOW.snow.minutes * 60)} · ${SNOW.snow.km.toFixed(1)} km`);
+  $('snowNote').textContent = `Snow from about ${Math.round(SNOW.weather.snow_from_m).toLocaleString('en-US')} m, bluer is deeper. Routes from the demo fix to the Rendezvous`;
+  $('snowSrc').textContent = SNOW.computed_label;
+  $('snowBtn').onclick = () => { state.snow = !state.snow; press($('snowBtn'), state.snow); $('snowInfo').hidden = !state.snow; render(); };
+  if (QS.has('snow')) { state.snow = true; press($('snowBtn'), true); $('snowInfo').hidden = false; }   // ?snow opens with it on
+}
 document.querySelectorAll('[data-aim]').forEach(b => b.onclick = () => {   // re-aim the same spot with a steadier or shakier hand
   state.aim = +b.dataset.aim;
   const sc = state.scen, s = state.step;
