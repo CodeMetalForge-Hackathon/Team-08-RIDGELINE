@@ -39,7 +39,7 @@ Where each person's work lives, and whether the live demo uses it.
 | --- | --- | --- | --- |
 | Peak selection (`find_true_peaks`), topography and localization prototype | Rohan | `topological_navigation/sprint1_topography.py` and `sprint2_localization.py` on main | Yes. The 23 peaks the phone aims at were picked with Rohan's `find_true_peaks` rule, converted to meters in `ridgeline/scripts/export_grid.py` |
 | Relief colours of the topo map | Noah | `terrain_viewer/scripts/team8_relief.py`, painted like his route plots | Yes. The same map image is used by the phone, the board and the judge view |
-| Terrain route planner with water handling and snapping (`hiker_router.py`, `destination.py`, `water.py`) | Noah | Branch `Sprint2-NavAlgorithm` | No. It runs on the same USGS 1 m Moran tile and is not merged into main at the time of writing |
+| Terrain route planner with snow, water handling, snapping and a route lock (`hiker_router.py`, `destination.py`, `navigator.py`, `water.py`, `weather.py`) | Noah | `topological_navigation/` on main (PR #22, from `Sprint2-NavAlgorithm`) | No. It runs on the same USGS 1 m Moran tile. Snow depth comes from Open-Meteo when there is signal and from a cached copy offline, and the demo storm is labelled simulated. The phone, the board and the judge view do not call it yet |
 | Base-layer COP map (`cop.py`, `sim_feed.py`) | Noah | Branch `Base-Layer-Map` | No, an earlier map concept |
 | Simulated accelerometer processing and inertial path reconstruction | Douglas | `accelerometer/` on main | No. A separate prototype, not an input to the three-peak fix |
 | Phone app, solver, board, CoT hand-off, terrain viewer and measurement record | Seika | `ridgeline/`, `terrain_viewer/`, `docs/` | Yes |

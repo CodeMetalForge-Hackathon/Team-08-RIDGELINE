@@ -126,7 +126,7 @@ summits outside the tile.
 ## Design rules
 
 * One map style for the whole team. The texture is painted like Noah's route plots (`scripts/team8_relief.py`,
-  from `plotting.py` on `Sprint2-NavAlgorithm`): elevation tint from green valleys through tan and brown to grey
+  from `topological_navigation/plotting.py`): elevation tint from green valleys through tan and brown to grey
   summits between the 2nd and 98th percentile, soft relief shading lit from the north-west (vertical exaggeration 2),
   blue water with italic names (only water is blue), dark contours with bold index lines and elevation labels along
   the line, a white 1 km UTM grid with its digits on the edge, summits as black triangles with names and heights.
