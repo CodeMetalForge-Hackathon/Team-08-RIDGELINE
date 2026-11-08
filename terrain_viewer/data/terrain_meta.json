@@ -1,0 +1,129 @@
+{
+ "schema": "team8-terrain/v1",
+ "bounds": [
+  -110.846907,
+  43.8172782,
+  -110.7186531,
+  43.8884954
+ ],
+ "grid": {
+  "width": 2064,
+  "height": 1584,
+  "cell_m": [
+   4.996,
+   4.996
+  ],
+  "crs": "EPSG:4326",
+  "note": "pixel edges match bounds; row 0 is north"
+ },
+ "elevation_decoder": {
+  "rScaler": 6553.6,
+  "gScaler": 25.6,
+  "bScaler": 0.1,
+  "offset": -10000
+ },
+ "elev_range_m": [
+  2055.4,
+  3843.3
+ ],
+ "slope_share_land": {
+  "lt15": 0.232,
+  "s15_25": 0.157,
+  "s25_35": 0.232,
+  "ge35": 0.379
+ },
+ "lake_share": 0.058,
+ "area_km2": 81.6,
+ "files": {
+  "terrain_rgb_5m": "terrain_rgb_5m.png",
+  "terrain_rgb_10m": "terrain_rgb_10m.png",
+  "color_5m_png": "terrain_color_5m.png",
+  "color_5m_jpg": "terrain_color_5m.jpg",
+  "lake_mask_5m": "lake_mask_5m.png"
+ },
+ "peaks": [
+  {
+   "name": "Mount Moran",
+   "lon": -110.776535,
+   "lat": 43.83506,
+   "elev_m": 3843.3,
+   "verified": true,
+   "source": "https://en.wikipedia.org/wiki/Mount_Moran"
+  },
+  {
+   "name": "Thor Peak",
+   "lon": -110.795177,
+   "lat": 43.830654,
+   "elev_m": 3665.8,
+   "verified": true,
+   "source": "https://en.wikipedia.org/wiki/Thor_Peak_(Wyoming)"
+  },
+  {
+   "name": "Pk 3388",
+   "lon": -110.806734,
+   "lat": 43.82355,
+   "elev_m": 3388.0,
+   "verified": false
+  },
+  {
+   "name": "Traverse Peak",
+   "lon": -110.794928,
+   "lat": 43.867791,
+   "elev_m": 3368.6,
+   "verified": true,
+   "source": "https://en.wikipedia.org/wiki/Traverse_Peak"
+  },
+  {
+   "name": "Pk 3336",
+   "lon": -110.823263,
+   "lat": 43.832542,
+   "elev_m": 3335.9,
+   "verified": false
+  },
+  {
+   "name": "Raynolds Peak",
+   "lon": -110.825811,
+   "lat": 43.870714,
+   "elev_m": 3325.8,
+   "verified": true,
+   "source": "https://en.wikipedia.org/wiki/Raynolds_Peak"
+  },
+  {
+   "name": "Pk 3316",
+   "lon": -110.841408,
+   "lat": 43.822921,
+   "elev_m": 3316.3,
+   "verified": false
+  },
+  {
+   "name": "Pk 3309",
+   "lon": -110.840786,
+   "lat": 43.882448,
+   "elev_m": 3309.4,
+   "verified": false
+  },
+  {
+   "name": "Bivouac Peak",
+   "lon": -110.784178,
+   "lat": 43.868466,
+   "elev_m": 3298.0,
+   "verified": true,
+   "source": "https://en.wikipedia.org/wiki/Bivouac_Peak"
+  },
+  {
+   "name": "Pk 3292",
+   "lon": -110.830223,
+   "lat": 43.822156,
+   "elev_m": 3292.2,
+   "verified": false
+  },
+  {
+   "name": "Pk 3112",
+   "lon": -110.825252,
+   "lat": 43.881504,
+   "elev_m": 3112.3,
+   "verified": false
+  }
+ ],
+ "credits": "USGS 3DEP 1 m lidar DEM via OpenTopography (WY_GrandTetonElkRefuge_2014, WY_GrandTetonNP_D22, WY_North_Converse_2020_D20), averaged to about 5 m on an EPSG:4326 grid. Public domain (USGS)."
+}

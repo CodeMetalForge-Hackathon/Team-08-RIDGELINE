@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<title>Team-8 Terrain Nav</title>
+<link rel="stylesheet" href="lib/fonts/fonts.css">
+<style>
+/* Design system, from three references.
+   awesome-design-md (SpaceX DESIGN.md): black canvas, 1px hairlines, no shadows, glows or blur, uppercase micro labels with wide tracking, 8px spacing.
+   taste-skill: the subject shown big, one button style, one panel style, one radius, no captions under visuals, credits in one footer line.
+   Vercel web interface guidelines: visible focus rings, aria labels and states, tabular numbers, no transition: all, reduced motion.
+   Cyan, gold and red are data colours only (where you can be, the peak you aim at, danger). Chrome stays black and white. */
+:root{
+  color-scheme:dark;
+  --bg:#000;--surface:rgba(10,10,10,.92);--well:#050505;--hair:#3a3a3f;--hair-2:#232328;
+  --ink:#fff;--ink-2:#d9d9e0;--mute:#9a9aa3;--faint:#85858e;
+  --cyan:#38e1ff;--gold:#ffc846;--red:#ff4d5e;
+  --r:8px;
+  --ui:'Noto Sans JP',system-ui,'Segoe UI',sans-serif;
+  --num:'B612 Mono',ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:400 14px/1.6 var(--ui);overflow:hidden;-webkit-font-smoothing:antialiased}
+#stage{position:fixed;inset:0;background:var(--bg)}
+#stage.eye{background:linear-gradient(#0c1724 0,#35546c 46%,#9fb2c0 62%,#1b2026 100%)}
+.panel{position:fixed;background:var(--surface);border:1px solid var(--hair);border-radius:var(--r)}
+.eyebrow{font:600 11px/16px var(--ui);letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+.mono{font-family:var(--num);font-variant-numeric:tabular-nums}
+
+/* one button system */
+button{font:600 12px/1 var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:transparent;border:1px solid var(--hair);border-radius:var(--r);height:32px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background-color .15s,border-color .15s,color .15s,transform .1s}
+button:hover{border-color:#8a8a93;background:rgba(255,255,255,.07)}
+button:active{transform:translateY(1px)}
+button.act,button.act:hover{background:var(--ink);border-color:var(--ink);color:#000}
+button:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+button svg{display:block}
+.group{display:flex;gap:4px}
+.vr{width:1px;align-self:stretch;background:var(--hair);margin:0 4px}
+
+/* left: what the judge reads */
+#info{left:24px;top:24px;width:352px;padding:24px}
+#info h1{margin:0;font:600 11px/16px var(--ui);letter-spacing:.12em;text-transform:uppercase;color:var(--ink)}
+#info .place{margin-top:2px;font-size:12px;line-height:16px;color:var(--mute)}
+#stepEyebrow{margin-top:24px;font-family:var(--num)}
+#stepTitle{margin:4px 0 8px;font:700 22px/1.2 var(--ui);letter-spacing:.03em;text-transform:uppercase;text-wrap:balance}
+#stepText{margin:0;color:var(--ink-2);min-height:68px;text-wrap:pretty}
+#sensors{margin:16px 0 0;padding:16px 0 0;border-top:1px solid var(--hair-2);display:grid;grid-template-columns:1fr auto;row-gap:8px;column-gap:16px;align-items:baseline}
+#sensors dt{font:600 11px/16px var(--ui);letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
+#sensors dd{margin:0;font:400 13px/16px var(--ui);font-variant-numeric:tabular-nums;color:var(--faint);text-align:right;white-space:nowrap}
+#sensors dd.on{color:var(--ink)}
+#sensors dd.alert{color:var(--red)}
+#area{margin-top:16px;padding-top:16px;border-top:1px solid var(--hair-2)}
+#areaVal{display:block;margin-top:4px;font:700 30px/1.1 var(--ui);font-variant-numeric:tabular-nums;color:var(--cyan)}
+#areaFrom{display:block;margin-top:4px;font-size:12px;line-height:16px;color:var(--mute)}
+
+/* top and bottom bars */
+#views{left:50%;top:24px;transform:translateX(-50%);width:max-content;display:flex;padding:8px}
+#banner{left:50%;top:88px;transform:translateX(-50%);padding:8px 16px;display:none;border-color:var(--red);color:var(--ink-2);white-space:nowrap}
+#banner b{color:var(--red);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-right:12px}
+#steps{left:calc(50% - 60px);bottom:24px;transform:translateX(-50%);width:max-content;display:flex;gap:4px;padding:8px;align-items:center}
+#steps .n{font-family:var(--num);color:var(--faint);letter-spacing:0}
+#steps .act .n{color:#000}
+#walkbar{left:calc(50% - 60px);bottom:88px;transform:translateX(-50%);width:max-content;display:none;gap:8px;padding:8px;align-items:center}
+#walkbar input{width:220px;accent-color:var(--cyan)}
+#clock{font:400 12px/1 var(--num);font-variant-numeric:tabular-nums;color:var(--mute);min-width:136px;text-align:center}
+#legend{left:24px;bottom:24px;padding:16px;font-size:12px;line-height:20px;color:var(--ink-2)}
+#legend .k{display:flex;align-items:center;gap:8px}
+#legend i{width:10px;height:10px;border-radius:2px;flex:none}
+#legend .eyebrow{margin-bottom:4px}
+#legend .eyebrow.next{margin-top:12px}
+#loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font:600 12px/1 var(--ui);letter-spacing:.12em;text-transform:uppercase;color:var(--mute);background:#000;z-index:9}
+#credit{position:fixed;right:24px;bottom:24px;width:300px;margin:0;font-size:11px;line-height:16px;color:var(--faint);text-align:right}
+
+/* right: the phone the survivor holds, no map */
+#phone{right:24px;top:50%;transform:translateY(-50%);width:300px;height:640px;border-radius:40px;border:8px solid #151517;background:#000;box-shadow:0 0 0 1px var(--hair);padding:16px 10px 12px;display:flex;flex-direction:column;gap:8px}
+#phone .notch{position:absolute;top:6px;left:50%;transform:translateX(-50%);width:88px;height:20px;border-radius:12px;background:#151517}
+.ph-status{display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding:0 4px}
+.tag{font:700 11px/1 var(--num);letter-spacing:.04em;padding:4px 8px;border-radius:4px;border:1px solid var(--hair);color:var(--mute)}
+.tag.red{color:var(--red);border-color:var(--red)}
+.tag.ok{color:var(--cyan);border-color:var(--cyan)}
+#tape,#sky{width:280px;display:block;border-radius:var(--r);background:var(--well);border:1px solid var(--hair-2)}
+#tape{height:46px}
+#sky{height:96px}
+.ph-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;padding:0 8px}
+#arrow{width:140px;height:140px;transition:transform .25s linear}
+#phBig{font:700 40px/1 var(--ui);font-variant-numeric:tabular-nums}
+#phSay{font-size:14px;line-height:1.5;color:var(--ink-2);min-height:42px;text-wrap:balance}
+#phStop{display:none;font:700 30px/1.15 var(--ui);letter-spacing:.08em;color:var(--red)}
+.ph-coords{font:400 12px/18px var(--ui);font-variant-numeric:tabular-nums;color:var(--ink);background:var(--well);border:1px solid var(--hair-2);border-radius:var(--r);padding:8px 10px;white-space:pre}
+.ph-coords span{color:var(--faint)}
+#phBtn{width:100%;height:44px;border-radius:12px;background:var(--ink);border-color:var(--ink);color:#000}
+#phBtn:hover{background:#e4e4ea}
+@media (max-width:1180px){#credit{display:none}}
+/* fitUI() zooms the panels as one layout below 1440 x 760; under 760 px wide only the phone and the steps stay */
+body.narrow #info,body.narrow #legend,body.narrow #views,body.narrow #walkbar,body.narrow #banner,body.narrow #credit{display:none!important}
+body.narrow #phone{right:auto;left:50%;top:8px;transform:translateX(-50%)}
+body.narrow #steps{left:50%;bottom:8px}
+#loading.err{text-transform:none;letter-spacing:0;font:400 14px/22px var(--ui);color:var(--ink-2);padding:24px;text-align:center}
+#loading.err b{color:var(--ink);font-weight:600}
+#loading.err a{color:var(--cyan)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="loading">Loading terrain…</div>
+
+<div id="info" class="panel">
+  <h1>Team-8 · GPS-denied land nav</h1>
+  <div class="place">Mount Moran, Grand Teton National Park</div>
+  <div id="stepEyebrow" class="eyebrow"></div>
+  <h2 id="stepTitle"></h2>
+  <p id="stepText" aria-live="polite"></p>
+  <dl id="sensors">
+    <dt>GPS</dt><dd class="alert">OFF, JAMMED</dd>
+    <dt>Barometer</dt><dd id="sBaro">waiting</dd>
+    <dt>Compass bearing</dt><dd id="sComp">waiting</dd>
+    <dt>Tilt angle</dt><dd id="sTilt">waiting</dd>
+    <dt>Steps and heading</dt><dd id="sDR">idle</dd>
+  </dl>
+  <div id="area"><div class="eyebrow">Where you can be · 95%</div><span id="areaVal"></span><span id="areaFrom"></span></div>
+</div>
+
+<div id="views" class="panel">
+  <div class="group" role="group" aria-label="View">
+    <button data-view="2d" aria-pressed="false">2D Map</button>
+    <button data-view="3d" class="act" aria-pressed="true">3D Terrain</button>
+    <button data-view="eye" aria-pressed="false">Eye View</button>
+  </div>
+  <span class="vr" aria-hidden="true"></span>
+  <div class="group" role="group" aria-label="Condition">
+    <button data-health="healthy" class="act" aria-pressed="true">Healthy 30°</button>
+    <button data-health="injured" aria-pressed="false">Injured 18°</button>
+  </div>
+</div>
+
+<div id="banner" class="panel" role="status"></div>
+
+<div id="walkbar" class="panel">
+  <button id="play">Pause</button>
+  <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Walk time">
+  <span id="clock">0 min</span>
+  <div class="group" role="group" aria-label="Playback speed">
+    <button data-speed="120" aria-pressed="false">×120</button><button data-speed="300" class="act" aria-pressed="true">×300</button><button data-speed="900" aria-pressed="false">×900</button>
+  </div>
+  <button id="refix">Re-fix Now</button>
+</div>
+
+<nav id="steps" class="panel" aria-label="Demo steps">
+  <button id="prev" aria-label="Previous step"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M9 2 4 7l5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+  <button data-step="0"><span class="n">0</span>GPS Lost</button>
+  <button data-step="1"><span class="n">1</span>Barometer</button>
+  <button data-step="2"><span class="n">2</span>Bearing</button>
+  <button data-step="3"><span class="n">3</span>Tilt</button>
+  <span class="vr" aria-hidden="true"></span>
+  <button data-step="4"><span class="n">4</span>Route</button>
+  <button data-step="5"><span class="n">5</span>Walk</button>
+  <button data-step="6">Reveal</button>
+  <button id="next" aria-label="Next step"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M5 2l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+</nav>
+
+<div id="legend" class="panel" role="group" aria-label="Legend">
+  <div class="eyebrow">Slope</div>
+  <div class="k"><i style="background:#2e9d4f"></i>Under 15°</div>
+  <div class="k"><i style="background:#e3c440"></i>15 to 25°</div>
+  <div class="k"><i style="background:#ef8a2a"></i>25 to 35°</div>
+  <div class="k"><i style="background:#d7263d"></i>35° and over, cliff</div>
+  <div class="eyebrow next">Overlays</div>
+  <div class="k"><i style="background:var(--cyan)"></i>Where you can be</div>
+  <div class="k"><i style="background:var(--gold)"></i>Line of sight to the peak</div>
+</div>
+
+<div id="phone" class="panel" role="region" aria-label="Survivor phone, no map">
+  <div class="notch" aria-hidden="true"></div>
+  <div class="ph-status"><span class="tag red">GPS OFF</span><span id="phFix" class="tag">NO FIX</span></div>
+  <canvas id="tape" width="560" height="92" role="img" aria-label="Compass tape"></canvas>
+  <div class="ph-main">
+    <svg id="arrow" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="none" stroke="#2c2c31" stroke-width="1.5"/><path d="M50 8 L74 72 L50 60 L26 72 Z" fill="#38e1ff"/></svg>
+    <div id="phStop">STAY<br>SIGNAL<br>WAIT</div>
+    <div id="phBig"></div>
+    <div id="phSay"></div>
+  </div>
+  <div class="ph-coords" id="phCoords"></div>
+  <canvas id="sky" width="560" height="192" role="img" aria-label="Skyline toward where the phone points"></canvas>
+  <button id="phBtn">Next</button>
+</div>
+
+<p id="credit">USGS 3DEP 1&nbsp;m lidar via OpenTopography, shown at 5&nbsp;m. Synthetic demo spot and simulated sensors, no real person or position. deck.gl 9.3.11, Noto Sans JP and B612 Mono (OFL), all offline.</p>
+<script src="lib/deck.gl@9.3.11/dist.min.js"></script>
+<script src="data/bundle.js"></script>
+<script>
+(function () {
+'use strict';
+const D = window.TEAM8;
+if (!D || !window.deck) {
+  const L = document.getElementById('loading');
+  L.classList.add('err');
+  L.innerHTML = /^(data|about|blob):$/.test(location.protocol)
+    ? '<div><b>This window opened the page without its folder.</b><br>Open <a href="http://localhost:8792/">http://localhost:8792</a> (run <code>python -m http.server 8792</code> in this folder),<br>or double-click index.html so it opens in Chrome or Edge.</div>'
+    : '<div><b>Missing files.</b><br>Keep index.html next to the lib and data folders.</div>';
+  return;
+}
+const {Deck, MapView, FirstPersonView, LinearInterpolator, WebMercatorViewport,
+  TerrainLayer, TripsLayer, PathLayer, LineLayer, ScatterplotLayer, TextLayer} = deck;
+const M = D.meta, S = D.sim, B = M.bounds;
+const TW = M.grid.width, TH = M.grid.height, PW = S.grid.width, PH = S.grid.height;
+const MPLON = M.grid.cell_m[0] / ((B[2] - B[0]) / TW), MPLAT = M.grid.cell_m[1] / ((B[3] - B[1]) / TH);
+// peak labels sit above their dot, or beside it (west one to the left, east one to the right) when another peak is within 1.2 km east or west
+const SIDE = new Map(M.peaks.map(p => {
+  const q = M.peaks.find(o => {
+    const dx = (o.lon - p.lon) * MPLON, dy = (o.lat - p.lat) * MPLAT;
+    return o !== p && Math.hypot(dx, dy) < 1200 && Math.abs(dx) > Math.abs(dy);
+  });
+  return [p, q ? (q.lon > p.lon ? -1 : 1) : 0];
+}));
+const NAMED = M.peaks.filter(p => p.verified);
+const DECODER = M.elevation_decoder;   // constant references, so the mesh is built once
+const BOUNDS = B;
+const $ = id => document.getElementById(id);
+const UI_FONT = '"Noto Sans JP", "Segoe UI", sans-serif', NUM_FONT = '"B612 Mono", Consolas, monospace';
+const REDUCED = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+const NB = s => String(s).replace(/(\d) (?=(?:m|km|km²|min|h)\b)/g, '$1 ');   // keep a number and its unit on one line
+const press = (el, on) => { el.classList.toggle('act', on); el.setAttribute('aria-pressed', on ? 'true' : 'false'); };
+
+// ---------------------------------------------------------------- geometry helpers
+const toXY = (lon, lat) => [(lon - B[0]) * MPLON, (lat - B[1]) * MPLAT];
+const fromXY = (x, y) => [B[0] + x / MPLON, B[1] + y / MPLAT];
+const px = (lon, lat) => [(lon - B[0]) / (B[2] - B[0]) * TW, (B[3] - lat) / (B[3] - B[1]) * TH];
+const brg = (a, b) => { const [x0, y0] = toXY(a[0], a[1]), [x1, y1] = toXY(b[0], b[1]); return (Math.atan2(x1 - x0, y1 - y0) * 180 / Math.PI + 360) % 360; };
+const dist = (a, b) => { const [x0, y0] = toXY(a[0], a[1]), [x1, y1] = toXY(b[0], b[1]); return Math.hypot(x1 - x0, y1 - y0); };
+const wrap = d => ((d % 360) + 360) % 360;
+const angd = (a, b) => ((a - b + 540) % 360) - 180;
+const fmtT = s => { const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min` : `${m} min`; };
+const DIR8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+
+// WGS84 UTM and MGRS (for the coordinate readout)
+function utm(lon, lat) {
+  const a = 6378137, f = 1 / 298.257223563, k0 = 0.9996, e2 = f * (2 - f), ep2 = e2 / (1 - e2);
+  const zone = Math.floor((lon + 180) / 6) + 1, lon0 = ((zone - 1) * 6 - 180 + 3) * Math.PI / 180;
+  const p = lat * Math.PI / 180, l = lon * Math.PI / 180;
+  const N = a / Math.sqrt(1 - e2 * Math.sin(p) ** 2), T = Math.tan(p) ** 2, C = ep2 * Math.cos(p) ** 2, A = Math.cos(p) * (l - lon0);
+  const Mm = a * ((1 - e2 / 4 - 3 * e2 ** 2 / 64 - 5 * e2 ** 3 / 256) * p - (3 * e2 / 8 + 3 * e2 ** 2 / 32 + 45 * e2 ** 3 / 1024) * Math.sin(2 * p)
+    + (15 * e2 ** 2 / 256 + 45 * e2 ** 3 / 1024) * Math.sin(4 * p) - (35 * e2 ** 3 / 3072) * Math.sin(6 * p));
+  const E = k0 * N * (A + (1 - T + C) * A ** 3 / 6 + (5 - 18 * T + T * T + 72 * C - 58 * ep2) * A ** 5 / 120) + 500000;
+  const Nn = k0 * (Mm + N * Math.tan(p) * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A ** 4 / 24 + (61 - 58 * T + T * T + 600 * C - 330 * ep2) * A ** 6 / 720));
+  return {zone, E, N: Nn};
+}
+function mgrs(lon, lat) {
+  const u = utm(lon, lat), band = 'CDEFGHJKLMNPQRSTUVWX'[Math.floor((lat + 80) / 8)];
+  const set = ((u.zone - 1) % 6) + 1, cols = ['ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ'][(set - 1) % 3];
+  const col = cols[Math.floor(u.E / 100000) - 1], row = 'ABCDEFGHJKLMNPQRSTUV'[(Math.floor(u.N / 100000) + (set % 2 === 0 ? 5 : 0)) % 20];
+  const e5 = String(Math.floor(u.E % 100000)).padStart(5, '0'), n5 = String(Math.floor(u.N % 100000)).padStart(5, '0');
+  return `${u.zone}${band} ${col}${row} ${e5} ${n5}`;
+}
+
+// ---------------------------------------------------------------- state
+const EST = [S.estimate.lon, S.estimate.lat], TRUTH = [S.truth.lon, S.truth.lat];
+const MORAN = [S.landmark.lon, S.landmark.lat, S.landmark.elev_m];
+const LZ = [S.rendezvous.lon, S.rendezvous.lat, S.rendezvous.elev_m];
+const state = {step: 0, view: '3d', health: 'healthy', t: 0, playing: true, speed: 300, heading: wrap(brg(EST, MORAN)),
+  vs: null, tex: {}, loaded: false, fixD: 0, fixes: 0, refixUntil: 0, drift: [0, 0], lastD: 0};
+
+// route and dead-reckoning bookkeeping
+const R = S.routes.healthy;
+const RP = R ? R.path : [], RT = R ? R.timestamps : [];
+const RD = [0];
+for (let i = 1; i < RP.length; i++) RD.push(RD[i - 1] + dist(RP[i - 1], RP[i]));
+function routeAt(t) {
+  if (!R) return null;
+  t = Math.max(0, Math.min(t, RT[RT.length - 1]));
+  let lo = 0, hi = RT.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (RT[m] <= t) lo = m; else hi = m; }
+  const f = RT[hi] > RT[lo] ? (t - RT[lo]) / (RT[hi] - RT[lo]) : 0, a = RP[lo], b = RP[hi];
+  return {i: lo, pos: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f],
+    d: RD[lo] + (RD[hi] - RD[lo]) * f, hdg: brg(a, b)};
+}
+
+// posterior spread of the final stage, from the probability PNG (P is proportional to R squared)
+let SIG0 = 60;
+
+// ---------------------------------------------------------------- images and the texture compositor
+const loadImg = src => new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; });
+const canvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+let COLOR, GLOW = [], EDGE = [];
+async function prepImages() {
+  COLOR = await loadImg(D.img.color);
+  const probs = await Promise.all(D.img.prob.map(loadImg));
+  probs.forEach((im, k) => {
+    const w = im.width, h = im.height, c = canvas(w, h), x = c.getContext('2d');
+    x.drawImage(im, 0, 0);
+    const p = x.getImageData(0, 0, w, h).data;
+    const g = x.createImageData(w, h), e = x.createImageData(w, h), o = g.data, q = e.data;
+    let sw = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+    const cw = M.grid.cell_m[0] * 2, ch = M.grid.cell_m[1] * 2;
+    for (let i = 0; i < w * h; i++) {
+      const v = p[4 * i] / 255;
+      if (v > 0) {
+        const t1 = Math.min(1, v / 0.55), t2 = Math.max(0, (v - 0.55) / 0.45);
+        o[4 * i] = 12 + 40 * t1 + 200 * t2; o[4 * i + 1] = 70 + 150 * t1 + 35 * t2; o[4 * i + 2] = 150 + 95 * t1 + 10 * t2;
+        o[4 * i + 3] = Math.round(Math.min(1, Math.pow(v, 0.85) * 1.1) * 235);
+        if (k === probs.length - 1) { const wt = v * v, xx = (i % w) * cw, yy = Math.floor(i / w) * ch; sw += wt; sx += wt * xx; sy += wt * yy; sxx += wt * xx * xx; syy += wt * yy * yy; sxy += wt * xx * yy; }
+      }
+      if (p[4 * i + 1] > 127) {
+        const X = i % w, Y = Math.floor(i / w);
+        const out = (dx, dy) => { const a = X + dx, b = Y + dy; return a < 0 || b < 0 || a >= w || b >= h || p[4 * (b * w + a) + 1] < 128; };
+        if (out(1, 0) || out(-1, 0) || out(0, 1) || out(0, -1)) { q[4 * i] = q[4 * i + 1] = q[4 * i + 2] = 255; q[4 * i + 3] = 235; }
+      }
+    }
+    // fix radius shown on the phone: radius of a circle with the area of the 50% region (outlying islands would inflate a covariance)
+    SIG0 = Math.max(25, Math.sqrt(ST[ST.length - 1].hpd50_km2 * 1e6 / Math.PI));
+    const gc = canvas(w, h); gc.getContext('2d').putImageData(g, 0, 0); GLOW.push(gc);
+    const ec = canvas(w, h); ec.getContext('2d').putImageData(e, 0, 0); EDGE.push(ec);
+  });
+}
+function strokePath(ctx, pts, color, width) {
+  ctx.lineJoin = ctx.lineCap = 'round';
+  [[`rgba(5,8,12,.85)`, width + 4], [color, width]].forEach(([c, w]) => {
+    ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath();
+    pts.forEach((p, i) => { const [x, y] = px(p[0], p[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke();
+  });
+}
+function texture(key) {
+  if (state.tex[key]) return state.tex[key];
+  const c = canvas(TW, TH), x = c.getContext('2d');
+  x.drawImage(COLOR, 0, 0, TW, TH);
+  const k = {p1: 0, p2: 1, p3: 2, route: 2, route_inj: 2, reveal: 2}[key];
+  const late = key === 'route' || key === 'route_inj' || key === 'reveal';
+  if (!late) { x.fillStyle = 'rgba(0,0,0,.5)'; x.fillRect(0, 0, TW, TH); }
+  if (key === 'p0') { x.fillStyle = 'rgba(56,225,255,.10)'; x.fillRect(0, 0, TW, TH); }
+  if (k !== undefined) {
+    x.imageSmoothingEnabled = true; x.globalAlpha = late ? 0.55 : 1; x.drawImage(GLOW[k], 0, 0, TW, TH);
+    x.globalAlpha = 1; x.imageSmoothingEnabled = false; x.drawImage(EDGE[k], 0, 0, TW, TH);
+  }
+  if (key === 'p2' || key === 'p3') {
+    const lop = S.line_of_position, L = dist(lop[0], lop[lop.length - 1]), back = S.measurements.bearing_deg + 180;
+    x.setLineDash([10, 8]);
+    [-S.measurements.bearing_sigma_deg, S.measurements.bearing_sigma_deg].forEach(dd => {
+      const th = (back + dd) * Math.PI / 180, [mx, my] = toXY(MORAN[0], MORAN[1]);
+      strokePath(x, [MORAN, fromXY(mx + Math.sin(th) * L, my + Math.cos(th) * L)], 'rgba(255,200,70,.65)', 2);
+    });
+    x.setLineDash([]);
+    strokePath(x, lop, '#ffc846', 4);
+  }
+  if ((key === 'route' || key === 'reveal') && R) strokePath(x, RP, '#ffffff', 3);
+  return (state.tex[key] = c.toDataURL('image/jpeg', 0.9));
+}
+const texKey = () => state.step <= 3 ? 'p' + state.step : (state.step === 6 ? 'reveal' : (state.health === 'injured' && !S.routes.injured ? 'route_inj' : 'route'));
+
+// ---------------------------------------------------------------- terrain mesh on the main thread
+// The deck.gl bundle parses terrain only in a web worker fetched from a CDN, which breaks offline and on file://.
+// This loader decodes the terrain-RGB PNG itself and builds a regular grid mesh (10 m image: about 0.8 M vertices).
+const STRIDE = 1;
+const GridTerrainLoader = {
+  name: 'Team-8 grid terrain', id: 'team8-grid-terrain', module: 'terrain', version: '1.0.0', worker: false,
+  extensions: ['png'], mimeTypes: ['image/png'], binary: true,
+  options: {terrain: {bounds: null, meshMaxError: 10, elevationDecoder: null, skirtHeight: 0, tesselator: 'auto'}},
+  parse: async (buf, options) => {
+    const o = (options && options.terrain) || {}, t0 = performance.now();
+    const bmp = await createImageBitmap(new Blob([buf], {type: 'image/png'}));
+    const w = bmp.width, h = bmp.height, c = canvas(w, h), x = c.getContext('2d', {willReadFrequently: true});
+    x.drawImage(bmp, 0, 0);
+    const p = x.getImageData(0, 0, w, h).data, dec = o.elevationDecoder || DECODER, [x0, y0, x1, y1] = o.bounds || BOUNDS;
+    const gw = Math.floor((w - 1) / STRIDE) + 1, gh = Math.floor((h - 1) / STRIDE) + 1;
+    const pos = new Float32Array(gw * gh * 3), uv = new Float32Array(gw * gh * 2);
+    let zmin = Infinity, zmax = -Infinity;
+    for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
+      const X = Math.min(w - 1, i * STRIDE), Y = Math.min(h - 1, j * STRIDE), k = 4 * (Y * w + X), v = j * gw + i;
+      const z = p[k] * dec.rScaler + p[k + 1] * dec.gScaler + p[k + 2] * dec.bScaler + dec.offset;
+      pos[3 * v] = x0 + (x1 - x0) * (X + 0.5) / w; pos[3 * v + 1] = y1 - (y1 - y0) * (Y + 0.5) / h; pos[3 * v + 2] = z;
+      uv[2 * v] = (X + 0.5) / w; uv[2 * v + 1] = (Y + 0.5) / h;
+      if (z < zmin) zmin = z; if (z > zmax) zmax = z;
+    }
+    const idx = new Uint32Array((gw - 1) * (gh - 1) * 6);
+    let n = 0;
+    for (let j = 0; j < gh - 1; j++) for (let i = 0; i < gw - 1; i++) {
+      const a = j * gw + i, b = a + 1, cc = a + gw, d = cc + 1;
+      idx[n++] = a; idx[n++] = cc; idx[n++] = b; idx[n++] = b; idx[n++] = cc; idx[n++] = d;
+    }
+    window.TEAM8_MESH = {vertices: gw * gh, triangles: idx.length / 3, ms: Math.round(performance.now() - t0)};
+    setTimeout(() => { $('loading').style.display = 'none'; }, 300);
+    return {loaderData: {header: {}}, header: {vertexCount: idx.length, boundingBox: [[x0, y0, zmin], [x1, y1, zmax]]}, mode: 4,
+      indices: {value: idx, size: 1}, attributes: {POSITION: {value: pos, size: 3}, TEXCOORD_0: {value: uv, size: 2}}};
+  }
+};
+
+// ---------------------------------------------------------------- views
+const mapView = new MapView({id: 'map', controller: {dragRotate: true, touchRotate: true}, farZMultiplier: 3});
+const eyeView = new FirstPersonView({id: 'eye', controller: true, fovy: 62, near: 2, far: 40000});
+function fitUI() {
+  // one layout designed at 1440 x 760, zoomed down as a whole so panels never overlap; phone only under 760 px wide
+  const w = window.innerWidth, h = window.innerHeight, narrow = w < 760;
+  document.body.classList.toggle('narrow', narrow);
+  const z = narrow ? 1 : Math.min(1, w / 1440, h / 760);
+  ['info', 'views', 'banner', 'walkbar', 'legend', 'credit', 'steps', 'phone'].forEach(id => { $(id).style.zoom = z; });
+  if (narrow) {
+    const st = $('steps'), sz = Math.min(1, (w - 16) / st.offsetWidth);
+    st.style.zoom = sz;
+    $('phone').style.zoom = Math.max(0.3, Math.min(1, (h - 32 - 64 * sz) / 656, (w - 16) / 316));
+  }
+}
+function fitVS(pitch, bearing) {
+  const w = Math.max(400, window.innerWidth), h = Math.max(400, window.innerHeight);
+  const pad = {top: Math.min(80, h * 0.1), bottom: Math.min(90, h * 0.12), left: Math.min(390, w * 0.3), right: Math.min(w > 1180 ? 340 : 270, w * 0.25)};
+  let v;
+  try { v = new WebMercatorViewport({width: w, height: h}).fitBounds([[B[0], B[1]], [B[2], B[3]]], {padding: pad}); }
+  catch (e) { v = {longitude: (B[0] + B[2]) / 2, latitude: (B[1] + B[3]) / 2, zoom: 12.3}; }
+  return {longitude: v.longitude, latitude: v.latitude, zoom: v.zoom + (pitch ? -0.25 : 0), pitch, bearing, maxPitch: 80, minZoom: 10, maxZoom: 17};
+}
+function eyeVS() {
+  return {longitude: EST[0], latitude: EST[1], position: [0, 0, S.estimate.elev_m + 6], bearing: state.heading,
+    pitch: -14, maxPitch: 60, minPitch: -80};   // FirstPersonView: negative pitch looks up
+}
+const TRANS = {transitionDuration: 1100, transitionInterpolator: new LinearInterpolator({transitionProps: ['longitude', 'latitude', 'zoom', 'pitch', 'bearing']})};
+function setView(v, instant) {
+  if (!deckgl) return;
+  state.view = v;
+  document.querySelectorAll('[data-view]').forEach(b => press(b, b.dataset.view === v));
+  $('stage').classList.toggle('eye', v === 'eye');
+  if (v === 'eye') { state.vs = eyeVS(); deckgl.setProps({views: [eyeView], viewState: state.vs}); }
+  else {
+    const cur = state.vs && state.vs.zoom !== undefined ? state.vs : fitVS(0, 0);
+    const target = v === '2d' ? fitVS(0, 0) : fitVS(58, -62);
+    if (deckgl.props.views && deckgl.props.views[0] && deckgl.props.views[0].id !== 'map') { state.vs = cur; deckgl.setProps({views: [mapView], viewState: cur}); }
+    state.vs = instant || REDUCED ? target : {...target, ...TRANS};
+    deckgl.setProps({views: [mapView], viewState: state.vs});
+  }
+  render();
+}
+
+// ---------------------------------------------------------------- layers
+const ON_TOP = {depthCompare: 'always', depthWriteEnabled: false};
+function layers() {
+  const eye = state.view === 'eye', step = state.step, top = eye ? {} : ON_TOP;
+  const out = [new TerrainLayer({id: 'terrain', elevationData: D.img.terrain, texture: texture(texKey()), bounds: BOUNDS,
+    elevationDecoder: DECODER, meshMaxError: 2.0, material: false, loaders: [GridTerrainLoader]})];
+  const peaks = eye ? S.peaks_from_estimate.filter(p => p.visible) : M.peaks;
+  const side = p => eye ? 0 : (SIDE.get(p) || 0);
+  // dots first so a label is never crossed by another peak's dot, and only named peaks get labels in the tilted 3D view
+  out.push(new ScatterplotLayer({id: 'peak-dots', data: peaks, billboard: true, getPosition: p => [p.lon, p.lat, p.elev_m + 8], getRadius: 5, radiusUnits: 'pixels',
+    getFillColor: p => p.name === 'Mount Moran' ? [255, 200, 70] : [230, 236, 240], stroked: true, getLineColor: [5, 8, 12], lineWidthMinPixels: 1.5, parameters: top}));
+  out.push(new TextLayer({id: 'peaks', data: eye || state.view === '2d' ? peaks : NAMED, characterSet: 'auto', getPosition: p => [p.lon, p.lat, p.elev_m + (eye ? 30 : 8)],
+    getText: p => eye ? `${p.verified ? p.name : Math.round(p.elev_m) + ' m'}  ${(p.dist_m / 1000).toFixed(1)} km` : (p.verified ? `${p.name} ${Math.round(p.elev_m)} m` : `${Math.round(p.elev_m)} m`),
+    getSize: p => p.name === 'Mount Moran' ? 16 : 12, getColor: p => p.name === 'Mount Moran' ? [255, 214, 110] : (p.verified ? [235, 242, 246] : [170, 185, 195]),
+    fontFamily: UI_FONT, fontWeight: 600, fontSettings: {sdf: true}, outlineWidth: 3, outlineColor: [0, 0, 0, 230],
+    getTextAnchor: p => ['end', 'middle', 'start'][side(p) + 1], getAlignmentBaseline: p => side(p) ? 'center' : 'bottom',
+    getPixelOffset: p => side(p) ? [side(p) * 10, 0] : [0, -9], parameters: top}));
+  if (step >= 3 && step < 5) {
+    out.push(new LineLayer({id: 'sight', data: [0], getSourcePosition: () => [EST[0], EST[1], S.estimate.elev_m + 2], getTargetPosition: () => MORAN,
+      getColor: [255, 200, 70, 210], getWidth: 2.5, widthUnits: 'pixels', parameters: top}));
+  }
+  if (step >= 4 && R && state.health === 'healthy') {
+    const lifted = RP.map(p => [p[0], p[1], p[2] + 8]);
+    out.push(new PathLayer({id: 'route', data: [{path: lifted}], getPath: d => d.path, getColor: [255, 255, 255, step >= 5 ? 90 : 230],
+      getWidth: 4, widthUnits: 'pixels', jointRounded: true, capRounded: true, parameters: top}));
+    if (step === 5) {
+      out.push(new TripsLayer({id: 'trail', data: [{path: lifted, timestamps: RT}], getPath: d => d.path, getTimestamps: d => d.timestamps,
+        getColor: [56, 225, 255], widthMinPixels: 5, trailLength: 1500, fadeTrail: true, currentTime: state.t, jointRounded: true, capRounded: true, parameters: top}));
+      const w = routeAt(state.t), est = devicePos(w);
+      out.push(new ScatterplotLayer({id: 'dr-circle', data: [0], getPosition: () => [est[0], est[1], w.pos[2] + 10], getRadius: () => sigmaNow(w),
+        radiusUnits: 'meters', filled: true, getFillColor: [56, 225, 255, 40], stroked: true, getLineColor: [56, 225, 255, 230], lineWidthMinPixels: 2,
+        updateTriggers: {getPosition: state.t, getRadius: state.t}, parameters: top}));
+      out.push(new ScatterplotLayer({id: 'walker', data: [0], getPosition: () => [w.pos[0], w.pos[1], w.pos[2] + 10], getRadius: 7, radiusUnits: 'pixels',
+        getFillColor: [255, 255, 255], stroked: true, getLineColor: [5, 8, 12], lineWidthMinPixels: 2, updateTriggers: {getPosition: state.t}, parameters: top}));
+    }
+  }
+  if (step >= 4) {
+    out.push(new ScatterplotLayer({id: 'lz', data: [LZ], getPosition: p => [p[0], p[1], p[2] + 8], getRadius: 9, radiusUnits: 'pixels',
+      getFillColor: [255, 255, 255], stroked: true, getLineColor: [56, 225, 255], lineWidthMinPixels: 3, parameters: top}));
+    out.push(new TextLayer({id: 'lz-label', data: [LZ], getPosition: p => [p[0], p[1], p[2] + 8], getText: () => 'Rendezvous', getSize: 13, getPixelOffset: [0, -14],
+      getColor: [230, 250, 255], fontFamily: UI_FONT, fontWeight: 600, fontSettings: {sdf: true}, outlineWidth: 3, outlineColor: [0, 0, 0, 230], getAlignmentBaseline: 'bottom', parameters: top}));
+  }
+  if (step >= 3 && step !== 5 && !eye) {
+    out.push(new ScatterplotLayer({id: 'fix', data: [EST], getPosition: p => [p[0], p[1], S.estimate.elev_m + 8], getRadius: 8, radiusUnits: 'pixels',
+      filled: false, stroked: true, getLineColor: [56, 225, 255], lineWidthMinPixels: 3, parameters: top}));
+  }
+  if (step === 6) {
+    out.push(new LineLayer({id: 'err', data: [0], getSourcePosition: () => [EST[0], EST[1], S.estimate.elev_m + 9], getTargetPosition: () => [TRUTH[0], TRUTH[1], S.truth.elev_m + 9],
+      getColor: [255, 77, 94], getWidth: 3, widthUnits: 'pixels', parameters: top}));
+    out.push(new ScatterplotLayer({id: 'truth', data: [TRUTH], getPosition: p => [p[0], p[1], S.truth.elev_m + 9], getRadius: 8, radiusUnits: 'pixels',
+      getFillColor: [255, 77, 94], stroked: true, getLineColor: [255, 255, 255], lineWidthMinPixels: 2, parameters: top}));
+    out.push(new TextLayer({id: 'truth-label', data: [TRUTH], getPixelOffset: [0, -13], getPosition: p => [p[0], p[1], S.truth.elev_m + 9], getText: () => `true spot, ${S.estimate.error_m} m from the fix`,
+      getSize: 14, getColor: [255, 225, 228], fontFamily: UI_FONT, fontWeight: 600, fontSettings: {sdf: true}, outlineWidth: 3, outlineColor: [0, 0, 0, 230], getAlignmentBaseline: 'bottom', parameters: top}));
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- dead reckoning (the fix moves as the person walks)
+const DR_SCALE = 0.04, DR_HEAD = 3 * Math.PI / 180, DR_GROW = 0.05;
+function sigmaNow(w) { return Math.hypot(SIG0, DR_GROW * Math.max(0, w.d - state.fixD)); }
+function devicePos(w) { const [x, y] = toXY(w.pos[0], w.pos[1]); return fromXY(x + state.drift[0], y + state.drift[1]); }
+function advanceDrift(w) {
+  const dd = w.d - state.lastD;
+  if (dd > 0) {
+    const h = w.hdg * Math.PI / 180, ax = Math.sin(h), ay = Math.cos(h);
+    state.drift[0] += dd * (DR_SCALE * ax + Math.sin(DR_HEAD) * ay);
+    state.drift[1] += dd * (DR_SCALE * ay - Math.sin(DR_HEAD) * ax);
+  }
+  state.lastD = w.d;
+}
+function refix(w) {
+  state.fixD = w.d; state.fixes += 1; state.drift = [SIG0 * 0.25, -SIG0 * 0.15]; state.refixUntil = performance.now() + 1400;
+}
+function resetWalk() { state.t = 0; state.fixD = 0; state.lastD = 0; state.drift = [0, 0]; state.fixes = 0; state.refixUntil = 0; }
+
+// ---------------------------------------------------------------- texts
+const MS = S.measurements, ST = S.stages;
+function stepCopy() {
+  const s = state.step, r = state.health === 'healthy' ? R : S.routes.injured;
+  switch (s) {
+    case 0: return ['GPS lost',`GPS is jammed. The device has only the pre-loaded terrain, a barometer, and a compass with tilt. You could be anywhere in ${S.prior_km2} km².`];
+    case 1: return ['Barometer',`Altitude ${MS.baro_alt_m.toFixed(0)} m ±${MS.baro_sigma_m} m. Only this contour band fits.`];
+    case 2: return ['Bearing to Mount Moran',`Pointing the phone at the summit reads ${MS.bearing_deg.toFixed(0)}° ±${MS.bearing_sigma_deg}°. Only spots on this line of sight fit.`];
+    case 3: return ['Tilt up to the summit',`The phone tilts +${MS.elev_angle_deg.toFixed(1)}° ±${MS.elev_sigma_deg}°. Altitude plus the angle gives the distance, so one peak is enough.`];
+    case 4: return r ? ['Safe route',`A* with Tobler walking time and a ${r.cap_deg}° slope limit, around cliffs and water. ${(r.length_m / 1000).toFixed(1)} km, about ${fmtT(r.time_s)}, steepest ${r.max_slope_deg}°.`]
+      : ['No safe route','With an injured ankle (18° limit, half speed) every way out crosses steeper ground. Stay, signal, wait.'];
+    case 5: return r ? ['Walk out','Steps and heading move the fix as you walk. The circle grows with distance, and a new peak sighting shrinks it again.']
+      : ['Stay put','No walk-out under the injured limit. The phone keeps the fix and beacons it when any signal returns.'];
+    default: return ['Reveal', `The hidden true spot was ${S.estimate.error_m} m from the fix. The simulated sensors carried +${MS.noise_added.baro_m} m, +${MS.noise_added.bearing_deg}° and ${MS.noise_added.elev_deg}° of error.`];
+  }
+}
+function updatePanels() {
+  const s = state.step, [title, text] = stepCopy();
+  $('stepEyebrow').textContent = s <= 5 ? `Step ${s} of 5` : 'Ground truth';
+  $('stepTitle').textContent = title; $('stepText').textContent = NB(text);
+  document.querySelectorAll('[data-step]').forEach(b => {
+    const on = +b.dataset.step === s; b.classList.toggle('act', on);
+    if (on) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+  });
+  const set = (id, on, txt) => { $(id).classList.toggle('on', on); $(id).textContent = NB(txt); };
+  set('sBaro', s >= 1, s >= 1 ? `${MS.baro_alt_m.toFixed(0)} m ±${MS.baro_sigma_m}` : 'waiting');
+  set('sComp', s >= 2, s >= 2 ? `${MS.bearing_deg.toFixed(0)}° ±${MS.bearing_sigma_deg}` : 'waiting');
+  set('sTilt', s >= 3, s >= 3 ? `+${MS.elev_angle_deg.toFixed(1)}° ±${MS.elev_sigma_deg}` : 'waiting');
+  set('sDR', s === 5 && !!R && state.health === 'healthy', s === 5 && R && state.health === 'healthy' ? 'tracking' : 'idle');
+  const a = s === 0 ? S.prior_km2 : s <= 3 ? ST[s - 1].hpd95_km2 : ST[2].hpd95_km2;
+  $('areaVal').textContent = NB(`${a} km²`);
+  $('areaFrom').textContent = s === 0 ? 'anywhere on the map tile' : s <= 3 ? NB(`down from ${S.prior_km2} km²`) : 'after three readings';
+  $('walkbar').style.display = s === 5 && R && state.health === 'healthy' ? 'flex' : 'none';
+  if (s === 5 && R) { const end = RT[RT.length - 1]; $('scrub').value = Math.round(state.t / end * 1000); $('clock').textContent = `${fmtT(state.t)} of ${fmtT(end)}`; }
+  const ban = $('banner'), noRoute = s >= 4 && s <= 5 && state.health === 'injured' && !S.routes.injured;
+  ban.style.display = noRoute ? 'block' : 'none';
+  ban.innerHTML = noRoute ? '<b>No safe route under 18°</b>Stay, signal, wait.' : '';
+  document.querySelectorAll('[data-health]').forEach(b => press(b, b.dataset.health === state.health));
+}
+
+// ---------------------------------------------------------------- phone (no map: compass tape, arrow, one line, skyline)
+const tape = $('tape').getContext('2d'), sky = $('sky').getContext('2d');
+function drawTape(h, marks) {
+  const c = tape, w = c.canvas.width, hh = c.canvas.height, span = 110, k = w / span;
+  c.clearRect(0, 0, w, hh); c.fillStyle = '#050505'; c.fillRect(0, 0, w, hh);
+  c.textAlign = 'center';
+  for (let d = Math.floor(h - span / 2); d <= h + span / 2; d++) {
+    const dd = wrap(d), x = w / 2 + (d - h) * k;
+    if (dd % 5) continue;
+    const big = dd % 15 === 0, card = dd % 45 === 0;
+    c.strokeStyle = big ? '#f2f2f5' : '#4a4a51'; c.lineWidth = big ? 3 : 2;
+    c.beginPath(); c.moveTo(x, hh); c.lineTo(x, hh - (big ? 22 : 12)); c.stroke();
+    if (big) {
+      const lab = dd % 90 === 0 ? 'NESW'[dd / 90] : card ? DIR8[dd / 45] : String(dd);
+      c.font = card ? `700 24px ${NUM_FONT}` : `400 20px ${NUM_FONT}`; c.fillStyle = card ? '#ffffff' : '#9a9aa3'; c.fillText(lab, x, 30);
+    }
+  }
+  marks.forEach(m => {   // gold diamond = Mount Moran, cyan diamond = where to walk, a chevron at the edge when it is out of view
+    const off = angd(m.deg, h), x = w / 2 + off * k;
+    c.fillStyle = m.color; c.beginPath();
+    if (Math.abs(off) <= span / 2) { c.moveTo(x, hh - 30); c.lineTo(x + 10, hh - 16); c.lineTo(x, hh - 2); c.lineTo(x - 10, hh - 16); }
+    else { const e = off < 0 ? 8 : w - 8, s = off < 0 ? 1 : -1; c.moveTo(e, hh - 16); c.lineTo(e + s * 14, hh - 28); c.lineTo(e + s * 14, hh - 4); }
+    c.closePath(); c.fill();
+  });
+  c.fillStyle = '#ffffff'; c.beginPath(); c.moveTo(w / 2 - 10, 0); c.lineTo(w / 2 + 10, 0); c.lineTo(w / 2, 12); c.closePath(); c.fill();
+}
+function drawSky(h, target) {
+  const c = sky, w = c.canvas.width, hh = c.canvas.height, span = 90, k = w / span, a0 = -8, a1 = 32;
+  const Y = a => hh - (a - a0) / (a1 - a0) * hh, HZ = S.skyline.horizon_deg, NR = S.skyline.near_ridge_deg, st = S.skyline.az_step_deg;
+  c.fillStyle = '#070a0d'; c.fillRect(0, 0, w, hh);
+  [[HZ, '#6c737c'], [NR, '#2b3036']].forEach(([arr, col]) => {
+    c.fillStyle = col; c.beginPath(); c.moveTo(0, hh);
+    for (let x = 0; x <= w; x += 2) { const az = wrap(h - span / 2 + x / k); c.lineTo(x, Y(Math.max(a0, arr[Math.round(az / st) % arr.length]))); }
+    c.lineTo(w, hh); c.closePath(); c.fill();
+  });
+  c.font = `600 18px ${UI_FONT}`; c.textAlign = 'center';
+  S.peaks_from_estimate.filter(p => p.visible).forEach(p => {
+    const off = angd(p.bearing_deg, h); if (Math.abs(off) > span / 2) return;
+    const x = w / 2 + off * k, y = Y(p.elev_deg), hit = target && p.name === target;
+    c.fillStyle = hit ? '#ffc846' : '#e6eef2'; c.beginPath(); c.moveTo(x, y - 4); c.lineTo(x - 7, y + 8); c.lineTo(x + 7, y + 8); c.fill();
+    if (hit) { c.strokeStyle = '#ffc846'; c.lineWidth = 2; c.strokeRect(x - 34, y - 34, 68, 56); }
+    const half = c.measureText(p.name).width / 2 + 6;   // keep the name inside the strip
+    c.fillStyle = hit ? '#ffc846' : '#e6eef2'; c.fillText(p.name, Math.min(w - half, Math.max(half, x)), Math.max(20, y - 40));
+  });
+  c.strokeStyle = 'rgba(56,225,255,.8)'; c.lineWidth = 2; c.beginPath(); c.moveTo(w / 2, 0); c.lineTo(w / 2, hh); c.stroke();
+}
+function updatePhone(now) {
+  const s = state.step, inj = state.health === 'injured', r = inj ? S.routes.injured : R;
+  let big = '', say = '', target = null, arrowTo = null, coords = null, sig = null, btn = 'Next';
+  const mor = wrap(brg(EST, MORAN));
+  $('phStop').style.display = 'none'; $('arrow').style.display = '';
+  if (s === 0) { big = 'Hold on'; say = 'GPS lost. Finding you from the terrain.'; btn = 'Read barometer'; }
+  else if (s === 1) { big = `${MS.baro_alt_m.toFixed(0)} m`; say = 'Altitude from the barometer. Next, find the peak in the box.'; target = 'Mount Moran'; btn = 'Aim at the peak'; }
+  else if (s === 2) { big = `${MS.bearing_deg.toFixed(0)}°`; say = 'Bearing locked. Now tilt up to the summit.'; target = 'Mount Moran'; arrowTo = mor; btn = 'Tilt and press'; }
+  else if (s === 3) { big = `+${MS.elev_angle_deg.toFixed(1)}°`; say = 'Position found.'; coords = EST; sig = SIG0; btn = 'Plan route'; }
+  else if (s === 4) {
+    if (r) { big = `${(r.length_m / 1000).toFixed(1)} km`; say = `Safe route, about ${fmtT(r.time_s)}, steepest ${r.max_slope_deg}°.`; arrowTo = wrap(brg(EST, RP[Math.min(20, RP.length - 1)])); btn = 'Start walking'; }
+    coords = EST; sig = SIG0;
+  } else if (s === 5 && r && !inj) {
+    const w = routeAt(state.t), est = devicePos(w), leg = S.legs.find(l => l.t1_s > state.t) || S.legs[S.legs.length - 1];
+    const legEnd = RP[leg.i1], remain = RD[leg.i1] - w.d, total = RD[RD.length - 1] - w.d;
+    arrowTo = wrap(brg(est, legEnd)); big = remain > 0 ? `${Math.round(remain / 10) * 10} m` : 'Arrived';
+    say = now < state.refixUntil ? 'Re-fix. Point at Mount Moran again.' : `${leg.say}. ${(total / 1000).toFixed(1)} km to the rendezvous.`;
+    if (now < state.refixUntil) target = 'Mount Moran';
+    coords = est; sig = sigmaNow(w); btn = state.playing ? 'Pause' : 'Resume';
+  } else if (s === 6) { big = `${S.estimate.error_m} m`; say = 'The fix was this far from the hidden true spot.'; coords = EST; sig = SIG0; btn = 'Start over'; }
+  if ((s === 4 || s === 5) && inj && !S.routes.injured) {
+    $('phStop').style.display = 'block'; $('arrow').style.display = 'none'; big = ''; say = 'No safe way out under 18°. Beacon armed, fix kept.'; coords = EST; sig = SIG0; btn = 'Back';
+  }
+  $('phBig').textContent = NB(big); $('phSay').textContent = NB(say); $('phBtn').textContent = btn;
+  $('arrow').style.opacity = arrowTo === null ? 0.15 : 1;
+  $('arrow').style.transform = `rotate(${arrowTo === null ? 0 : angd(arrowTo, state.heading)}deg)`;
+  $('phFix').className = 'tag' + (sig ? ' ok' : ''); $('phFix').textContent = sig ? NB(`FIX ±${Math.round(sig)} m`) : 'NO FIX';
+  $('phCoords').innerHTML = coords ? `<span>LAT</span> ${coords[1].toFixed(5)}  <span>LON</span> ${coords[0].toFixed(5)}<br><span>MGRS</span> ${mgrs(coords[0], coords[1])}<br><span>HDG</span> ${Math.round(state.heading)}°  <span>±</span>${Math.round(sig)} m  <span>re-fixes</span> ${state.fixes}`
+    : '<span>LAT</span> ?  <span>LON</span> ?<br><span>MGRS</span> ?<br><span>HDG</span> ' + Math.round(state.heading) + '°';
+  const marks = [{deg: mor, color: '#ffc846'}]; if (arrowTo !== null) marks.push({deg: arrowTo, color: '#38e1ff'});
+  drawTape(state.heading, marks); drawSky(state.heading, target);
+}
+
+// ---------------------------------------------------------------- render loop
+let deckgl, lastFrame = performance.now();
+const STILL = new URLSearchParams(location.search).has('still');
+function render() { if (deckgl) deckgl.setProps({layers: layers()}); updatePanels(); updatePhone(performance.now()); }
+function tick(now) {
+  const dt = Math.min(0.1, (now - lastFrame) / 1000); lastFrame = now;
+  if (state.step === 5 && R && state.health === 'healthy' && state.playing && now >= state.refixUntil) {
+    const end = RT[RT.length - 1];
+    state.t = Math.min(end, state.t + dt * state.speed);
+    const w = routeAt(state.t); advanceDrift(w);
+    state.heading = wrap(w.hdg + 6 * Math.sin(now / 900));
+    if (sigmaNow(w) > SIG0 + 90) refix(w);
+    if (state.t >= end) state.playing = false;
+    $('scrub').value = Math.round(state.t / end * 1000);
+    $('clock').textContent = `${fmtT(state.t)} of ${fmtT(end)}`;
+    $('play').textContent = state.playing ? 'Pause' : 'Resume';
+    render();
+  } else if (state.step === 5) { updatePhone(now); $('play').textContent = 'Resume'; }   // keep the bar in step with the phone button
+  if (STILL && now > 6000) { render(); return; }   // ?still=1 stops the loop so headless screenshots can settle
+  requestAnimationFrame(tick);
+}
+function go(step) {
+  state.step = Math.max(0, Math.min(6, step));
+  if (state.step === 5) { resetWalk(); state.playing = !REDUCED; }
+  else state.heading = state.step >= 4 && R ? wrap(brg(EST, RP[Math.min(20, RP.length - 1)])) : wrap(brg(EST, MORAN));
+  if (state.view === 'eye') { state.vs = {...state.vs, bearing: state.heading}; deckgl.setProps({viewState: state.vs}); }
+  render();
+}
+
+// ---------------------------------------------------------------- start
+(async function start() {
+  // the map labels are drawn into a glyph atlas once, so the bundled fonts must be ready before deck.gl starts
+  const faces = ['600 16px "Noto Sans JP"', '700 16px "Noto Sans JP"', '400 16px "B612 Mono"', '700 16px "B612 Mono"'];
+  await Promise.all([prepImages(), document.fonts ? Promise.all(faces.map(f => document.fonts.load(f))).catch(() => null) : null]);
+  fitUI();
+  state.vs = fitVS(58, -62);
+  deckgl = new Deck({
+    parent: $('stage'), views: [mapView], viewState: state.vs, layers: [], useDevicePixels: true,
+    onViewStateChange: ({viewState}) => {
+      state.vs = viewState;
+      if (state.view === 'eye') { state.heading = wrap(viewState.bearing); updatePhone(performance.now()); }
+      deckgl.setProps({viewState});
+    },
+    onAfterRender: () => {
+      if (state.loaded) return;
+      const t = deckgl.layerManager && deckgl.layerManager.getLayers({layerIds: ['terrain']})[0];
+      if (t && t.isLoaded) { state.loaded = true; $('loading').style.display = 'none'; window.TEAM8_READY = performance.now(); }
+    }
+  });
+  window.TEAM8_DECK = deckgl; window.TEAM8_STATE = state;
+  render();
+  // deep links for demos and screenshots, e.g. ?step=5&t=2400&view=3d&health=healthy
+  const q = new URLSearchParams(location.search);
+  if (q.has('health')) state.health = q.get('health') === 'injured' ? 'injured' : 'healthy';
+  if (q.has('step')) go(+q.get('step'));
+  if (q.has('t') && R) { simulateTo(+q.get('t')); state.playing = !STILL && !REDUCED; }   // a deep link keeps walking unless it is a still
+  if (q.has('view')) setView(q.get('view'), true);
+  render();
+  requestAnimationFrame(tick);
+})();
+function simulateTo(tt) {
+  resetWalk();
+  for (let t = 0; t <= tt; t += 20) { state.t = t; const w = routeAt(t); advanceDrift(w); if (sigmaNow(w) > SIG0 + 90) { refix(w); state.refixUntil = 0; } }
+  state.t = tt; const w = routeAt(tt); advanceDrift(w); state.heading = wrap(w.hdg);
+}
+
+document.querySelectorAll('[data-step]').forEach(b => b.onclick = () => go(+b.dataset.step));
+document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => setView(b.dataset.view));
+document.querySelectorAll('[data-health]').forEach(b => b.onclick = () => { state.health = b.dataset.health; render(); });
+document.querySelectorAll('[data-speed]').forEach(b => b.onclick = () => { state.speed = +b.dataset.speed; document.querySelectorAll('[data-speed]').forEach(x => press(x, x === b)); });
+$('prev').onclick = () => go(state.step - 1);
+$('next').onclick = () => go(state.step + 1);
+$('play').onclick = () => { state.playing = !state.playing; if (state.playing && R && state.t >= RT[RT.length - 1]) resetWalk(); };
+$('refix').onclick = () => { if (R) refix(routeAt(state.t)); };
+$('scrub').oninput = e => { if (!R) return; simulateTo(e.target.value / 1000 * RT[RT.length - 1]); render(); };
+$('phBtn').onclick = () => {
+  if (state.step === 5) { state.playing = !state.playing; return; }
+  if ((state.step === 4 || state.step === 5) && state.health === 'injured' && !S.routes.injured) { go(3); return; }
+  go(state.step === 6 ? 0 : state.step + 1);
+};
+window.addEventListener('keydown', e => {
+  const tag = e.target && e.target.tagName;   // leave the slider its arrow keys, and focused buttons their own Space and Enter
+  if (tag === 'INPUT' || (tag === 'BUTTON' && (e.key === ' ' || e.key === 'Enter'))) return;
+  if (e.key === 'ArrowRight') go(state.step + 1);
+  else if (e.key === 'ArrowLeft') go(state.step - 1);
+  else if (e.key === ' ') { e.preventDefault(); state.playing = !state.playing; }
+  else if (e.key === 'q' || e.key === 'e') { state.heading = wrap(state.heading + (e.key === 'q' ? -5 : 5)); if (state.view === 'eye') { state.vs = {...state.vs, bearing: state.heading}; deckgl.setProps({viewState: state.vs}); } updatePhone(performance.now()); }
+});
+window.addEventListener('resize', () => { fitUI(); if (state.view !== 'eye') setView(state.view); });
+})();
+</script>
+</body>
+</html>
