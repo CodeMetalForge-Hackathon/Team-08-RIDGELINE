@@ -1,4 +1,4 @@
-﻿// RIDGELINE solver tests. Node 18+, no dependencies.
+// RIDGELINE solver tests. Node 18+, no dependencies.
 //
 //   node --test tests/solver.test.mjs        (or)   node tests/solver.test.mjs
 //
