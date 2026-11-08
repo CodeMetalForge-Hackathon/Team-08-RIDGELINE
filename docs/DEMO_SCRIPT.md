@@ -17,10 +17,10 @@ For the team's rehearsals and the judging slot. Every number here is in the [REA
 | Time | Who | Say | Do |
 | --- | --- | --- | --- |
 | 0:00 to 0:15 | Seika | GPS is the first thing jammed or spoofed. Picture a downed pilot in the mountains. No GPS, no signal, only a phone. RIDGELINE gives them a position from what they can see. | Show the phone in airplane mode. |
-| 0:15 to 0:45 | Seika, then Judge | Take the phone. Aim at the three peaks and press Lock each time. The phone tells you which peak is next. | Hand the phone to a judge standing on the floor mark. The judge Locks the three cards. |
-| 0:45 to 1:00 | Teammate | Each Lock adds a line on the big screen and the bubble shrinks. It only uses the angles between peaks, so no compass and no declination. The whole solve runs on the phone in about a tenth of a second. | Point at the board, then press R to reveal the true spot and the error in meters. |
-| 1:00 to 1:15 | Teammate | On this wall our real-phone test landed 42 meters off, inside a 293 meter circle. The cards stand in for real peaks and the height is simulated, so this is not a field result. | Leave the reveal on the board. |
-| 1:15 to 1:30 | Seika | Where to gives a route that stays off water and steep ground, or says Stay, Signal, Wait. [Walk away and the circle grows until the phone asks you to aim again.] It runs on the phone you already carry, with no signal, and sends the fix to ATAK. | Tap Where to on the phone. Open `localhost:8768/api/cot` on the PC to show the Cursor on Target events. |
+| 0:15 to 0:40 | Seika, then Judge | Take the phone. Aim at the three peaks and press Lock each time. The phone tells you which peak is next. | Hand the phone to a judge standing on the floor mark. The judge Locks the three cards. |
+| 0:40 to 1:00 | Teammate | Each Lock adds a line on the big screen and the bubble shrinks. It only uses the angles between peaks, so no compass needed. It solves on the phone in a tenth of a second. | Point at the board, then press R to reveal the true spot and the error in meters. |
+| 1:00 to 1:10 | Teammate | Our real-phone wall test landed 42 meters off, inside a 293 meter circle. Cards stand in for peaks and the height is simulated. | Leave the reveal on the board. |
+| 1:10 to 1:30 | Seika | Where to gives a route that stays off water and steep ground, or says Stay, Signal, Wait. [Walk away and the circle grows until the phone asks you to aim again.] It runs on the phone you already carry, with no signal, and sends the fix to ATAK. | Tap Where to on the phone. Open `localhost:8768/api/cot` on the PC to show the Cursor on Target events. |
 
 ## 10-minute version
 
