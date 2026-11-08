@@ -117,6 +117,7 @@ A reference up to 30 m off still leaves the truth inside the bubble in at least 
 
 ## Not tested yet
 
+* Real-world accuracy. The simulated Locks and the solver use the same 30 m terrain grid, so terrain model error, lens and sensor bias, and a person who misjudges which summit they see are not in the simulated numbers. Only the Gate B rows were measured with a real phone.
 * Anything inside real ATAK (the connection dialog, how the items look, the delete events). ATAK-CIV was not installed on the test phone, so the CoT was checked with a stand-in TAK client only.
 * On the phone, Night mode over a live camera, the Copy button and installing to the home screen.
 * Which orientation stream a held phone uses. Chrome on this Galaxy sends `deviceorientation` (gyro) only while the phone moves and `deviceorientationabsolute` all the time. The page prefers the gyro stream, falls back to the absolute one, and never mixes them within one fix.
