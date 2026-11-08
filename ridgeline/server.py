@@ -127,6 +127,8 @@ class Atak:
         self.current = []        # the events ATAK should hold now (xml strings)
         self.uids = []
         self.fix = None
+        self.fix_key = None      # cot.position_key of the fix ATAK holds
+        self.fix_at = None       # when that position first arrived, so ATAK can read its age
         self.listening = False
         self.sent = 0
         self.last_sent = None
@@ -171,10 +173,13 @@ class Atak:
         changed = snap is not cot.KEEP and snap != self.fix
         if changed:
             self.fix = snap
+            key = cot.position_key(snap)
+            if key != self.fix_key:
+                self.fix_key, self.fix_at = key, time.time()
         if not changed and not periodic:
             return False
         now = time.time()
-        events = cot.build(self.fix, now)
+        events = cot.build(self.fix, now, fix_at=self.fix_at)
         keep = {uid for uid, _ in events}
         gone = [uid for uid in self.uids if uid not in keep]
         payload = [cot.delete_event(uid, now) for uid in gone] + [x for _, x in events]
