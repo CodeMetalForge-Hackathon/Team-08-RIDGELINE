@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a1016">
+<title>RIDGELINE</title>
+<link rel="icon" href="data:,">
+<style>
+:root{color-scheme:dark;--bg:#0a1016;--panel:#111b23;--raise:#16232d;--line:#243440;--line2:#33464f;--text:#f1f5f6;--muted:#97a9b2;--faint:#5f737d;--cyan:#86dce9;--amber:#ffcf5c;--red:#ff8c89;--r:8px;--font:"Noto Sans JP","Noto Sans",system-ui,sans-serif;--mono:ui-monospace,"Roboto Mono","Cascadia Mono",Consolas,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);-webkit-tap-highlight-color:transparent}
+body{min-height:100svh}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--cyan);outline-offset:3px}
+[hidden]{display:none!important}
+.app{max-width:520px;margin:0 auto;min-height:100svh;display:flex;flex-direction:column;padding:0 max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+.top{height:56px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:8px;font-weight:800;letter-spacing:.14em;font-size:15px;margin-right:auto}
+.brand svg{width:24px;height:24px}
+.chip{font-size:12px;letter-spacing:.06em;padding:4px 8px;border-radius:999px;border:1px solid var(--line2);color:var(--muted);white-space:nowrap}
+.chip.off{border-color:rgba(255,140,137,.5);color:var(--red)}
+.chip.on{border-color:rgba(134,220,233,.5);color:var(--cyan)}
+.icon-btn{width:40px;height:40px;border-radius:var(--r);border:1px solid transparent;background:transparent;display:grid;place-items:center;color:var(--muted)}
+main{flex:1;display:flex;flex-direction:column;gap:16px;padding-top:16px}
+.eyebrow{font-size:12px;letter-spacing:.16em;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em;font-weight:750}
+.lead{margin:0;color:var(--muted);line-height:1.5;font-size:16px}
+.rows{border-top:1px solid var(--line)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--line);font-size:16px}
+.row b{font-weight:600}
+.row .v{font-variant-numeric:tabular-nums;text-align:right}
+.v.off{color:var(--red)}.v.ok{color:var(--cyan)}.v.warn{color:var(--amber)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.pace{display:flex;gap:12px;align-items:flex-start}
+.pace i{width:10px;height:10px;border-radius:50%;background:var(--amber);margin-top:7px;flex-shrink:0;box-shadow:0 0 0 4px rgba(255,207,92,.15)}
+.btn{min-height:56px;border-radius:var(--r);border:1px solid var(--line2);background:var(--raise);font-weight:650;font-size:17px;padding:8px 16px;position:relative;overflow:hidden}
+.btn.primary{background:var(--cyan);border-color:var(--cyan);color:#06171b}
+.btn.ghost{background:transparent}
+.btn:disabled{opacity:.45;cursor:default}
+.stack{display:flex;flex-direction:column;gap:8px;margin-top:auto}
+.pair{display:flex;gap:8px}.pair>*{flex:1;min-width:0}
+.target-label{font-size:12px;letter-spacing:.16em;color:var(--muted)}
+.target{font-size:34px;line-height:1.1;font-weight:800;color:var(--amber);letter-spacing:-.01em}
+.hint{font-size:15px;color:var(--muted);min-height:22px}
+.hint b{color:var(--text);font-weight:600}
+.dots{display:flex;gap:6px}
+.dots span{width:22px;height:6px;border-radius:3px;background:var(--line2);transition:background .3s}
+.dots span.on{background:var(--cyan)}
+.dots span.bad{background:var(--red)}
+.scope{position:relative;aspect-ratio:1/1;max-height:42svh;margin:0 auto;width:100%;border-radius:var(--r);background:radial-gradient(circle at 50% 50%,#132430 0%,#0d1820 62%,#0a1016 100%);border:1px solid var(--line);overflow:hidden}
+.scope svg{position:absolute;inset:0;width:100%;height:100%}
+.scope .ring{fill:none;stroke:#1f3440;stroke-width:1}
+.scope .hair{stroke:#2b4652;stroke-width:1}
+.scope .br{fill:none;stroke:var(--text);stroke-width:3;stroke-linecap:square;transition:stroke .2s}
+.scope.steady .br{stroke:var(--amber)}
+.scope .tick{stroke:#4a626c;stroke-width:1.2}
+.scope .tlab{fill:#8aa0a9;font:600 11px var(--mono)}
+.scope .center{fill:var(--text)}
+.scope .tgt{fill:var(--amber)}
+.readout{position:absolute;top:10px;left:12px;right:12px;display:flex;justify-content:space-between;font:600 12px var(--mono);color:var(--muted);letter-spacing:.04em;pointer-events:none}
+.readout .st{color:var(--amber)}
+.edge{position:absolute;top:50%;transform:translateY(-50%);font:700 15px var(--mono);color:var(--amber);padding:6px 8px;background:rgba(10,16,22,.75);border-radius:var(--r);pointer-events:none}
+.edge.l{left:8px}.edge.r{right:8px}
+.lock{width:100%;min-height:72px;border-radius:var(--r);border:0;background:var(--amber);color:#1f1705;font-weight:850;font-size:22px;letter-spacing:.18em;position:relative;overflow:hidden}
+.lock[data-state=wait]{background:var(--raise);color:var(--muted);border:1px solid var(--line2);letter-spacing:.06em;font-size:18px}
+.lock[data-state=ready]{animation:halo 1.6s ease-out infinite}
+@keyframes halo{0%{box-shadow:0 0 0 0 rgba(255,207,92,.55)}70%{box-shadow:0 0 0 16px rgba(255,207,92,0)}100%{box-shadow:0 0 0 0 rgba(255,207,92,0)}}
+.ripple{position:absolute;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;background:rgba(255,255,255,.6);transform:scale(0);animation:ripple .65s ease-out forwards;pointer-events:none}
+@keyframes ripple{to{transform:scale(22);opacity:0}}
+.meter{display:grid;grid-template-columns:64px 1fr;gap:12px;align-items:center}
+.meter svg{width:64px;height:64px}
+.meter .trk{fill:none;stroke:var(--line2);stroke-width:6}
+.meter .arc{fill:none;stroke:var(--cyan);stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset .7s cubic-bezier(.2,.8,.2,1),stroke .3s}
+.meter.bad .arc{stroke:var(--red)}
+.meter.done .arc{stroke:var(--amber)}
+.pm{font:700 28px var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.pm small{font:600 13px var(--font);color:var(--muted);letter-spacing:.04em;margin-left:6px}
+.status{font-size:15px;line-height:1.4;color:var(--muted)}
+.status b{color:var(--text)}
+.status.bad b{color:var(--red)}
+.map{position:relative;border-radius:var(--r);overflow:hidden;border:1px solid var(--line2);background:#e9e4d6}
+.map canvas{display:block;width:100%;height:100%}
+.map.small{aspect-ratio:345/200}
+.map.big{aspect-ratio:1/1}
+.sweep{position:absolute;left:50%;top:50%;width:220%;aspect-ratio:1/1;transform:translate(-50%,-50%);border-radius:50%;background:conic-gradient(from 0deg,rgba(13,110,140,0) 0deg,rgba(13,110,140,0) 290deg,rgba(13,110,140,.42) 360deg);animation:sweep .8s linear forwards;pointer-events:none}
+@keyframes sweep{from{transform:translate(-50%,-50%) rotate(0)}to{transform:translate(-50%,-50%) rotate(360deg);opacity:.2}}
+.maplab{position:absolute;left:8px;bottom:8px;font:600 11px var(--mono);color:#3a3326;background:rgba(245,241,230,.85);padding:2px 6px;border-radius:4px}
+.coords{font:700 26px/1.25 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.big-pm{font:800 52px/1 var(--mono);letter-spacing:-.03em;color:var(--cyan)}
+.big-pm small{font:600 15px var(--font);color:var(--muted);letter-spacing:.04em;margin-left:8px}
+.foot{font-size:12px;color:var(--faint);line-height:1.5}
+.sheet{position:fixed;inset:0;background:rgba(5,8,11,.72);display:flex;align-items:flex-end;z-index:20}
+.sheet .in{background:var(--panel);border-top:1px solid var(--line2);width:100%;max-width:520px;margin:0 auto;padding:16px 16px max(16px,env(safe-area-inset-bottom));border-radius:12px 12px 0 0;display:flex;flex-direction:column;gap:12px;max-height:85svh;overflow:auto}
+.sheet label{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--muted)}
+.sheet select,.sheet input{font:inherit;color:var(--text);background:var(--raise);border:1px solid var(--line2);border-radius:var(--r);padding:10px}
+.sheet pre{font:12px/1.45 var(--mono);color:var(--muted);white-space:pre-wrap;word-break:break-all;margin:0;max-height:30svh;overflow:auto}
+.err{padding:24px;color:var(--red)}
+@media (prefers-reduced-motion:reduce){.lock[data-state=ready]{animation:none;box-shadow:0 0 0 3px rgba(255,207,92,.6)}.ripple,.sweep{display:none}.meter .arc,.dots span{transition:none}}
+@media (min-height:860px){.scope{max-height:46svh}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 26 13 6 19 17 23 10 30 26M9 26l7-12 7 12" fill="none" stroke="#86dce9" stroke-width="2.2" stroke-linejoin="round"/></svg>RIDGELINE</div>
+    <span class="chip off" id="chip-gps">GPS OFF</span>
+    <span class="chip on" id="chip-mode">TERRAIN</span>
+    <button class="icon-btn" id="open-settings" aria-label="Settings"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg></button>
+  </header>
+  <main id="main"><p class="lead">Loading terrain…</p></main>
+</div>
+<section class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="Settings">
+  <div class="in">
+    <div class="eyebrow"><span>SETTINGS</span><button class="btn ghost" id="close-settings" style="min-height:40px">Close</button></div>
+    <label>Orientation input<select id="source"><option value="sensor">Phone motion sensor</option><option value="keyboard">Keyboard (PC)</option></select></label>
+    <p class="foot" id="sensor-debug">No motion data yet.</p>
+    <label>Aim error assumed (deg, 1 sigma)<input id="sigma" type="number" min="0.5" max="10" step="0.5" value="3"></label>
+    <label>Barometer altitude (m, simulated)<input id="baro" type="number" step="1"></label>
+    <button class="btn" id="assist">Demo assist: aim at the current card (keyboard only)</button>
+    <button class="btn" id="reset">Start a new fix</button>
+    <pre id="locks-json">No Locks yet.</pre>
+    <p class="foot">Locks are posted to this PC only (localhost over USB). Nothing is sent to a network. The barometer value is simulated because browsers do not expose the pressure sensor.</p>
+  </div>
+</section>
+<script src="/solver.js"></script>
+<script>
+'use strict';
+const S = window.RidgelineSolver;
+const $ = id => document.getElementById(id);
+const rad = d => d * Math.PI / 180, deg = r => r * 180 / Math.PI;
+const W360 = d => ((d % 360) + 360) % 360, W180 = d => ((((d % 360) + 540) % 360) - 180);
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const fmtM = m => m >= 1000 ? (m / 1000).toFixed(2) + ' km' : Math.round(m) + ' m';
+let model, topo, wall = [], wallIds = [], screen = 'check', source = 'sensor';
+let locks = [], result = null, target = null, skip = 0, baro = null, sigma = 3, shownPm = null;
+let samples = [], sensorSeen = 0, kb = { h: 140, t: 4, moved: 0 }, overlay = null, lastPost = null;
+
+// ---------- orientation ----------
+// One orientation stream per fix, never mixed: relative (gyro) first, absolute only when the
+// relative stream stays silent. Chrome sends an event only when the angle changes by about 0.1 deg,
+// so silence while samples exist means the phone is perfectly still, not that the sensor died.
+let orientMode = 'relative', relSeen = 0, absSeen = 0;
+function onOrient(e, kind) {
+  if (e.alpha == null || e.beta == null || e.gamma == null) return;
+  if (kind === 'relative') relSeen = performance.now(); else absSeen = performance.now();
+  if (kind !== orientMode) return;
+  sensorSeen = performance.now();
+  if (source !== 'sensor') return;
+  const a = rad(e.alpha), b = rad(e.beta), g = rad(e.gamma);
+  // back camera direction (device -Z) in the earth frame: x east, y north, z up
+  const x = -Math.cos(a) * Math.sin(g) - Math.sin(a) * Math.sin(b) * Math.cos(g);
+  const y = -Math.sin(a) * Math.sin(g) + Math.cos(a) * Math.sin(b) * Math.cos(g);
+  const z = -Math.cos(b) * Math.cos(g);
+  samples.push({ t: performance.now(), x, y, z });
+  if (samples.length > 120) samples.splice(0, samples.length - 120);
+}
+window.addEventListener('deviceorientation', e => onOrient(e, 'relative'));   // gyro based on Android
+window.addEventListener('deviceorientationabsolute', e => onOrient(e, 'absolute'));
+setInterval(() => {
+  if (locks.length) return;   // the stream is fixed once the first Lock is taken
+  const now = performance.now();
+  const want = relSeen && now - relSeen < 1500 ? 'relative' : absSeen && now - absSeen < 1500 && (!relSeen || now - relSeen > 2000) ? 'absolute' : orientMode;
+  if (want !== orientMode) { orientMode = want; samples = []; }
+}, 500);
+function meanVec(ms) {
+  const now = performance.now();
+  if (source === 'keyboard') return { h: kb.h, t: kb.t, steady: now - kb.moved > 350, fresh: true, spread: 0 };
+  const lastS = samples[samples.length - 1];
+  if (!lastS || now - lastS.t > 15000) return null;
+  let win = samples.filter(s => now - s.t <= ms);
+  if (!win.length) win = [lastS];
+  let x = 0, y = 0, z = 0;
+  for (const s of win) { x += s.x; y += s.y; z += s.z; }
+  const n = Math.hypot(x, y, z) || 1; x /= n; y /= n; z /= n;
+  let spread = 0;
+  for (const s of samples.filter(s => now - s.t <= 450)) spread = Math.max(spread, deg(Math.acos(Math.min(1, s.x * x + s.y * y + s.z * z))));
+  if (Math.hypot(x, y) < 0.15) return { flat: true };   // camera straight up or down, heading undefined
+  return { h: W360(deg(Math.atan2(x, y))), t: deg(Math.asin(Math.max(-1, Math.min(1, z)))), steady: spread < 1.4, fresh: true, spread };
+}
+
+// ---------- solving ----------
+function solveNow() {
+  result = S.solve(model, { baro_m: baro, locks }, { candidates: wallIds, bearing_sigma_deg: sigma });
+  if (result.status === 'mismatch' && result.suspect) target = result.suspect.was_peak_id;
+  else if (result.status === 'enough') target = null;
+  else target = result.next_peak_id || wallIds.find(id => !locks.some(l => l.peak_id === id)) || null;
+  overlay = buildOverlay(result);
+}
+function predictedHeading(id) {
+  if (!result || !locks.length || !id) return null;
+  const at = result.estimate.index;
+  const off = locks.length >= 2 ? result.offset_deg : W180(locks[0].heading_deg - S.bearingFrom(model, model.E[at], model.N[at], locks[0].peak_id));
+  // only trust the hint when the bubble agrees on the turn
+  let ss = 0, cc = 0, k = 0;
+  const ref = locks[locks.length - 1].peak_id;
+  for (let i = 0; i < model.n && k < 400; i += 7) {
+    if (!result.hpd95[i]) continue;
+    const d = rad(W180(S.bearingFrom(model, model.E[i], model.N[i], id) - S.bearingFrom(model, model.E[i], model.N[i], ref)));
+    ss += Math.sin(d); cc += Math.cos(d); k++;
+  }
+  const R = k ? Math.hypot(ss, cc) / k : 0;
+  if (k && R < 0.97) return null;   // circular spread above about 14 deg
+  return W360(S.bearingFrom(model, model.E[at], model.N[at], id) + off);
+}
+function post() {
+  // the board solves on its own, so a Lock is sent before this phone finishes solving
+  const fresh = result && result.n_locks === locks.length;
+  const body = { source: 'phone', obs: { baro_m: baro, locks }, summary: fresh ? { status: result.status, r95_m: Math.round(result.r95_m), lat: result.estimate.lat, lon: result.estimate.lon, n: locks.length } : null };
+  lastPost = fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+}
+
+// ---------- map ----------
+function buildOverlay(res) {
+  if (!res || !res.n_locks) return null;
+  const c = document.createElement('canvas');
+  c.width = model.nx; c.height = model.ny;
+  const ctx = c.getContext('2d'), img = ctx.createImageData(model.nx, model.ny);
+  for (let i = 0; i < model.n; i++) {
+    const a = res.hpd50[i] ? 150 : res.hpd95[i] ? 82 : 0;
+    if (!a) continue;
+    const bad = res.status === 'mismatch';
+    img.data[i * 4] = bad ? 190 : 12; img.data[i * 4 + 1] = bad ? 40 : 104; img.data[i * 4 + 2] = bad ? 40 : 140; img.data[i * 4 + 3] = a;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+function drawMap(canvas, zoom) {
+  if (!canvas || !topo || !topo.complete) return;
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const W = canvas.width = Math.round(canvas.clientWidth * dpr), H = canvas.height = Math.round(canvas.clientHeight * dpr);
+  const ctx = canvas.getContext('2d');
+  const fullE = model.nx * model.dx, fullN = model.ny * model.dy;
+  let e0 = 0, e1 = fullE, n0 = 0, n1 = fullN;
+  const aspect = W / H;
+  if (zoom && result && result.n_locks >= 2) {
+    const r = Math.max(900, result.r95_m * 3.4);
+    let we = r * 2, wn = r * 2;
+    if (we / wn < aspect) we = wn * aspect; else wn = we / aspect;
+    const ce = result.estimate.e_m, cn = result.estimate.n_m;
+    e0 = Math.max(0, Math.min(fullE - we, ce - we / 2)); e1 = e0 + we;
+    n0 = Math.max(0, Math.min(fullN - wn, cn - wn / 2)); n1 = n0 + wn;
+  } else {
+    const wn = fullE / aspect;
+    if (wn <= fullN) { n0 = (fullN - wn) / 2; n1 = n0 + wn; } else { const we = fullN * aspect; e0 = (fullE - we) / 2; e1 = e0 + we; }
+  }
+  const X = e => (e - e0) / (e1 - e0) * W, Y = n => (n1 - n) / (n1 - n0) * H;
+  const iw = topo.naturalWidth, ih = topo.naturalHeight;
+  ctx.drawImage(topo, e0 / fullE * iw, (1 - n1 / fullN) * ih, (e1 - e0) / fullE * iw, (n1 - n0) / fullN * ih, 0, 0, W, H);
+  if (overlay) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(overlay, e0 / model.dx, model.ny - n1 / model.dy, (e1 - e0) / model.dx, (n1 - n0) / model.dy, 0, 0, W, H);
+  }
+  // pencil lines from the locked peaks back toward the observer
+  if (result && result.lines.length) {
+    ctx.save(); ctx.strokeStyle = 'rgba(40,36,30,.85)'; ctx.lineWidth = 1.6 * dpr; ctx.setLineDash([]);
+    for (const ln of result.lines) {
+      const p = model.byId[ln.peak_id];
+      const back = rad(ln.bearing_true_deg + 180);
+      const len = Math.hypot(p.e_m - result.estimate.e_m, p.n_m - result.estimate.n_m) * 1.25 + 300;
+      ctx.beginPath(); ctx.moveTo(X(p.e_m), Y(p.n_m)); ctx.lineTo(X(p.e_m + Math.sin(back) * len), Y(p.n_m + Math.cos(back) * len)); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // wall peaks
+  for (const w of wall) {
+    const p = model.byId[w.peak_id], x = X(p.e_m), y = Y(p.n_m), s = 7 * dpr;
+    const done = locks.some(l => l.peak_id === w.peak_id), isT = w.peak_id === target;
+    ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s * .9, y + s * .6); ctx.lineTo(x - s * .9, y + s * .6); ctx.closePath();
+    ctx.fillStyle = done ? '#1f2a30' : isT ? '#d99a00' : 'rgba(31,42,48,.25)'; ctx.fill();
+    ctx.lineWidth = 1.4 * dpr; ctx.strokeStyle = '#1f2a30'; ctx.stroke();
+    if (x > -40 && x < W + 40 && y > -20 && y < H + 20) {
+      ctx.font = `600 ${11 * dpr}px "Noto Sans JP",sans-serif`; ctx.fillStyle = '#2b2418';
+      ctx.fillText(p.name, x + 9 * dpr, y + 4 * dpr);
+    }
+  }
+  if (result && result.n_locks >= 2) {
+    const x = X(result.estimate.e_m), y = Y(result.estimate.n_m), r = result.r95_m / (e1 - e0) * W;
+    ctx.save(); ctx.strokeStyle = result.status === 'mismatch' ? '#b42318' : '#0b5f7a'; ctx.lineWidth = 2 * dpr; ctx.setLineDash([5 * dpr, 4 * dpr]);
+    ctx.beginPath(); ctx.arc(x, y, Math.max(6 * dpr, r), 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.lineWidth = 2.2 * dpr; ctx.beginPath(); ctx.moveTo(x - 9 * dpr, y); ctx.lineTo(x + 9 * dpr, y); ctx.moveTo(x, y - 9 * dpr); ctx.lineTo(x, y + 9 * dpr); ctx.stroke();
+    ctx.restore();
+  }
+}
+function sweep(el) {
+  if (reduce || !el) return;
+  const s = document.createElement('div'); s.className = 'sweep'; el.appendChild(s);
+  setTimeout(() => s.remove(), 850);
+}
+
+// ---------- effects ----------
+function countTo(el, value) {
+  if (!el) return;
+  const from = shownPm == null ? value * 4 : shownPm, t0 = performance.now(), dur = reduce ? 0 : 700;
+  shownPm = value;
+  const step = now => {
+    const k = dur ? Math.min(1, (now - t0) / dur) : 1, e = 1 - Math.pow(1 - k, 3);
+    el.textContent = '±' + fmtM(from + (value - from) * e).replace(' ', ' ');
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+function decrypt(el, text) {
+  if (!el) return;
+  if (reduce) { el.textContent = text; return; }
+  const t0 = performance.now(), dur = 650;
+  const step = now => {
+    const k = Math.min(1, (now - t0) / dur), solid = Math.floor(k * text.length);
+    el.textContent = text.split('').map((c, i) => i < solid || !/[0-9]/.test(c) ? c : String(Math.floor(Math.random() * 10))).join('');
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+function ripple(btn, ev) {
+  if (reduce || !btn) return;
+  const r = btn.getBoundingClientRect(), s = document.createElement('span');
+  s.className = 'ripple';
+  s.style.left = ((ev && ev.clientX ? ev.clientX : r.left + r.width / 2) - r.left) + 'px';
+  s.style.top = ((ev && ev.clientY ? ev.clientY : r.top + r.height / 2) - r.top) + 'px';
+  btn.appendChild(s); setTimeout(() => s.remove(), 700);
+}
+
+// ---------- screens ----------
+const nameOf = id => (model.byId[id] || {}).name || id;
+const cardNo = id => wallIds.indexOf(id) + 1;
+function render() {
+  const m = $('main');
+  $('chip-mode').textContent = source === 'keyboard' ? 'KEYBOARD' : 'TERRAIN';
+  if (screen === 'check') {
+    const live = performance.now() - sensorSeen < 1500;
+    m.innerHTML = `<div class="eyebrow"><span>01 · SYSTEM CHECK</span><span>${new Date().toISOString().slice(11, 16)} UTC</span></div>
+      <h1>GPS is jammed.<br>Use the mountains.</h1>
+      <div class="rows">
+        <div class="row"><b>GPS</b><span class="v off">No signal</span></div>
+        <div class="row"><b>Network</b><span class="v off">None</span></div>
+        <div class="row"><b>Barometer</b><span class="v ok">${Math.round(baro).toLocaleString('en-US')} m <span class="foot">sim</span></span></div>
+        <div class="row"><b>Motion sensor</b><span class="v ${live ? 'ok' : source === 'keyboard' ? 'warn' : 'off'}" id="motion-v">${live ? 'Streaming' : source === 'keyboard' ? 'Keyboard' : 'Waiting'}</span></div>
+        <div class="row"><b>Compass</b><span class="v">Not needed</span></div>
+      </div>
+      <div class="card pace"><i></i><div><b>Auto-PACE switched to terrain.</b><p class="lead" style="margin-top:4px">Aim at ${wall.length} peaks you can name. RIDGELINE uses only the angles between them.</p></div></div>
+      <div class="stack"><button class="btn primary" id="start">Start terrain fix</button></div>`;
+    $('start').onclick = start;
+  } else if (screen === 'aim') {
+    const st = result ? result.status : 'start';
+    const done = locks.length;
+    const sus = result && result.suspect;
+    let msg;
+    if (!done) msg = `<b>Find ${nameOf(target)} on the wall.</b> Center it, hold still, Lock.`;
+    else if (st === 'mismatch' && sus) msg = sus.repeat ? `<b>Lock ${sus.lock_index + 1} looks like ${nameOf(sus.peak_id)} again.</b> Aim at ${nameOf(sus.was_peak_id)} and Lock it again.` : `<b>Lock ${sus.lock_index + 1} does not fit.</b> Aim at ${nameOf(sus.was_peak_id)} again.`;
+    else if (st === 'enough') msg = `<b>Enough.</b> ${locks.length} peaks agree.`;
+    else if (done === 1) msg = `<b>One peak only puts you on a band.</b> Next: ${nameOf(target)}.`;
+    else if (done === 2) msg = `<b>Two peaks, two places still fit.</b> Next: ${nameOf(target)}.`;
+    else msg = target ? `<b>Close, not sure yet.</b> One more peak: ${nameOf(target)}.` : `<b>No more cards.</b> This is the best fix.`;
+    const pmText = done ? '±' + fmtM(result.r95_m) : '—';
+    m.innerHTML = `<div class="eyebrow"><span>02 · TERRAIN FIX</span><span class="dots">${[0, 1, 2].map(i => `<span class="${i < done ? (st === 'mismatch' && sus && sus.lock_index === i ? 'bad' : 'on') : ''}"></span>`).join('')}</span></div>
+      <div><div class="target-label">${target ? 'AIM AT · CARD ' + cardNo(target) : 'FIX COMPLETE'}</div><div class="target">${target ? nameOf(target) : 'Position found'}</div><div class="hint" id="hint"></div></div>
+      <div class="scope" id="scope"><svg viewBox="0 0 300 300" aria-hidden="true">
+        <circle class="ring" cx="150" cy="150" r="118"/><circle class="ring" cx="150" cy="150" r="70"/>
+        <path class="hair" d="M150 22V112M150 188V246M22 150H112M188 150H278"/>
+        <g id="br"></g><circle class="center" cx="150" cy="150" r="2.6"/>
+        <g id="tape"></g></svg>
+        <div class="readout"><span id="ro-h">HDG ---</span><span class="st" id="ro-s"></span><span id="ro-t">TILT ---</span></div>
+        <div class="edge" id="edge" hidden></div></div>
+      ${target ? `<button class="lock" id="lock" data-state="wait">HOLD STEADY</button>` : `<button class="btn primary" id="see" style="min-height:72px;font-size:20px">See my position</button>`}
+      <div class="meter ${st === 'mismatch' ? 'bad' : st === 'enough' ? 'done' : ''}"><svg viewBox="0 0 64 64"><circle class="trk" cx="32" cy="32" r="26"/><circle class="arc" id="arc" cx="32" cy="32" r="26" transform="rotate(-90 32 32)" stroke-dasharray="163.4" stroke-dashoffset="163.4"/></svg>
+        <div><div class="pm"><span id="pm">${pmText}</span><small>${done ? '95% · ' + done + ' lock' + (done > 1 ? 's' : '') : 'no lock yet'}</small></div><div class="status ${st === 'mismatch' ? 'bad' : ''}">${msg}</div></div></div>
+      <div class="map small" id="map-wrap"><canvas id="map"></canvas><span class="maplab">${model.json.name} · ${done ? 'live' : 'no fix'}</span></div>
+      <div class="pair"><button class="btn ghost" id="skip"${target ? '' : ' disabled'}>Can't see it</button><button class="btn ghost" id="undo"${done ? '' : ' disabled'}>Undo last</button></div>`;
+    if ($('lock')) $('lock').onclick = ev => doLock(ev);
+    if ($('see')) $('see').onclick = () => go('fix');
+    $('skip').onclick = skipTarget; $('undo').onclick = undo;
+    $('map-wrap').onclick = () => { $('map-wrap').classList.toggle('big'); $('map-wrap').classList.toggle('small'); drawMap($('map'), true); };
+    requestAnimationFrame(() => {
+      const arc = $('arc');
+      if (arc) arc.style.strokeDashoffset = String(163.4 * (1 - (st === 'mismatch' ? 0.15 : Math.max(done ? 0.08 : 0, result ? result.confidence : 0))));
+      if (done && result) countTo($('pm'), result.r95_m);
+      drawMap($('map'), done >= 2);
+    });
+  } else if (screen === 'fix') {
+    const e = result.estimate, o = result.others[0];
+    const ns = `${Math.abs(e.lat).toFixed(5)}° ${e.lat >= 0 ? 'N' : 'S'}`, ew = `${Math.abs(e.lon).toFixed(5)}° ${e.lon >= 0 ? 'E' : 'W'}`;
+    const dir = o ? ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(W360(deg(Math.atan2(o.lon - e.lon, o.lat - e.lat))) / 45) % 8] : '';
+    m.innerHTML = `<div class="eyebrow"><span>03 · POSITION</span><span>NO GPS · NO NETWORK</span></div>
+      <h1>You are here.</h1>
+      <div class="coords" id="coords"></div>
+      <div><span class="big-pm" id="pm">±${fmtM(result.r95_m)}</span><small class="foot" style="margin-left:8px">95% · ${locks.length} peaks</small></div>
+      <div class="map big" id="map-wrap"><canvas id="map"></canvas><span class="maplab">${model.json.name} · USGS 3DEP</span></div>
+      <p class="status">${o && o.mass >= 0.02 ? `<b>Second place: ${Math.round(o.mass * 100)}%</b>, ${fmtM(o.distance_m)} ${dir}. Lock one more peak to rule it out.` : '<b>One place fits.</b> No second candidate above 2%.'}</p>
+      <div class="stack"><div class="pair"><button class="btn" id="back">Back</button><button class="btn" id="again">New fix</button></div></div>
+      <p class="foot">Solved on this phone in ${Math.round(result.ms)} ms from ${locks.length} angles and a barometer band. 30 m terrain grid, USGS 3DEP lidar. Demo barometer is simulated.</p>`;
+    decrypt($('coords'), ns + '\n' + ew);
+    $('coords').style.whiteSpace = 'pre-line';
+    $('back').onclick = () => go('aim'); $('again').onclick = resetFix;
+    requestAnimationFrame(() => { drawMap($('map'), true); sweep($('map-wrap')); });
+  }
+  $('locks-json').textContent = locks.length ? JSON.stringify(locks.map(l => ({ peak: nameOf(l.peak_id), heading_deg: +l.heading_deg.toFixed(2), tilt_deg: l.elevation_deg == null ? null : +l.elevation_deg.toFixed(1) })), null, 1) : 'No Locks yet.';
+}
+function go(next) { screen = next; render(); window.scrollTo(0, 0); }
+function start() {
+  // fire and forget: some browsers never settle these promises
+  try { if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {}); } catch (e) { /* optional */ }
+  try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {}); } catch (e) { /* optional */ }
+  try { if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') DeviceOrientationEvent.requestPermission().catch(() => {}); } catch (e) { /* iOS only */ }
+  if (source === 'sensor' && performance.now() - sensorSeen > 1500 && !('ontouchstart' in window)) source = 'keyboard';
+  solveNow(); go('aim');
+}
+function doLock(ev) {
+  const v = meanVec(300);
+  if (!v || v.flat || !target) return;
+  ripple($('lock'), ev);
+  if (navigator.vibrate) navigator.vibrate(v.steady ? 40 : [20, 40, 20]);
+  const sus = result && result.status === 'mismatch' ? result.suspect : null;
+  if (sus) locks.splice(sus.lock_index, 1);
+  locks.push({ peak_id: target, heading_deg: +v.h.toFixed(3), elevation_deg: +v.t.toFixed(2), at: new Date().toISOString(), steady: v.steady, stream: source === 'keyboard' ? 'keyboard' : orientMode });
+  skip = 0;
+  post();
+  sweep($('map-wrap'));
+  setTimeout(() => { solveNow(); render(); }, reduce ? 0 : 120);
+}
+function skipTarget() {
+  const rest = wallIds.filter(id => !locks.some(l => l.peak_id === id));
+  if (!rest.length) return;
+  skip++; target = rest[skip % rest.length]; render();
+}
+function undo() { if (!locks.length) return; locks.pop(); solveNow(); render(); post(); }
+function resetFix() { locks = []; skip = 0; shownPm = null; solveNow(); target = model.demo.first_peak_id; post(); go('aim'); }
+
+// ---------- live scope (every frame) ----------
+function brackets(g) {
+  const L = 24, c = 150;
+  return [`M${c - g} ${c - g + L}V${c - g}H${c - g + L}`, `M${c + g - L} ${c - g}H${c + g}V${c - g + L}`, `M${c + g} ${c + g - L}V${c + g}H${c + g - L}`, `M${c - g + L} ${c + g}H${c - g}V${c + g - L}`].map(d => `<path class="br" d="${d}"/>`).join('');
+}
+function frame() {
+  requestAnimationFrame(frame);
+  if (screen !== 'aim' || !$('scope')) return;
+  const v = meanVec(160);
+  const scope = $('scope');
+  const ref = locks.length ? locks[locks.length - 1].heading_deg : null;
+  if (!v || v.flat) {
+    $('br').innerHTML = brackets(70); $('ro-h').textContent = 'HDG ---'; $('ro-t').textContent = 'TILT ---'; $('ro-s').textContent = v ? 'RAISE THE PHONE' : source === 'sensor' ? 'NO MOTION DATA' : '';
+    scope.classList.remove('steady'); if ($('lock')) { $('lock').dataset.state = 'wait'; $('lock').textContent = v ? 'HOLD IT UP LIKE A CAMERA' : 'WAITING FOR SENSOR'; }
+    return;
+  }
+  if (!target) $('hint').textContent = '';
+  const g = v.steady ? 34 : 34 + Math.min(40, 10 + v.spread * 6);
+  $('br').innerHTML = brackets(g);
+  scope.classList.toggle('steady', v.steady);
+  $('ro-h').textContent = ref == null ? 'HDG ' + String(Math.round(v.h)).padStart(3, '0') + '°' : 'Δ ' + (W180(v.h - ref) >= 0 ? '+' : '') + Math.round(W180(v.h - ref)) + '°';
+  $('ro-t').textContent = 'TILT ' + (v.t >= 0 ? '+' : '') + v.t.toFixed(0) + '°';
+  $('ro-s').textContent = v.steady ? 'STEADY' : '';
+  if ($('lock')) { $('lock').dataset.state = v.steady ? 'ready' : 'wait'; $('lock').textContent = v.steady ? 'LOCK' : 'HOLD STEADY'; }
+  // heading tape, 3 px per degree, labels relative to the last Lock
+  let t = '';
+  const px = 3, base = Math.floor(v.h / 5) * 5;
+  for (let d = base - 55; d <= base + 55; d += 5) {
+    const x = 150 + W180(d - v.h) * px;
+    if (x < 8 || x > 292) continue;
+    const major = d % 10 === 0;
+    t += `<path class="tick" d="M${x.toFixed(1)} ${major ? 262 : 268}V276"/>`;
+    if (ref != null && W360(d) % 30 === 0) t += `<text class="tlab" x="${x.toFixed(1)}" y="256" text-anchor="middle">${Math.round(W180(d - ref))}</text>`;
+  }
+  t += '<path class="tgt" d="M150 280l-6 10h12z"/>';
+  const ph = predictedHeading(target);
+  const edge = $('edge');
+  if (ph != null) {
+    const dx = W180(ph - v.h);
+    if (Math.abs(dx) * px < 135) { t += `<path class="tgt" d="M${(150 + dx * px).toFixed(1)} 248l-7-12h14z"/>`; edge.hidden = true; }
+    else { edge.hidden = false; edge.className = 'edge ' + (dx > 0 ? 'r' : 'l'); edge.textContent = (dx > 0 ? '→ ' : '← ') + Math.round(Math.abs(dx)) + '°'; }
+    $('hint').innerHTML = Math.abs(dx) < 4 ? '<b>On it.</b> Hold still and Lock.' : `Turn <b>${dx > 0 ? 'right' : 'left'} ${Math.round(Math.abs(dx))}°</b> from here`;
+  } else if (target) { edge.hidden = true; $('hint').textContent = locks.length ? 'Look for the card on the wall.' : 'Any order works. Start with the card you see best.'; }
+  else edge.hidden = true;
+  $('tape').innerHTML = t;
+}
+
+// ---------- settings and keys ----------
+function openSettings() { $('sheet').hidden = false; $('baro').value = Math.round(baro); }
+$('open-settings').onclick = openSettings;
+$('close-settings').onclick = () => { $('sheet').hidden = true; };
+$('sheet').onclick = e => { if (e.target === $('sheet')) $('sheet').hidden = true; };
+$('source').onchange = e => { source = e.target.value; samples = []; render(); };
+$('sigma').onchange = e => { const v = Number(e.target.value); if (v >= 0.5 && v <= 10) { sigma = v; if (locks.length) { solveNow(); render(); } } };
+$('baro').onchange = e => { const v = Number(e.target.value); if (Number.isFinite(v)) { baro = v; if (locks.length) { solveNow(); render(); post(); } } };
+$('reset').onclick = () => { $('sheet').hidden = true; resetFix(); };
+$('assist').onclick = () => {
+  if (source !== 'keyboard' || !target) return;
+  const d = model.demo, noise = (Math.random() - 0.5) * 3;
+  kb.h = W360(S.bearingFrom(model, d.e_m, d.n_m, target) + 37 + noise); kb.moved = performance.now() - 1000;
+  $('sheet').hidden = true;
+};
+setInterval(() => {
+  const s = $('sensor-debug');
+  if (s) { const v = meanVec(300); s.textContent = `Stream ${orientMode}. ` + (v ? `Heading ${v.h.toFixed(1)}°, tilt ${v.t.toFixed(1)}°, wobble ${v.spread.toFixed(2)}°, ${samples.length} samples` : 'No usable aim yet (lay flat means the camera points down).'); }
+  const mv = $('motion-v');
+  if (screen === 'check' && mv) {
+    const live = performance.now() - sensorSeen < 15000 && sensorSeen > 0;
+    mv.className = 'v ' + (source === 'keyboard' ? 'warn' : live ? 'ok' : 'off');
+    mv.textContent = source === 'keyboard' ? 'Keyboard' : live ? (orientMode === 'relative' ? 'Gyro' : 'Fused') + ' streaming' : 'Waiting';
+    $('chip-mode').textContent = source === 'keyboard' ? 'KEYBOARD' : 'TERRAIN';
+  }
+}, 1000);
+window.addEventListener('keydown', e => {
+  if (!$('sheet').hidden || ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+  const k = e.key;
+  if (k.startsWith('Arrow')) {
+    if (source !== 'keyboard') { source = 'keyboard'; $('source').value = 'keyboard'; }
+    const f = e.shiftKey ? 0.25 : 1;
+    if (k === 'ArrowLeft') kb.h = W360(kb.h - 2 * f);
+    if (k === 'ArrowRight') kb.h = W360(kb.h + 2 * f);
+    if (k === 'ArrowUp') kb.t = Math.min(60, kb.t + f);
+    if (k === 'ArrowDown') kb.t = Math.max(-60, kb.t - f);
+    kb.moved = performance.now(); e.preventDefault();
+  } else if (k === 'Enter' && screen === 'aim' && e.target.tagName !== 'BUTTON') { e.preventDefault(); doLock(); }
+  else if (k === 'Enter' && screen === 'check') { e.preventDefault(); start(); }
+  else if (k === 'n' || k === 'N') skipTarget();
+  else if (k === 'u' || k === 'U') undo();
+  else if (k === 'a' || k === 'A') $('assist').onclick();
+  else if (k === 's' || k === 'S') openSettings();
+});
+
+// ---------- load ----------
+Promise.all([fetch('/data/moran.json', { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error('Cannot load terrain data'); return r.json(); }),
+  new Promise((res, rej) => { topo = new Image(); topo.onload = res; topo.onerror = () => rej(new Error('Cannot load the topo map')); topo.src = '/topo/moran.jpg'; })])
+  .then(([json]) => {
+    model = S.load(json);
+    wall = model.demo.wall; wallIds = wall.map(w => w.peak_id);
+    baro = model.demo.baro_m; target = model.demo.first_peak_id;
+    if (!('ondeviceorientation' in window) || !('ontouchstart' in window)) { source = 'keyboard'; $('source').value = 'keyboard'; }
+    render(); requestAnimationFrame(frame);
+    window.addEventListener('resize', () => { if ($('map')) drawMap($('map'), screen === 'fix' || locks.length >= 2); });
+  })
+  .catch(err => { $('main').innerHTML = `<p class="err">${err.message}. Start the server with python -I ridgeline/server.py and open http://localhost:8768.</p>`; });
+window.RIDGELINE_DEBUG = { get locks() { return locks; }, get result() { return result; }, get target() { return target; }, lock: doLock, kb, assist: () => $('assist').onclick() };
+</script>
+</body>
+</html>
