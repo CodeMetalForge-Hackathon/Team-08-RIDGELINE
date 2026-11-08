@@ -107,6 +107,9 @@ h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em;font-weight:75
 .big-pm{font:800 52px/1 var(--mono);letter-spacing:-.03em;color:var(--cyan)}
 .big-pm small{font:600 15px var(--font);color:var(--muted);letter-spacing:.04em;margin-left:8px}
 .foot{font-size:12px;color:var(--faint);line-height:1.5}
+.atak{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:16px}
+.atak .leg b{color:var(--text)}
+.cot{font:11px/1.45 var(--mono);color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:10px;margin:0;max-height:180px;overflow:auto;white-space:pre-wrap;word-break:break-all}
 .sheet{position:fixed;inset:0;background:rgba(5,8,11,.72);display:flex;align-items:flex-end;z-index:20}
 .sheet .in{background:var(--panel);border-top:1px solid var(--line2);width:100%;max-width:520px;margin:0 auto;padding:16px 16px max(16px,env(safe-area-inset-bottom));border-radius:12px 12px 0 0;display:flex;flex-direction:column;gap:12px;max-height:85svh;overflow:auto}
 .sheet label{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--muted)}
@@ -365,7 +368,7 @@ function post() {
 // ---------- relay to the PC ----------
 // Only the newest state matters. While the cable or the server is down the newest body waits here
 // (older ones are dropped), retries every 2 s and on 'online', and goes out once the link is back.
-const relay = { body: null, seq: 0, busy: false, live: null, checked: 0 };
+const relay = { body: null, seq: 0, busy: false, live: null, checked: 0, ver: null, sent: null };
 function timed(ms) {
   const ctl = typeof AbortController === 'function' ? new AbortController() : null;
   const t = setTimeout(() => { if (ctl) ctl.abort(); }, ms);
@@ -379,17 +382,23 @@ function setLink(ok) {
 function flush() {
   if (relay.busy || relay.body == null) return;
   relay.busy = true;
-  const seq = relay.seq, t = timed(4000);
-  lastPost = fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: relay.body, cache: 'no-store', signal: t.signal })
-    .then(r => { if (r.status >= 500) throw new Error('HTTP ' + r.status); if (relay.seq === seq) relay.body = null; return true; })
+  const seq = relay.seq, t = timed(4000), sent = relay.body;
+  lastPost = fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: sent, cache: 'no-store', signal: t.signal })
+    .then(r => { if (r.status >= 500) throw new Error('HTTP ' + r.status); return r.json().catch(() => ({})); })
+    .then(j => { if (Number.isFinite(j.version)) relay.ver = j.version; relay.sent = sent; if (relay.seq === seq) relay.body = null; return true; })
     .catch(() => false)
-    .then(ok => { t.done(); relay.busy = false; setLink(ok); if (ok && relay.body != null) flush(); return ok; });
+    .then(ok => { t.done(); relay.busy = false; setLink(ok); if (ok && relay.body != null) flush(); else if (ok && screen === 'fix') setTimeout(atakRefresh, 250); return ok; });
 }
 function ping() {
   if (relay.busy || relay.body != null) return;
   relay.busy = true;
   const t = timed(4000);
-  fetch('/api/state', { cache: 'no-store', signal: t.signal }).then(r => r.ok, () => false)
+  fetch('/api/state', { cache: 'no-store', signal: t.signal }).then(r => r.ok ? r.json().then(j => {
+    // the PC server restarted (its version went back): send the newest state again so the board and ATAK have the fix
+    if (relay.ver != null && Number.isFinite(j.version) && j.version < relay.ver && relay.sent && relay.body == null) { relay.body = relay.sent; relay.seq++; }
+    if (Number.isFinite(j.version)) relay.ver = j.version;
+    return true;
+  }, () => true) : false, () => false)
     .then(ok => { t.done(); relay.busy = false; setLink(ok); if (relay.body != null && ok) flush(); });
 }
 setInterval(() => { if (relay.body != null) flush(); else if (performance.now() - relay.checked > 5000) ping(); }, 2000);
@@ -729,11 +738,14 @@ function render() {
       <div class="map big" id="map-wrap"><canvas id="map"></canvas><span class="maplab">${model.json.name} · USGS 3DEP</span></div>
       <p class="status">${o && o.mass >= 0.02 ? `<b>Second place: ${Math.round(o.mass * 100)}%</b>, ${fmtM(o.distance_m)} ${dir}. Lock one more peak to rule it out.` : '<b>One place fits.</b> No second candidate above 2%.'}</p>
       ${goHtml()}
+      ${atakHtml()}
       <div class="stack"><div class="pair"><button class="btn" id="back">Back</button><button class="btn" id="again">New fix</button></div></div>
       <p class="foot">Solved on this phone in ${Math.round(result.ms)} ms from ${locks.length} angles and a barometer band. 30 m terrain grid, USGS 3DEP lidar. Demo barometer is simulated.</p>`;
     decrypt($('coords'), ns + '\n' + ew);
     $('coords').style.whiteSpace = 'pre-line';
     $('back').onclick = () => go('aim'); $('again').onclick = resetFix;
+    $('cot-copy').onclick = copyCot;
+    setTimeout(atakRefresh, 700);   // after the post of this fix has reached the PC
     wireGo();
     if (!home) { home = { lon: e.lon, lat: e.lat }; store.set('home', home); }
     loadNav();
@@ -833,6 +845,42 @@ function skipTarget() {
 }
 function undo() { if (!locks.length) return; locks.pop(); solveNow(); render(); post(); }
 function resetFix() { locks = []; skip = 0; shownPm = null; solveNow(); target = model.demo.first_peak_id; go('aim'); post(); }
+
+// ---------- ATAK hand-off: server.py builds the CoT and serves ATAK over the cable ----------
+const atakLast = { st: 'Checking the link to ATAK…', cot: '', ok: false };
+function atakHtml() {
+  return `<section class="atak" aria-label="Send to ATAK">
+    <div class="go-head"><h2>Send to ATAK</h2><button class="btn ghost" id="cot-copy" style="min-height:40px"${atakLast.ok && atakLast.cot ? '' : ' disabled'}>Copy</button></div>
+    <p class="leg" id="atak-st" aria-live="polite">${atakLast.st}</p>
+    <pre class="cot" id="cot" tabindex="0"${atakLast.ok ? '' : ' hidden'}>${esc(atakLast.cot)}</pre>
+  </section>`;
+}
+function atakShow() {
+  if (!$('cot')) return;
+  $('atak-st').innerHTML = atakLast.st; $('cot').textContent = atakLast.cot; $('cot').hidden = !atakLast.ok;
+  $('cot-copy').disabled = !(atakLast.ok && atakLast.cot);
+}
+function atakRefresh() {
+  if (screen !== 'fix' || !$('cot')) return;
+  const t = timed(3000), get = (u, json) => fetch(u, { cache: 'no-store', signal: t.signal }).then(r => { if (!r.ok) throw new Error(u); return json ? r.json() : r.text(); });
+  Promise.all([get('/api/atak', true), get('/api/cot', false)]).then(([st, xml]) => {
+    const ago = Number.isFinite(st.last_sent) ? Math.max(0, Math.round(Date.now() / 1000 - st.last_sent)) : null;
+    atakLast.ok = true; atakLast.cot = String(xml || '').trim() || 'No fix on the PC yet.';
+    atakLast.st = `<b>${st.connected ? 'ATAK connected' : 'ATAK not connected'}</b> · ${st.sent || 0} sent${ago == null ? '' : ` · last ${ago < 90 ? ago + ' s' : Math.round(ago / 60) + ' min'} ago`}${!st.connected && st.cot_port ? `. In ATAK add the TAK Server 127.0.0.1, port ${st.cot_port}, TCP.` : ''}`;
+  }, () => {
+    atakLast.ok = false; atakLast.cot = '';
+    atakLast.st = '<b>Connect the cable to hand off to ATAK.</b>';
+  }).then(() => { t.done(); atakShow(); });
+}
+setInterval(() => { if (screen === 'fix') atakRefresh(); }, 5000);
+function copyCot() {
+  const txt = $('cot').textContent, btn = $('cot-copy');
+  const said = ok => { btn.textContent = ok ? 'Copied' : 'Select and copy'; setTimeout(() => { if ($('cot-copy')) $('cot-copy').textContent = 'Copy'; }, 1600); };
+  const byHand = () => { try { const r = document.createRange(); r.selectNodeContents($('cot')); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); return document.execCommand('copy'); } catch (e) { return false; } };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(() => said(true), () => said(byHand()));
+  else said(byHand());
+}
+const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // ---------- expected skyline toward the next peak (ridgeline/skyline.js) ----------
 // From the current estimate, after the 2nd Lock, so the person can compare the shape with what they see.
