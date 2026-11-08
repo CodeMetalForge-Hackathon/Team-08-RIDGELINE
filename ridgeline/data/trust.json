@@ -1,0 +1,192 @@
+{
+ "schema": "ridgeline-trust/v1",
+ "made": "2026-11-08T07:25:43.535Z",
+ "seed": 2026,
+ "seconds": 104,
+ "area": "Mount Moran",
+ "grid_m": 30,
+ "solver_sigma_deg": 3,
+ "compass_bias_sd_deg": 7,
+ "demo_wall": [
+  "Pk 2958",
+  "Raynolds Peak",
+  "Bivouac Peak"
+ ],
+ "n_demo": 120,
+ "n_random": 100,
+ "note": "Simulated Locks with Gaussian aim error, solved with the app settings. Not a hand-held test.",
+ "rows": [
+  {
+   "aim_deg": 1,
+   "demo": {
+    "angles": {
+     "n": 120,
+     "median_m": 46,
+     "p90_m": 97,
+     "coverage": 1,
+     "r95_median_m": 276,
+     "reaim_rate": 0,
+     "slowest_ms": 167
+    },
+    "compass": {
+     "n": 120,
+     "median_m": 191,
+     "p90_m": 981,
+     "coverage": 0.592,
+     "r95_median_m": 222,
+     "reaim_rate": 0.092,
+     "slowest_ms": 160
+    }
+   },
+   "random": {
+    "angles": {
+     "n": 100,
+     "median_m": 54,
+     "p90_m": 177,
+     "coverage": 1,
+     "r95_median_m": 545,
+     "reaim_rate": 0,
+     "slowest_ms": 142
+    },
+    "compass": {
+     "n": 100,
+     "median_m": 185,
+     "p90_m": 560,
+     "coverage": 0.63,
+     "r95_median_m": 261,
+     "reaim_rate": 0.12,
+     "slowest_ms": 72
+    }
+   }
+  },
+  {
+   "aim_deg": 3,
+   "demo": {
+    "angles": {
+     "n": 120,
+     "median_m": 103,
+     "p90_m": 225,
+     "coverage": 0.983,
+     "r95_median_m": 293,
+     "reaim_rate": 0,
+     "slowest_ms": 86
+    },
+    "compass": {
+     "n": 120,
+     "median_m": 204,
+     "p90_m": 997,
+     "coverage": 0.542,
+     "r95_median_m": 222,
+     "reaim_rate": 0.108,
+     "slowest_ms": 65
+    }
+   },
+   "random": {
+    "angles": {
+     "n": 100,
+     "median_m": 136,
+     "p90_m": 604,
+     "coverage": 1,
+     "r95_median_m": 562,
+     "reaim_rate": 0,
+     "slowest_ms": 106
+    },
+    "compass": {
+     "n": 100,
+     "median_m": 222,
+     "p90_m": 667,
+     "coverage": 0.65,
+     "r95_median_m": 263,
+     "reaim_rate": 0.1,
+     "slowest_ms": 143
+    }
+   }
+  },
+  {
+   "aim_deg": 6,
+   "demo": {
+    "angles": {
+     "n": 120,
+     "median_m": 132,
+     "p90_m": 528,
+     "coverage": 0.783,
+     "r95_median_m": 330,
+     "reaim_rate": 0.042,
+     "slowest_ms": 132
+    },
+    "compass": {
+     "n": 120,
+     "median_m": 265,
+     "p90_m": 988,
+     "coverage": 0.425,
+     "r95_median_m": 213,
+     "reaim_rate": 0.242,
+     "slowest_ms": 92
+    }
+   },
+   "random": {
+    "angles": {
+     "n": 100,
+     "median_m": 305,
+     "p90_m": 1798,
+     "coverage": 0.77,
+     "r95_median_m": 612,
+     "reaim_rate": 0.06,
+     "slowest_ms": 96
+    },
+    "compass": {
+     "n": 100,
+     "median_m": 271,
+     "p90_m": 1181,
+     "coverage": 0.43,
+     "r95_median_m": 323,
+     "reaim_rate": 0.28,
+     "slowest_ms": 63
+    }
+   }
+  },
+  {
+   "aim_deg": 10,
+   "demo": {
+    "angles": {
+     "n": 120,
+     "median_m": 450,
+     "p90_m": 4958,
+     "coverage": 0.5,
+     "r95_median_m": 363,
+     "reaim_rate": 0.208,
+     "slowest_ms": 93
+    },
+    "compass": {
+     "n": 120,
+     "median_m": 406,
+     "p90_m": 1032,
+     "coverage": 0.308,
+     "r95_median_m": 231,
+     "reaim_rate": 0.508,
+     "slowest_ms": 65
+    }
+   },
+   "random": {
+    "angles": {
+     "n": 100,
+     "median_m": 498,
+     "p90_m": 2432,
+     "coverage": 0.52,
+     "r95_median_m": 558,
+     "reaim_rate": 0.14,
+     "slowest_ms": 190
+    },
+    "compass": {
+     "n": 100,
+     "median_m": 434,
+     "p90_m": 1350,
+     "coverage": 0.31,
+     "r95_median_m": 263,
+     "reaim_rate": 0.54,
+     "slowest_ms": 55
+    }
+   }
+  }
+ ]
+}

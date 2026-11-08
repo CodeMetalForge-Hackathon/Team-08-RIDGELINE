@@ -50,6 +50,16 @@ h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em;font-weight:75
 .dots span.bad{background:var(--red)}
 .scope{position:relative;aspect-ratio:1/1;max-height:42svh;margin:0 auto;width:100%;border-radius:var(--r);background:radial-gradient(circle at 50% 50%,#132430 0%,#0d1820 62%,#0a1016 100%);border:1px solid var(--line);overflow:hidden}
 .scope svg{position:absolute;inset:0;width:100%;height:100%}
+.scope video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .3s}
+.scope.cam video{opacity:1}
+.scope.cam svg{filter:drop-shadow(0 0 1.5px rgba(0,0,0,.85))}
+.scope.cam .ring{stroke:rgba(255,255,255,.4)}
+.scope.cam .hair{stroke:rgba(255,255,255,.8)}
+.scope.cam .tick{stroke:rgba(255,255,255,.75)}
+.scope.cam .tlab{fill:#fff}
+.scope.cam .readout{color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.9)}
+.check{display:flex;flex-direction:row!important;align-items:center;gap:10px!important;color:var(--text)!important}
+.check input{width:22px;height:22px;accent-color:var(--cyan)}
 .scope .ring{fill:none;stroke:#1f3440;stroke-width:1}
 .scope .hair{stroke:#2b4652;stroke-width:1}
 .scope .br{fill:none;stroke:var(--text);stroke-width:3;stroke-linecap:square;transition:stroke .2s}
@@ -140,6 +150,7 @@ h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em;font-weight:75
     <div class="eyebrow"><span>SETTINGS</span><button class="btn ghost" id="close-settings" style="min-height:40px">Close</button></div>
     <label>Orientation input<select id="source"><option value="sensor">Phone motion sensor</option><option value="keyboard">Keyboard (PC)</option></select></label>
     <p class="foot" id="sensor-debug">No motion data yet.</p>
+    <label class="check"><input type="checkbox" id="camopt"> Rear camera behind the crosshair</label>
     <label>Aim error assumed (deg, 1 sigma)<input id="sigma" type="number" min="0.5" max="10" step="0.5" value="3"></label>
     <label>Barometer altitude (m, simulated)<input id="baro" type="number" step="1"></label>
     <button class="btn" id="assist">Demo assist: aim at the current card (keyboard only)</button>
@@ -476,7 +487,7 @@ function render() {
     const pmText = done ? '±' + fmtM(result.r95_m) : '—';
     m.innerHTML = `<div class="eyebrow"><span>02 · TERRAIN FIX</span><span class="dots">${[0, 1, 2].map(i => `<span class="${i < done ? (st === 'mismatch' && sus && sus.lock_index === i ? 'bad' : 'on') : ''}"></span>`).join('')}</span></div>
       <div><div class="target-label">${target ? 'AIM AT · CARD ' + cardNo(target) : 'FIX COMPLETE'}</div><div class="target">${target ? nameOf(target) : 'Position found'}</div><div class="hint" id="hint"></div></div>
-      <div class="scope" id="scope"><svg viewBox="0 0 300 300" aria-hidden="true">
+      <div class="scope" id="scope"><video id="cam" playsinline muted autoplay aria-hidden="true"></video><svg viewBox="0 0 300 300" aria-hidden="true">
         <circle class="ring" cx="150" cy="150" r="118"/><circle class="ring" cx="150" cy="150" r="70"/>
         <path class="hair" d="M150 22V112M150 188V246M22 150H112M188 150H278"/>
         <g id="br"></g><circle class="center" cx="150" cy="150" r="2.6"/>
@@ -492,6 +503,7 @@ function render() {
     if ($('see')) $('see').onclick = () => go('fix');
     $('skip').onclick = skipTarget; $('undo').onclick = undo;
     $('map-wrap').onclick = () => { $('map-wrap').classList.toggle('big'); $('map-wrap').classList.toggle('small'); drawMap($('map'), true); };
+    camAttach(); camStart();
     requestAnimationFrame(() => {
       const arc = $('arc');
       if (arc) arc.style.strokeDashoffset = String(163.4 * (1 - (st === 'mismatch' ? 0.15 : Math.max(done ? 0.08 : 0, result ? result.confidence : 0))));
@@ -560,7 +572,30 @@ function wireGo() {
     computeRoute(); renderGo(); post();
   };
 }
-function go(next) { screen = next; render(); window.scrollTo(0, 0); }
+function go(next) { if (next !== 'aim') camStop(); screen = next; render(); window.scrollTo(0, 0); }
+
+// ---------- rear camera behind the crosshair ----------
+// localhost counts as a secure page, so getUserMedia works over adb reverse without HTTPS.
+// The centre of the picture is the camera axis, the same direction the orientation math calls the aim.
+let camStream = null, camBusy = false, camErr = null;
+let camWanted = store.get('cam', 'ontouchstart' in window);
+async function camStart() {
+  if (!camWanted || camStream || camBusy || screen !== 'aim' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+  camBusy = true;
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } });
+    camErr = null;
+    if (screen !== 'aim') camStop(); else camAttach();
+  } catch (e) { camErr = e.name || 'Error'; }
+  camBusy = false;
+}
+function camStop() { if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; } camAttach(); }
+function camAttach() {
+  const v = $('cam'), sc = $('scope');
+  if (!v || !sc) return;
+  if (camStream) { if (v.srcObject !== camStream) v.srcObject = camStream; v.play().catch(() => {}); sc.classList.add('cam'); }
+  else { v.srcObject = null; sc.classList.remove('cam'); }
+}
 function start() {
   // fire and forget: some browsers never settle these promises
   try { if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {}); } catch (e) { /* optional */ }
@@ -638,7 +673,8 @@ function frame() {
 }
 
 // ---------- settings and keys ----------
-function openSettings() { $('sheet').hidden = false; $('baro').value = Math.round(baro); }
+function openSettings() { $('sheet').hidden = false; $('baro').value = Math.round(baro); $('camopt').checked = camWanted; }
+$('camopt').onchange = e => { camWanted = e.target.checked; store.set('cam', camWanted); if (camWanted) camStart(); else camStop(); };
 $('open-settings').onclick = openSettings;
 $('close-settings').onclick = () => { $('sheet').hidden = true; };
 $('sheet').onclick = e => { if (e.target === $('sheet')) $('sheet').hidden = true; };

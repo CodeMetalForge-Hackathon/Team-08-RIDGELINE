@@ -62,7 +62,7 @@ td.r{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
     <div id="others" class="sub"></div>
     <div id="route" class="route" hidden></div>
     <div class="reveal" id="reveal" hidden></div>
-    <div class="keys"><kbd>R</kbd> answer check &nbsp; <kbd>C</kbd> clear &nbsp; <kbd>F</kbd> full screen<br>Click the map to drop a test pilot there. RIDGELINE simulates three Locks with 3° aim error from that spot and solves again.<br><span id="foot"></span></div>
+    <div class="keys"><kbd>R</kbd> answer check &nbsp; <kbd>C</kbd> clear &nbsp; <kbd>F</kbd> full screen &nbsp; <kbd>T</kbd> trust numbers<br>Click the map to drop a test pilot there. RIDGELINE simulates three Locks with 3° aim error from that spot and solves again.<br><span id="foot"></span></div>
   </aside>
 </div>
 <script src="/solver.js"></script>
@@ -302,6 +302,7 @@ addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (k === 'r') { showTruth = !showTruth; if (state) solveFrom(state.obs); panel(); }
   if (k === 'c') { showTruth = false; fetch('/api/reset', { method: 'POST' }); }
+  if (k === 't') location.href = '/trust';
   if (k === 'f') { if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); else document.exitFullscreen(); }
 });
 $('cv').addEventListener('click', testPilot);

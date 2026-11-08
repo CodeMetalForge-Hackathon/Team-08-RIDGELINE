@@ -33,6 +33,8 @@
     enough_r95_m: 300,
     enough_elsewhere: 0.1,
     mismatch_chi2: 14,
+    absolute_bearings: false,   // true: compass bearings, no offset is fitted (used only to compare against)
+    diagnose: true,             // false skips the relabel search on a mismatch (fast batch statistics)
   });
 
   function bytesFromB64(s) {
@@ -130,7 +132,16 @@
       const d = m.elev[i] + m.eye - obs.baro_m;
       lp -= (d * d) / (2 * o.baro_sigma_m * o.baro_sigma_m);
     }
-    if (L >= 2) {
+    if (o.absolute_bearings && L >= 1) {
+      let q = 0;
+      for (let k = 0; k < L; k++) {
+        const e = wrap180(obs.locks[k].heading_deg - B[k][i]);
+        q += e * e;
+        if (out) out.res[k] = e;
+      }
+      if (out) out.offset = 0;
+      lp -= q / (2 * o.bearing_sigma_deg * o.bearing_sigma_deg);
+    } else if (L >= 2) {
       let ss = 0, cc = 0;
       for (let k = 0; k < L; k++) {
         const r = wrap180(obs.locks[k].heading_deg - B[k][i]) * D2R;
@@ -304,11 +315,11 @@
     let suspect = null;
     if (L >= 3 && chi2 > o.mismatch_chi2) {
       status = 'mismatch';
-      suspect = diagnose(m, obs, o);
+      suspect = o.diagnose ? diagnose(m, obs, o) : null;
     } else if (L >= 3 && r95 <= o.enough_r95_m && elsewhere <= o.enough_elsewhere) {
       status = 'enough';
     }
-    const lines = L >= 2 ? obs.locks.map((l, k) => ({
+    const lines = L >= 2 || (o.absolute_bearings && L >= 1) ? obs.locks.map((l, k) => ({
       peak_id: l.peak_id,
       bearing_true_deg: wrap360(l.heading_deg - fit.offset),
       residual_deg: fit.res[k],
