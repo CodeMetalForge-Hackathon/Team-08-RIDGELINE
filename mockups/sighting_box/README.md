@@ -117,7 +117,7 @@ phone_state.jsonのlock_3.visible_peaksを優先し、その最終推定地点�
 
 自動更新はない。box_scene.jsonがサーバーの場面の正で、poster_sheet.htmlにも同じ値を埋め込んで単体で開けるようにしている。場面を変えるときはCodexへ両方の同時更新と整合性確認を依頼する。今回の範囲はこのフォルダだけなので、共通のAIツール取説の索引は変更していない。
 
-組み立て手順の原本は [照準の箱の組み立て手順](C:/Users/seika/Obsidian/2_Areas/BHCC/マネーハンティング/2026-11-07_CodeMetalForge_照準の箱の組み立て手順.md)。今回の違いは、山の順をphone_state.jsonへ合わせたこと、位置推定の前に成功音を鳴らさないこと、未特定の機種を図で断定しないこと。
+組み立て手順の原本はチームのメモにあり、このリポジトリには入れていない。今回の違いは、山の順をphone_state.jsonへ合わせたこと、位置推定の前に成功音を鳴らさないこと、未特定の機種を図で断定しないこと。
 
 ## やめたいとき
 
@@ -139,7 +139,7 @@ Codex内蔵ブラウザで12段を表示し、前へと次へ、チェック保�
 
 ## ファイルの場所
 
-全ファイルのリンクは [成果物一覧](C:/Users/seika/Obsidian/_ai/workspace/2026-11-08_codemetal_sighting_box/outputs/files.md)。作業と再開は [STATUS.md](C:/Users/seika/Obsidian/_ai/workspace/2026-11-08_codemetal_sighting_box/STATUS.md)。
+ファイルはこのフォルダにあるもので全部で、作業の記録はリポジトリの外のチームのメモにある。
 
 手元の画面のチャットに伝える文。
 

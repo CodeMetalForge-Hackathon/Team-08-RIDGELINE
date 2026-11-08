@@ -26,7 +26,7 @@ python -I -m pip install numpy==2.2.6 scipy==1.16.1 rasterio==1.5.2
 node verify_ui.mjs
 ```
 
-The default reference is `C:\Users\seika\Obsidian\3_Resources\attachments\2026-11-07_CodeMetalForge_地図見本\stats.json`. Use `--stats <path>` when moving the prototype. The exporter reads `input/dem_5m.tif`. The supplied 10 m file is retained but is not sufficient for this exporter's fine-slope check. The 1 m source archive is not needed and was not copied into the Vault.
+The default reference is the `stats.json` of the team's map samples, which is not in this repository. Use `--stats <path>` when moving the prototype. The exporter reads `input/dem_5m.tif`. The supplied 10 m file is retained but is not sufficient for this exporter's fine-slope check. The 1 m source archive is not needed and was not copied into the Vault.
 
 ## Show the demo
 
@@ -153,4 +153,4 @@ flowchart LR
 
 Stop the local server with Ctrl+C in its terminal. Reloading resets the browser demo. Nothing is installed as a service and no automation was created.
 
-All files are in `C:\Users\seika\Obsidian\_ai\workspace\2026-11-08_codemetal_phone_screen`. The complete file list is in [FILES.md](FILES.md), and verification evidence is in [VALIDATION.md](VALIDATION.md). The next reviewer is Claude Code. No Team-8 files, 3D-map files, notes, branches, commits or remotes were changed.
+All files are in this folder, and verification evidence is in [VALIDATION.md](VALIDATION.md). The next reviewer is Claude Code. No Team-8 files, 3D-map files, notes, branches, commits or remotes were changed.
