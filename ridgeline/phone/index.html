@@ -234,7 +234,7 @@ html.night .lock[data-state=ready]{animation:none;border-color:var(--amber);box-
 <div class="app">
   <header class="top">
     <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 26 13 6 19 17 23 10 30 26M9 26l7-12 7 12" fill="none" stroke="#86dce9" stroke-width="2.2" stroke-linejoin="round"/></svg>RIDGELINE</div>
-    <span class="chip off" id="chip-gps">GPS NOT USED</span>
+    <span class="chip off" id="chip-gps">GPS UNUSED</span>
     <span class="chip on" id="chip-mode">TERRAIN</span>
     <button class="icon-btn" id="open-settings" aria-label="Settings"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg></button>
   </header>
@@ -675,17 +675,6 @@ function drawMap(canvas, zoom) {
     for (const q of nav.route.runs) { ctx.strokeStyle = col[q.cls]; ctx.lineWidth = 4.5 * dpr; line(q.path); }
     ctx.restore();
   }
-  const ws0 = screen === 'fix' ? startNow() : null;
-  if (ws0 && ws0.moved) {   // candidate start only; no line implies an unverified walk from the fix
-    const q = S.toEN(model, ws0.lon, ws0.lat), x = X(q.e), y = Y(q.n), s = dpr;
-    ctx.save(); ctx.strokeStyle = '#2b2418'; ctx.lineWidth = 2 * s;
-    ctx.beginPath(); ctx.arc(x, y, 5 * s, 0, Math.PI * 2); ctx.fillStyle = '#f5f1e6'; ctx.fill(); ctx.lineWidth = 2.2 * s; ctx.stroke();
-    ctx.font = `${11 * s}px sans-serif`; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-    const label = 'Candidate start', labelX = Math.max(4 * s, Math.min(x + 9 * s, W - ctx.measureText(label).width - 4 * s));
-    ctx.lineWidth = 3 * s; ctx.strokeStyle = '#f5f1e6'; ctx.strokeText(label, labelX, y - 7 * s);
-    ctx.fillStyle = '#2b2418'; ctx.fillText(label, labelX, y - 7 * s);
-    ctx.restore();
-  }
   if (screen === 'fix') {   // HIDE ring and SIGNAL flag, as on the board
     for (const d of spotDests()) {
       const q = S.toEN(model, d.lon, d.lat), x = X(q.e), y = Y(q.n), s = dpr;
@@ -737,6 +726,17 @@ function drawMap(canvas, zoom) {
       ctx.font = `600 ${11 * dpr}px "Noto Sans JP",sans-serif`; ctx.fillStyle = '#2b2418';
       ctx.fillText(p.name, x + 9 * dpr, y + 4 * dpr);
     }
+  }
+  const ws0 = screen === 'fix' ? startNow() : null;
+  if (ws0 && ws0.moved) {   // candidate start only; no line implies an unverified walk from the fix. Drawn after the marks and pencil lines so its label stays readable
+    const q = S.toEN(model, ws0.lon, ws0.lat), x = X(q.e), y = Y(q.n), s = dpr;
+    ctx.save(); ctx.strokeStyle = '#2b2418'; ctx.lineWidth = 2 * s;
+    ctx.beginPath(); ctx.arc(x, y, 5 * s, 0, Math.PI * 2); ctx.fillStyle = '#f5f1e6'; ctx.fill(); ctx.lineWidth = 2.2 * s; ctx.stroke();
+    ctx.font = `700 ${11 * s}px "Noto Sans JP",sans-serif`; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    const label = 'Candidate start', labelX = Math.max(4 * s, Math.min(x + 9 * s, W - ctx.measureText(label).width - 4 * s));
+    ctx.lineWidth = 3 * s; ctx.strokeStyle = '#f5f1e6'; ctx.strokeText(label, labelX, y - 7 * s);
+    ctx.fillStyle = '#2b2418'; ctx.fillText(label, labelX, y - 7 * s);
+    ctx.restore();
   }
   const gc = screen === 'fix' ? gpsCheck() : null;
   if (gc) {   // the test GPS reading: red X for disagreement, green ring for consistency
@@ -1079,7 +1079,7 @@ $('baro').onchange = e => { const v = Number(e.target.value); if (Number.isFinit
 $('reset').onclick = () => { $('sheet').hidden = true; clearMarks(); resetFix(); };   // the demo reset: a new fix and no saved marks
 $('clear-marks').onclick = () => { clearMarks(); if (screen === 'fix') { render(); post(); } };
 function gpsChanged() {
-  $('chip-gps').textContent = gpsMode === 'off' ? 'GPS NOT USED' : 'GPS TEST';
+  $('chip-gps').textContent = gpsMode === 'off' ? 'GPS UNUSED' : 'GPS TEST';
   if (screen === 'fix') render();
   if (result && result.n_locks) post();
 }
