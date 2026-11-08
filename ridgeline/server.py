@@ -21,7 +21,9 @@ ATAK (Cursor on Target, events built by cot.py)
 from __future__ import annotations
 
 import argparse
+import errno
 import importlib.util
+import itertools
 import json
 import math
 import socket
@@ -135,6 +137,7 @@ class Atak:
         self._push_cv = threading.Condition()
         self._push_deletes = []
         self._push_due = False
+        self._ids = itertools.count(1)
 
     # ---- threads ----
     def start(self) -> None:
@@ -192,7 +195,7 @@ class Atak:
         try:
             srv = socket.create_server((self.host, self.port))
         except OSError as error:
-            self.bind_error = f'CoT port {self.port} not open: {error}'
+            self.bind_error = f'CoT port {self.port} not open: {why(error)}'
             self._error(self.bind_error)
             print(self.bind_error, flush=True)
             return
@@ -201,12 +204,12 @@ class Atak:
             try:
                 sock, addr = srv.accept()
             except OSError as error:
-                self._error(f'accept: {error}')
+                self._error(f'accept: {why(error)}')
                 time.sleep(0.5)
                 continue
             sock.settimeout(self.IO_TIMEOUT_S)
             sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            client = {'sock': sock, 'peer': f'{addr[0]}:{addr[1]}', 'wlock': threading.Lock(), 'id': id(sock)}
+            client = {'sock': sock, 'peer': f'{addr[0]}:{addr[1]}', 'wlock': threading.Lock(), 'id': next(self._ids)}
             # register and send the current set under the client's write lock, so a change that lands
             # meanwhile reaches this client after the older set, never before it
             with client['wlock']:
@@ -254,7 +257,7 @@ class Atak:
                         s.shutdown(socket.SHUT_WR)
                     done += 1
                 except OSError as error:
-                    self._error(f'push {host}:{port}: {error}')
+                    self._error(f'push {host}:{port}: {why(error)}')
                     break
             with self.lock:
                 self.sent += done
@@ -275,15 +278,13 @@ class Atak:
             return
         try:
             client['sock'].sendall(''.join(events).encode('utf-8'))
-        except OSError as error:
-            self._error(f"send to {client['peer']}: {error}")
+        except OSError:   # ATAK went away (closed, reset, or stopped reading): drop it, not an error
             self._drop(client)
             return
         if count:
             with self.lock:
                 self.sent += len(events)
                 self.last_sent = time.time()
-                self._clear_error('send')
 
     def _drop(self, client: dict) -> None:
         with self.lock:
@@ -298,7 +299,7 @@ class Atak:
             self.last_error, self.last_error_at = message[:200], time.time()
 
     def _clear_error(self, kind: str) -> None:
-        """A later success clears an old send or push error (the board shows last_error in red). Call under lock."""
+        """A later success clears an old push error (the board shows last_error in red). Call under lock."""
         if self.last_error and self.last_error.startswith(kind) and self.last_error != self.bind_error:
             self.last_error = self.last_error_at = None
 
@@ -329,6 +330,20 @@ class Atak:
 
 
 ATAK: Atak | None = None
+
+
+def why(error: OSError) -> str:
+    """A short English reason (Windows gives localized messages) for the board's ATAK line."""
+    for kind, name in ((ConnectionRefusedError, 'connection refused'), (ConnectionResetError, 'connection reset'),
+                       (ConnectionAbortedError, 'connection aborted'), (BrokenPipeError, 'connection closed'),
+                       (TimeoutError, 'timed out')):
+        if isinstance(error, kind):
+            return name
+    if error.errno in (errno.EADDRINUSE, 10048) or getattr(error, 'winerror', None) == 10048:
+        return 'port already in use'
+    if error.errno in (errno.EACCES, 10013) or getattr(error, 'winerror', None) == 10013:
+        return 'port not allowed'
+    return f'{type(error).__name__} {error.errno}'
 
 
 def host_port(text: str) -> tuple[str, int]:

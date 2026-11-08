@@ -376,6 +376,31 @@ class ServerToAtak(unittest.TestCase):
         self.assertLess(worst, 0.25, f'Lock to board took {worst:.3f} s')
 
 
+class BusyCotPort(unittest.TestCase):
+    def test_a_busy_cot_port_leaves_the_lock_relay_running(self):
+        busy = socket.create_server(('127.0.0.1', 0))
+        http_port, cot_port = free_port(), busy.getsockname()[1]
+        proc = subprocess.Popen([sys.executable, '-I', str(SERVER), '--port', str(http_port), '--cot-port', str(cot_port)],
+                                cwd=str(RIDGELINE.parent), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            url, st, end = f'http://127.0.0.1:{http_port}', None, time.time() + 15
+            while time.time() < end:
+                try:
+                    st = json.loads(http(url + '/api/atak', timeout=1))
+                    if st.get('last_error'):
+                        break
+                except OSError:
+                    pass
+                time.sleep(0.1)
+            self.assertEqual(st['last_error'], f'CoT port {cot_port} not open: port already in use')
+            self.assertFalse(st['listening'])
+            self.assertTrue(json.loads(http(url + '/api/state', phone_body()))['ok'])
+        finally:
+            proc.terminate()
+            proc.wait(timeout=5)
+            busy.close()
+
+
 # ---------- cot.py on its own ----------
 
 class CotEvents(unittest.TestCase):
