@@ -7,13 +7,13 @@
    /api/* is never touched: the Lock relay must reach the PC or fail, and the page keeps the newest
    state and sends it again when the link is back. */
 'use strict';
-const VERSION = 'ridgeline-pace-20261108';
+const VERSION = 'ridgeline-follow-20261108';
 const PREFIX = 'ridgeline-';
 const TIMEOUT_MS = 2500;
 const CORE = [
   '/', '/solver.js', '/data/moran.json', '/topo/moran.jpg',
   '/tv/team8_nav.js', '/tv/data/moran/bundle.js',
-  '/hide.js', '/skyline.js', '/pace.js',
+  '/hide.js', '/skyline.js', '/pace.js', '/follow.js',
   '/manifest.webmanifest', '/phone/icon-192.png', '/phone/icon-512.png',
 ];
 

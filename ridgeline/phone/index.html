@@ -315,6 +315,41 @@ html.night .dots span.on{color:#000;background:var(--amber)}html.night .boot-mar
 .pc-btns{display:grid;gap:8px}
 .pm-sub{display:inline-block;white-space:nowrap;font:600 13px var(--font);color:var(--muted);letter-spacing:.02em;margin-left:8px}
 .pm-sub.low{color:var(--red)}
+/* Follow: the locked route one instruction at a time (ridgeline/follow.js). Colours from the tokens only */
+.views{display:flex;border:1px solid var(--line2);border-radius:var(--r);overflow:hidden}
+.views button{flex:1;border:0;background:transparent;color:var(--muted);font:700 13px var(--mono);letter-spacing:.12em;min-height:44px}
+.views button[aria-selected=true]{background:var(--raise);color:var(--text);box-shadow:inset 0 -3px var(--action)}
+.fol{display:flex;flex-direction:column;gap:12px}
+.fol-dial{position:relative;aspect-ratio:1/1;max-height:46svh;margin:0 auto;width:100%;max-width:340px;border:1px solid var(--line);background:radial-gradient(circle at 50% 50%,var(--raise),var(--panel) 70%);border-radius:var(--r)}
+.fol-dial svg{position:absolute;inset:0;width:100%;height:100%}
+.fol-dial .ring{fill:none;stroke:var(--line2);stroke-width:1.2}
+.fol-dial .tk{stroke:var(--faint);stroke-width:1.4}
+.fol-dial .fwd{fill:var(--muted);font:700 11px var(--mono);letter-spacing:.14em}
+.fol-dial #fol-arrow{transform-origin:150px 150px;will-change:transform}
+.fol-dial #fol-arrow path{fill:var(--action);stroke:var(--on-action);stroke-width:2;stroke-linejoin:round}
+.fol-dial.done #fol-arrow,.fol-dial:not(.done) #fol-check{display:none}
+.fol-dial #fol-check path{fill:none;stroke:var(--green);stroke-width:14;stroke-linecap:round;stroke-linejoin:round}
+.fol-dial.north .fwd{opacity:0}
+.fol-dial .npin{fill:var(--muted);font:700 12px var(--mono)}
+.fol-dial:not(.north) .npin{display:none}
+.fol-say{font:800 30px/1.1 var(--font);text-align:center;color:var(--action);min-height:34px;letter-spacing:-.01em}
+.fol-dial.done+.fol-say{color:var(--green)}
+.fol-nums{display:grid;grid-template-columns:1fr 1fr;gap:12px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:12px 0}
+.fol-nums small{display:block;font:600 12px var(--font);color:var(--muted);letter-spacing:.04em}
+.fol-nums b{display:block;font:800 34px/1.05 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.fol-nums b small{display:inline;font:600 14px var(--font);color:var(--muted);margin-left:4px}
+.fol-bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.fol-bar i{display:block;height:100%;width:0;background:var(--action)}
+.fol-rows{border-top:1px solid var(--line)}
+.fol-rows div{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px;color:var(--muted)}
+.fol-rows b{font:700 14px var(--mono);color:var(--text);text-align:right}
+.fol-rows b.low{color:var(--red)}
+.fol-alert{border:1px solid var(--red);background:var(--panel);padding:12px;display:flex;flex-direction:column;gap:8px;font-size:14px;line-height:1.45}
+.fol-alert b{color:var(--red)}
+.fol-alert.warn{border-color:var(--action)}
+.fol-alert.warn b{color:var(--action)}
+.map.fmini{aspect-ratio:16/10}
+.lock-ln{display:flex;flex-direction:column;gap:8px}
 </style>
 </head>
 <body>
@@ -352,6 +387,7 @@ html.night .dots span.on{color:#000;background:var(--amber)}html.night .boot-mar
 <script src="/solver.js"></script>
 <script src="/hide.js"></script>
 <script src="/pace.js"></script>
+<script src="/follow.js"></script>
 <script src="/skyline.js"></script>
 <script>
 'use strict';
@@ -416,8 +452,10 @@ function solveNow() {
   else if (result.status === 'enough') target = null;
   else target = result.next_peak_id || wallIds.find(id => !locks.some(l => l.peak_id === id)) || null;
   overlay = buildOverlay(result);
-  // every new fix starts with Rendezvous selected, saved marks stay in the list but are never preselected
-  nav.dest = rvDest(); nav.picking = false; nav.unpin = false;
+  // every new fix starts with Rendezvous selected, saved marks stay in the list but are never preselected.
+  // A locked route keeps its destination through a Re-aim
+  if (!nav.locked) nav.dest = rvDest();
+  nav.picking = false; nav.unpin = false;
   if (locks.length >= 2 && !NAV) setTimeout(loadNav, 1500);   // the route planner loads while the last card is aimed
 }
 function predictedHeading(id) {
@@ -685,6 +723,10 @@ function noteFor(r, d) {
   return s.replace(/closest safe point/g, 'closest point you can walk to');
 }
 function computeRoute() {
+  if (nav.locked) {   // a locked route never changes on its own, only Re-route or Unlock replace it
+    Object.assign(nav, { route: nav.locked.route, dest: nav.locked.dest, health: nav.locked.health, stay: false, shore: null });
+    return;
+  }
   nav.route = null; nav.stay = false; nav.shore = null;
   if (nav.dest && nav.dest.kind) nav.dest = spotDests().find(d => d.id === nav.dest.id) || null;   // the spots move with the fix and the walking ability
   const here = fixLL();
@@ -1052,9 +1094,10 @@ function drawMap(canvas, zoom) {
   const live = paceLive() ? pace.st : null, liveQ = live ? posNow() : null;
   if (zoom && result && result.n_locks >= 2) {
     const fr = liveQ || { e_m: result.estimate.e_m, n_m: result.estimate.n_m, r95_m: result.r95_m };   // Auto-PACE: frame the live circle
-    const r = Math.max(900, fr.r95_m * 3.4), ce = fr.e_m, cn = fr.n_m;
+    const fol = screen === 'fix' && fixView === 'follow';   // Follow: a close map that moves with the position
+    const r = fol ? Math.max(320, fr.r95_m * 1.25) : Math.max(900, fr.r95_m * 3.4), ce = fr.e_m, cn = fr.n_m;
     let a0 = ce - r, a1 = ce + r, b0 = cn - r, b1 = cn + r;
-    if (screen === 'fix') {   // the route and the destination stay in the frame
+    if (screen === 'fix' && !fol) {   // the route and the destination stay in the frame
       const pts = nav.route ? nav.route.path.map(p => S.toEN(model, p[0], p[1])) : [];
       if (nav.dest) pts.push(S.toEN(model, nav.dest.lon, nav.dest.lat));
       const gc = gpsCheck(); if (gc) pts.push(S.toEN(model, gc.lon, gc.lat));
@@ -1095,6 +1138,7 @@ function drawMap(canvas, zoom) {
     for (const q of nav.route.runs) { ctx.strokeStyle = col[q.cls]; ctx.lineWidth = 4.5 * dpr; line(q.path); }
     ctx.restore();
   }
+  if (screen === 'fix' && nav.locked && FL) { if (!follow.g) followNow(); drawFollow(ctx, X, Y, W, dpr); }
   if (screen === 'fix') {   // HIDE ring and SIGNAL flag, as on the board
     for (const d of spotDests()) {
       const q = S.toEN(model, d.lon, d.lat), x = X(q.e), y = Y(q.n), s = dpr;
@@ -1291,10 +1335,16 @@ function render() {
   } else if (screen === 'fix') {
     if (NAV) computeRoute();   // the route always starts from the newest fix
     paceSync();   // Auto-PACE starts from this fix, or folds it into the walked map after Re-aim
+    if (fixView === 'follow' && !(nav.locked && FL)) fixView = 'map';
+    if (fixView === 'follow') {   // the second page: the locked route one instruction at a time
+      m.innerHTML = followHtml(); wireFollow();
+      requestAnimationFrame(() => { const g = followNow(); if (g) followPaint(g); drawMap($('map'), true); });
+    } else {
     const e = result.estimate, o = result.others[0], q = posNow(), psm = pace ? PC.summary(pace.st, Date.now()) : null;
     const ns = `${Math.abs(q.lat).toFixed(5)}° ${q.lat >= 0 ? 'N' : 'S'}`, ew = `${Math.abs(q.lon).toFixed(5)}° ${q.lon >= 0 ? 'E' : 'W'}`;
     const dir = o ? ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(W360(deg(Math.atan2(o.lon - e.lon, o.lat - e.lat))) / 45) % 8] : '';
     m.innerHTML = `<div class="eyebrow"><span>Position</span><span>SOLVED ON DEVICE</span></div>
+      ${nav.locked && FL ? viewsHtml() : ''}
       <section class="fix-panel" aria-label="Terrain position"><h1>You are here</h1>
       <div class="coords" id="coords"></div>
       <div class="mgrs" id="mgrs">${fixMgrs()}<small>MGRS · ${mgrsDigits() === 4 ? '10' : '100'} m squares</small></div>
@@ -1317,17 +1367,29 @@ function render() {
     if (!home) { home = { lon: e.lon, lat: e.lat }; store.set('home', home); }
     loadNav();
     requestAnimationFrame(() => { drawMap($('map'), true); });
+    }
   }
   $('locks-json').textContent = locks.length ? JSON.stringify(locks.map(l => ({ peak: nameOf(l.peak_id), heading_deg: +l.heading_deg.toFixed(2), tilt_deg: l.elevation_deg == null ? null : +l.elevation_deg.toFixed(1) })), null, 1) : 'No Locks yet.';
 }
 function goHtml() {
-  const dl = destList();
+  if (nav.locked) {   // the destination and the walking ability are fixed with the route
+    const L = nav.locked;
+    return `<section class="go" aria-label="Route out">
+    <div class="go-head"><h2>Route locked</h2><span class="chip on">${L.health === 'injured' ? 'INJURED' : 'HEALTHY'} · ${CAP[L.health]}°</span></div>
+    <div class="rt" aria-live="polite">${routeHtml()}</div>
+    <p class="leg"><b>To ${L.dest.label}, locked at ${L.at.slice(11, 16)}Z.</b> The route stays the same while your position moves. Only Re-route or Unlock change it.</p>
+    <div class="pair"><button class="btn primary" id="to-follow">Follow</button><button class="btn ghost" id="unlock">${nav.unlockArm ? 'Tap again to unlock' : 'Unlock'}</button></div>
+    <div class="pair"><button class="btn ghost" id="mark">Mark here</button></div>
+  </section>`;
+  }
+  const dl = destList(), canLock = !!(FL && nav.route && !nav.stay);
   return `<section class="go" aria-label="Route out">
     <div class="go-head"><h2>Where to?</h2><div class="seg" role="group" aria-label="How well can you walk"><button data-h="healthy" aria-pressed="${nav.health === 'healthy'}">Healthy · ${CAP.healthy}°</button><button data-h="injured" aria-pressed="${nav.health === 'injured'}">Injured · ${CAP.injured}°</button></div></div>
     <div class="dests">${dl.filter(d => !d.kind).map(d => `<button class="dest" data-d="${d.id}" aria-pressed="${!!(nav.dest && nav.dest.id === d.id)}">${d.label}</button>`).join('')}<button class="dest pick" id="pick" aria-pressed="${nav.picking}">${nav.picking ? 'Tap the map…' : pin ? 'Move pin' : 'Pick on map'}</button></div>
     ${startHtml()}
     ${spotsHtml(dl)}
     <div class="rt" aria-live="polite">${routeHtml()}</div>
+    ${canLock ? '<button class="btn primary" id="lock-route">Lock route and follow</button>' : ''}
     <div class="pair"><button class="btn ghost" id="mark">Mark here</button>${pin ? `<button class="btn ghost" id="unpin">${nav.unpin ? 'Tap again to remove' : 'Remove pin'}</button>` : ''}</div>
   </section>`;
 }
@@ -1337,9 +1399,13 @@ function renderGo() {
   g.outerHTML = goHtml(); wireGo(); drawMap($('map'), true);
 }
 function wireGo() {
+  wireViews();
+  if ($('lock-route')) $('lock-route').onclick = lockRoute;
+  if ($('to-follow')) $('to-follow').onclick = () => setView('follow');
+  if ($('unlock')) $('unlock').onclick = () => { if (!nav.unlockArm) { nav.unlockArm = true; renderGo(); return; } unlockRoute(); };   // two taps, like removing a pin
   document.querySelectorAll('[data-h]').forEach(b => { b.onclick = () => { nav.health = b.dataset.h; computeRoute(); renderGo(); post(); }; });
   document.querySelectorAll('[data-d]').forEach(b => { b.onclick = () => { nav.dest = destList().find(d => d.id === b.dataset.d) || null; nav.picking = false; nav.unpin = false; computeRoute(); renderGo(); post(); }; });
-  $('pick').onclick = () => { nav.picking = !nav.picking; renderGo(); };
+  if ($('pick')) $('pick').onclick = () => { nav.picking = !nav.picking; renderGo(); };
   $('mark').onclick = () => {
     const h = fixLL(); if (!h) return;
     marks = marks.concat([{ lon: h[0], lat: h[1], label: 'Mark ' + (marks.length + 1), at: new Date().toISOString() }]).slice(-5);
@@ -1360,6 +1426,214 @@ function wireGo() {
     nav.dest = { id: 'pin', lon: pin.lon, lat: pin.lat, label: 'Pin' }; nav.picking = false; nav.unpin = false;
     computeRoute(); renderGo(); post();
   };
+}
+// ---------- Follow: the locked route one instruction at a time (ridgeline/follow.js) ----------
+// The guidance mockup made live. The arrow turns with the phone (the heading the peaks calibrated), the next point
+// moves on as Auto-PACE moves the position (steps, or the Simulated walk), and the route never reroutes by itself.
+// The fix screen has two pages, Map and Follow, switched by the tabs, a swipe, or F on a keyboard. L locks, as on
+// Noah's planner.
+const FL = window.RidgelineFollow || null;
+let fixView = 'map';
+const follow = { f: null, key: 0, g: null, raf: 0, ang: null, buzzed: false, drawn: -1, drawnAt: 0, paintedAt: 0, sig: '', alertSig: '', note: null };
+const viewsHtml = () => `<div class="views" role="tablist" aria-label="Map or Follow"><button role="tab" data-v="map" aria-selected="${fixView === 'map'}">MAP</button><button role="tab" data-v="follow" aria-selected="${fixView === 'follow'}">FOLLOW</button></div>`;
+function wireViews() { document.querySelectorAll('[data-v]').forEach(b => { b.onclick = () => setView(b.dataset.v); }); }
+function setView(v) {
+  if (v === 'follow' && !(nav.locked && FL)) v = 'map';
+  if (v === fixView) return;
+  fixView = v; render(); window.scrollTo(0, 0);
+}
+function lockRoute() {
+  if (!FL || !nav.route || nav.stay || !nav.dest) return;
+  nav.locked = { route: nav.route, dest: nav.dest, health: nav.health, key: Date.now(), at: new Date().toISOString() };
+  nav.unlockArm = false; follow.f = null; follow.note = null;
+  if (navigator.vibrate) navigator.vibrate(40);
+  fixView = 'follow'; render(); window.scrollTo(0, 0); post();
+}
+function unlockRoute() {
+  nav.locked = null; nav.unlockArm = false; follow.f = null; follow.g = null; follow.note = null;
+  fixView = 'map'; computeRoute(); render(); post();
+}
+function followRoute() {
+  const L = nav.locked;
+  if (!L || !FL || !model) return null;
+  if (follow.f && follow.key === L.key) return follow.f;
+  const pts = L.route.path.map(p => { const q = S.toEN(model, p[0], p[1]); return { e: q.e, n: q.n }; });
+  follow.f = FL.build({ pts, times: L.route.timestamps, legs: L.route.legs });
+  follow.key = L.key; follow.g = null; follow.buzzed = false;
+  return follow.f;
+}
+// the true bearing the phone points now. The phone itself (turned to true north by the peaks), else the simulated
+// walker's direction, else the keyboard heading on a PC, else none and the arrow is drawn north up
+function followHeading() {
+  const h = walkHeading();
+  if (h != null) return { h, from: 'phone' };
+  if (sim.running && sim.head !== 'lost' && sim.pts && sim.k < sim.pts.length - 1) {   // a phone in a pocket has no heading
+    const a = sim.pts[sim.k], b = sim.pts[sim.k + 1];
+    return { h: W360(deg(Math.atan2(b.e - a.e, b.n - a.n))), from: 'sim' };
+  }
+  if (source === 'keyboard' && result && Number.isFinite(result.offset_deg)) return { h: W360(kb.h - result.offset_deg), from: 'keys' };
+  return null;
+}
+function followNow() {
+  const f = followRoute(), q = posNow();
+  if (!f || !q) return null;
+  const hd = followHeading();
+  const g = FL.update(f, { e: q.e_m, n: q.n_m, r95_m: q.r95_m }, hd ? hd.h : null);
+  g.heading = hd; g.r95_m = q.r95_m; g.q = q;
+  follow.g = g;
+  return g;
+}
+const bigUnits = s => s.replace(/(\d)\s?(km|m|h|min)\b/g, '$1<small>$2</small>');
+function followHtml() {
+  const L = nav.locked;
+  const ticks = Array.from({ length: 36 }, (_, i) => { const a = i * 10 * Math.PI / 180, r0 = i % 9 ? 121 : 112; return `<line class="tk" x1="${(150 + r0 * Math.sin(a)).toFixed(1)}" y1="${(150 - r0 * Math.cos(a)).toFixed(1)}" x2="${(150 + 128 * Math.sin(a)).toFixed(1)}" y2="${(150 - 128 * Math.cos(a)).toFixed(1)}"/>`; }).join('');
+  return `<div class="eyebrow"><span>Follow · ${L.dest.label}</span><span id="fol-count"></span></div>
+    ${viewsHtml()}
+    <section class="fol" aria-label="Follow the locked route">
+      <div class="fol-dial" id="fol-dial"><svg viewBox="0 0 300 300" aria-hidden="true">
+        <circle class="ring" cx="150" cy="150" r="128"/>${ticks}
+        <text class="fwd" x="150" y="15" text-anchor="middle">AHEAD</text><text class="npin" x="150" y="15" text-anchor="middle">N</text>
+        <g id="fol-arrow"><path d="M150 44 212 162 166 147 166 238 134 238 134 147 88 162Z"/></g>
+        <g id="fol-check"><path d="M96 156 136 196 208 110"/></g>
+      </svg></div>
+      <div class="fol-say" id="fol-say" aria-live="polite"></div>
+      <div class="fol-nums"><div><small>Next point</small><b id="fol-wp"></b></div><div><small>Time left</small><b id="fol-time"></b></div></div>
+      <div class="fol-bar" aria-hidden="true"><i id="fol-bar"></i></div>
+      <p class="leg" id="fol-left"></p>
+      <div id="fol-alert"></div>
+      <div class="fol-rows">
+        <div><span>Position, 95%</span><b id="fol-pm"></b></div>
+        <div><span>Rests on</span><b id="fol-basis"></b></div>
+        <div><span>Arrow turns with</span><b id="fol-head"></b></div>
+      </div>
+      <p class="leg" id="fol-leg"></p>
+      <div class="map fmini" id="map-wrap"><canvas id="map"></canvas><span class="maplab">${model.json.name} · moves with you</span></div>
+      ${pace ? `<div class="pc-sim"><span class="tag">SIMULATED</span><div class="pc-simrow"><button class="btn ghost" id="fsim-walk" style="flex:1"></button><button class="btn ghost" id="fsim-speed" aria-label="Simulation speed, tap to change">×${sim.mult}</button></div>
+        <button class="btn ghost" id="fsim-head" aria-pressed="${sim.head === 'lost'}">${sim.head === 'lost' ? 'Heading lost (pocket)' : 'Heading from the peaks'}</button>
+        <p class="foot">Walks the locked route at ${sim.mult}× ${sim.head === 'lost' ? 'with no usable heading, as with the phone in a pocket' : `with a ${SIM.bias_deg}° heading error`}, steps ${SIM.stride_bias * 100}% longer than assumed. The arrow follows the position Auto-PACE keeps, not the simulated walker. Not a real walk.</p></div>` : ''}
+      <div class="pair"><button class="btn" id="fol-map">Map</button><button class="btn ghost" id="fol-unlock">${nav.unlockArm ? 'Tap again to unlock' : 'Unlock route'}</button></div>
+    </section>`;
+}
+function wireFollow() {
+  wireViews();
+  follow.sig = ''; follow.alertSig = ''; follow.drawn = -1;
+  $('fol-map').onclick = () => setView('map');
+  $('map-wrap').onclick = () => setView('map');
+  $('fol-unlock').onclick = () => { if (!nav.unlockArm) { nav.unlockArm = true; $('fol-unlock').textContent = 'Tap again to unlock'; return; } unlockRoute(); };
+  if ($('fsim-walk')) $('fsim-walk').onclick = () => {
+    if (sim.running) simStop();
+    else { if (sim.done && follow.f) { follow.f.s = 0; follow.buzzed = false; } simStart(); }
+    paceAfter(); follow.sig = '';
+  };
+  if ($('fsim-speed')) $('fsim-speed').onclick = () => { const L = SIM.speeds; sim.mult = L[(L.indexOf(sim.mult) + 1) % L.length]; store.set('simx', sim.mult); render(); };
+  if ($('fsim-head')) $('fsim-head').onclick = () => { sim.head = sim.head === 'lost' ? 'peaks' : 'lost'; store.set('simh', sim.head); render(); };
+  if (!follow.raf) follow.raf = requestAnimationFrame(followLoop);
+}
+function followLoop() {
+  follow.raf = 0;
+  if (screen !== 'fix' || fixView !== 'follow' || !nav.locked || !$('fol-dial')) return;
+  follow.raf = requestAnimationFrame(followLoop);
+  const g = followNow();
+  if (g) followPaint(g);
+}
+// animation frames stop while the page is not painted (a power saver, a hidden window); the numbers still move
+setInterval(() => {
+  if (screen !== 'fix' || fixView !== 'follow' || !nav.locked || !$('fol-dial') || performance.now() - follow.paintedAt < 400) return;
+  const g = followNow();
+  if (g) followPaint(g);
+}, 250);
+const HEADFROM = { phone: 'Phone, peak calibrated', sim: 'Simulated walker', keys: 'Keyboard heading' };
+function followPaint(g) {
+  follow.paintedAt = performance.now();
+  const L = nav.locked, dial = $('fol-dial'), north = g.turn_deg == null;
+  const want = north ? g.bearing_deg : g.turn_deg;   // north up when the heading is unknown
+  follow.ang = follow.ang == null || reduce ? want : follow.ang + FL.wrap180(want - follow.ang) * 0.25;
+  $('fol-arrow').style.transform = `rotate(${follow.ang.toFixed(1)}deg)`;
+  dial.classList.toggle('north', north); dial.classList.toggle('done', !!g.arrived);
+  const sm = pace ? PC.summary(pace.st, Date.now()) : null, low = !!(sm && sm.level === 'low');
+  const lvl = sm ? { good: 'GOOD', caution: 'CAUTION', low: 'LOW' }[sm.level] : 'GOOD';
+  const simLabel = !$('fsim-walk') ? '' : sim.running ? 'Stop simulated walk' : simPaused() ? 'Resume simulated walk' : sim.done ? 'Simulated walk again from the fix' : 'Simulated walk';
+  const t = {
+    count: g.arrived ? 'END' : `Point ${g.wp_index + 1} of ${g.wp_count}`,
+    say: g.arrived ? 'Arrived' : g.say,
+    wp: g.arrived ? '0 m' : fmtM(g.wp_m), time: g.left_s == null ? '' : g.arrived ? '0 min' : fmtT(g.left_s),
+    left: g.arrived ? `${L.dest.label} reached on the map. ${fmtM(g.along_m)} walked.` : `${fmtM(g.left_m)} to ${L.dest.label} along the route · ${Math.round(g.done * 100)}% walked`,
+    bar: (g.done * 100).toFixed(1), pm: '±' + fmtM(g.r95_m), low,
+    basis: sm ? `${BASIS[sm.basis] || sm.basis} · ${lvl}` : 'Terrain fix',
+    head: g.heading ? HEADFROM[g.heading.from] : 'None, north up',
+    leg: g.arrived || !g.leg_say ? '' : `<b>This part.</b> ${g.leg_say}.`, sim: simLabel,
+  };
+  const sig = JSON.stringify(t);
+  if (sig !== follow.sig) {
+    follow.sig = sig;
+    $('fol-count').textContent = t.count; $('fol-say').textContent = t.say;
+    $('fol-wp').innerHTML = bigUnits(t.wp); $('fol-time').innerHTML = t.time ? bigUnits(t.time) : '';
+    $('fol-left').textContent = t.left; $('fol-bar').style.width = t.bar + '%';
+    $('fol-pm').textContent = t.pm; $('fol-pm').className = t.low ? 'low' : '';
+    $('fol-basis').textContent = t.basis; $('fol-head').textContent = t.head; $('fol-leg').innerHTML = t.leg;
+    if ($('fsim-walk')) { $('fsim-walk').textContent = t.sim; $('fsim-walk').disabled = false; }
+  }
+  // one alert at a time: arrived, re-aim, off the route, no heading
+  let a = '', kind = '';
+  if (follow.note) { a = `<b>${follow.note}</b>`; kind = 'note'; }
+  else if (g.arrived) {
+    a = `<b>Arrived on the map.</b><span>The position kept on the phone has reached the end of the route, ${fmtM(g.to_end_m)} from it, ±${fmtM(g.r95_m)}. ${sm && sm.refix ? 'The circle is wide, so aim at 3 peaks to confirm before you stop.' : 'Check the ground around you before you stop.'}</span>${sm && sm.refix ? '<button class="btn primary" id="fol-reaim">Re-aim to confirm</button>' : ''}`;
+    kind = sm && sm.refix ? 'reaim' : 'warn';
+  }
+  else if (sm && sm.refix) { a = `<b>Confidence low. Aim at 3 peaks again.</b><span>±${fmtM(sm.r95_m)} now, so the arrow may point the wrong way. The route stays locked.</span><button class="btn primary" id="fol-reaim">Re-aim now</button>`; kind = 'reaim'; }
+  else if (g.offroute) { a = `<b>Off the route by ${fmtM(g.off_m)}.</b><span>The route stays locked. Walk back to it, or plan a new one from where you are.</span><button class="btn primary" id="fol-reroute">Re-route from here</button>`; kind = 'off'; }
+  else if (!g.heading) { a = `<b>No heading.</b><span>The arrow points the way with north up. Take the fix with the phone sensor, or hold the phone up and turn it, to make it turn with you.</span>`; kind = 'warn'; }
+  const asig = kind + '|' + (kind === 'off' ? Math.round(g.off_m / 10) : kind === 'reaim' ? Math.round(sm.r95_m / 10) : '');
+  if (asig !== follow.alertSig) {
+    follow.alertSig = asig;
+    $('fol-alert').innerHTML = a ? `<div class="fol-alert${kind === 'warn' || kind === 'note' ? ' warn' : ''}" role="${kind === 'reaim' || kind === 'off' ? 'alert' : 'status'}">${a}</div>` : '';
+    if ($('fol-reaim')) $('fol-reaim').onclick = refixStart;
+    if ($('fol-reroute')) $('fol-reroute').onclick = rerouteHere;
+  }
+  if (g.arrived && !follow.buzzed) { follow.buzzed = true; if (navigator.vibrate) navigator.vibrate([300, 120, 300]); }
+  const now = performance.now(), ver = pace ? pace.st.updates : 0;
+  if (now - follow.drawnAt > 400 && (ver !== follow.drawn || now - follow.drawnAt > 1500)) { follow.drawn = ver; follow.drawnAt = now; drawMap($('map'), true); }
+}
+// a new route from the position kept now to the same destination, only when asked, and locked at once
+function rerouteHere() {
+  const L = nav.locked, q = posNow();
+  if (!L || !NAV || !q) return;
+  simStop();
+  const rt = NAV.reach(q.lon, q.lat, CAP[L.health], SPEED[L.health], 9 * 3600);
+  const pp = NAV.pathTo(rt, L.dest.lon, L.dest.lat), r = pp && NAV.buildRoute(pp, rt);
+  if (!r || (r.length_m < 25 && !r.reached)) { follow.note = `No route from here to ${L.dest.label} stays under ${CAP[L.health]}°. Stay, signal, wait.`; follow.alertSig = ''; return; }
+  r.say = NAV.describe(r);
+  nav.locked = Object.assign({}, L, { route: r, key: Date.now(), at: new Date().toISOString(), rerouted: (L.rerouted || 0) + 1 });
+  if (sim.truth) { sim.home = { e: sim.truth.e, n: sim.truth.n }; sim.pts = null; sim.done = false; }   // a walk resumes from where the walker is
+  follow.f = null; follow.note = null; computeRoute(); render(); post();
+}
+// the locked route on the map: the part walked dimmed, a line to the next point, the point, and the heading
+function drawFollow(ctx, X, Y, W, dpr) {
+  const f = followRoute(), g = follow.g, q = posNow(), s = dpr;
+  if (!f || !g || !q) return;
+  const act = getComputedStyle(document.documentElement).getPropertyValue('--action').trim() || '#ffd15b';
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(X(f.pts[0].e), Y(f.pts[0].n));
+  for (let k = 1; k < f.pts.length && f.cum[k] <= g.along_m; k++) ctx.lineTo(X(f.pts[k].e), Y(f.pts[k].n));
+  ctx.lineTo(X(g.on.e), Y(g.on.n));
+  ctx.strokeStyle = 'rgba(24,28,30,.62)'; ctx.lineWidth = 5.5 * s; ctx.stroke();
+  const wx = X(g.wp.e), wy = Y(g.wp.n), px = X(q.e_m), py = Y(q.n_m);
+  if (!g.arrived) {
+    ctx.setLineDash([1, 6 * s]); ctx.lineWidth = 4 * s; ctx.strokeStyle = 'rgba(245,241,230,.95)';
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(wx, wy); ctx.stroke();
+    ctx.lineWidth = 2.2 * s; ctx.strokeStyle = '#1f2a30'; ctx.stroke(); ctx.setLineDash([]);
+  }
+  ctx.beginPath(); ctx.arc(wx, wy, 8 * s, 0, Math.PI * 2); ctx.fillStyle = act; ctx.fill(); ctx.lineWidth = 2.5 * s; ctx.strokeStyle = '#1f2a30'; ctx.stroke();
+  ctx.font = `800 ${10.5 * s}px "Noto Sans JP",sans-serif`; ctx.lineWidth = 3 * s; ctx.strokeStyle = 'rgba(245,241,230,.95)';
+  const lab = g.last ? 'End' : `Next ${g.wp_index + 1}`, tw = ctx.measureText(lab).width, tx = wx + 12 * s + tw > W - 4 * s ? wx - 12 * s - tw : wx + 12 * s;
+  ctx.strokeText(lab, tx, wy + 4 * s); ctx.fillStyle = '#1f2a30'; ctx.fillText(lab, tx, wy + 4 * s);
+  if (g.heading) {   // which way the phone points, a wedge from the position
+    const h = rad(g.heading.h), L = 26 * s, w = rad(16);
+    ctx.beginPath(); ctx.moveTo(px, py);
+    ctx.lineTo(px + Math.sin(h - w) * L, py - Math.cos(h - w) * L); ctx.lineTo(px + Math.sin(h + w) * L, py - Math.cos(h + w) * L); ctx.closePath();
+    ctx.fillStyle = act; ctx.globalAlpha = 0.85; ctx.fill(); ctx.globalAlpha = 1; ctx.lineWidth = 1.5 * s; ctx.strokeStyle = '#1f2a30'; ctx.stroke();
+  }
+  ctx.restore();
 }
 function go(next) { if (next !== 'aim') camStop(); screen = next; render(); window.scrollTo(0, 0); if (next === 'fix') post(); }
 
@@ -1421,7 +1695,7 @@ function skipTarget() {
   skip++; target = rest[skip % rest.length]; render();
 }
 function undo() { if (!locks.length) return; locks.pop(); solveNow(); render(); post(); }
-function resetFix() { paceDrop(); locks = []; skip = 0; shownPm = null; solveNow(); target = model.demo.first_peak_id; go('aim'); post(); }
+function resetFix() { nav.locked = null; nav.unlockArm = false; follow.f = null; follow.g = null; follow.note = null; fixView = 'map'; paceDrop(); locks = []; skip = 0; shownPm = null; solveNow(); target = model.demo.first_peak_id; go('aim'); post(); }
 
 // ---------- ATAK hand-off: server.py builds the CoT and serves ATAK over the cable ----------
 const atakLast = { st: 'Checking the link to ATAK…', cot: '', ok: false };
@@ -1602,8 +1876,23 @@ window.addEventListener('keydown', e => {
   else if (k === 'n' || k === 'N') skipTarget();
   else if (k === 'u' || k === 'U') undo();
   else if (k === 'a' || k === 'A') $('assist').onclick();
+  else if ((k === 'f' || k === 'F') && screen === 'fix') setView(fixView === 'follow' ? 'map' : 'follow');
+  else if ((k === 'l' || k === 'L') && screen === 'fix') { if (nav.locked) setView('follow'); else lockRoute(); }
   else if (k === 's' || k === 'S') openSettings();
 });
+// swipe left for Follow and right for the map, on the fix screen with a locked route (not while picking a pin)
+(() => {
+  let t0 = null;
+  const m = $('main');
+  m.addEventListener('touchstart', e => { const t = e.touches[0]; t0 = e.touches.length === 1 ? { x: t.clientX, y: t.clientY, at: performance.now() } : null; }, { passive: true });
+  m.addEventListener('touchend', e => {
+    const a = t0; t0 = null;
+    if (!a || screen !== 'fix' || !nav.locked || nav.picking) return;
+    const t = e.changedTouches[0], dx = t.clientX - a.x, dy = t.clientY - a.y;
+    if (performance.now() - a.at > 700 || Math.abs(dx) < 70 || Math.abs(dx) < 1.6 * Math.abs(dy)) return;
+    setView(dx < 0 ? 'follow' : 'map');
+  }, { passive: true });
+})();
 
 // ---------- load ----------
 Promise.all([fetch('/data/moran.json', { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error('Cannot load terrain data'); return r.json(); }),
@@ -1625,7 +1914,7 @@ let offReady = false, offTimer = null, swFailed = false;
 function setOff(cls, text) { const el = $('st-off'); if (el) { el.className = 'nb ' + cls; el.lastChild.textContent = text; } }
 function checkOffline() {
   if (swFailed || !('serviceWorker' in navigator) || !window.caches) { setOff('', 'No offline copy'); return; }
-  const need = CORE.concat(window.RidgelineHide ? ['/hide.js'] : [], window.RidgelineSkyline ? ['/skyline.js'] : [], window.RidgelinePace ? ['/pace.js'] : []);
+  const need = CORE.concat(window.RidgelineHide ? ['/hide.js'] : [], window.RidgelineSkyline ? ['/skyline.js'] : [], window.RidgelinePace ? ['/pace.js'] : [], window.RidgelineFollow ? ['/follow.js'] : []);
   Promise.all(need.map(u => caches.match(u).then(Boolean, () => false))).then(hits => {
     const n = hits.filter(Boolean).length, active = !!navigator.serviceWorker.controller;
     offReady = active && n === need.length;
@@ -1640,7 +1929,8 @@ if ('serviceWorker' in navigator) {
 checkOffline();
 ping();
 window.RIDGELINE_DEBUG = { relay, checkOffline, get locks() { return locks; }, get result() { return result; }, get target() { return target; }, lock: doLock, kb, assist: () => $('assist').onclick(),
-  get pace() { return pace; }, sim, simStart, simStop, simRefix, refixStart, paceSummary: () => pace && PC.summary(pace.st, Date.now()) };
+  get pace() { return pace; }, sim, simStart, simStop, simRefix, refixStart, paceSummary: () => pace && PC.summary(pace.st, Date.now()),
+  nav, follow, followNow, lockRoute, unlockRoute, rerouteHere, setView, get fixView() { return fixView; } };
 </script>
 </body>
 </html>
