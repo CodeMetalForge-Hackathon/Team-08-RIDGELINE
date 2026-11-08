@@ -315,6 +315,7 @@ html.still *{transition:none!important;animation:none!important}
 <p id="credit"></p>
 <script src="lib/deck.gl@9.3.11/dist.min.js"></script>
 <script src="team8_nav.js"></script>
+<script src="team8_live.js"></script>
 <script src="data/areas.js"></script>
 <script>
 // Pick the area (?area=<id>, else the first), load its bundle as a classic script so file:// works, then start.
@@ -366,6 +367,7 @@ if (STILL) document.documentElement.classList.add('still');   // screenshots: no
 const NB = s => String(s).replace(/(\d) (?=(?:m|km|km²|min|h)(?![\w]))/g, '$1 ');   // keep a number and its unit on one line
 const press = (el, on) => { el.classList.toggle('act', on); el.setAttribute('aria-pressed', on ? 'true' : 'false'); };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const LIVE = () => !!(window.TEAM8_LIVE && window.TEAM8_LIVE.on);   // a phone is live (team8_live.js, served by tools/live_server.py)
 
 // ---------------------------------------------------------------- geometry helpers
 const toXY = (lon, lat) => [(lon - B[0]) * MPLON, (lat - B[1]) * MPLAT];
@@ -559,6 +561,7 @@ function plotPencil(x, sc, j, stg) {
   });
 }
 function texKey() {
+  if (LIVE()) return 'p0';   // live: the plain sheet, the phone's plotting is drawn as layers
   const s = state.step, sc = state.scen;
   if (s <= 4) return 'p' + Math.min(s, sc.fixStep);
   return s === 7 ? 'reveal' : 'route_' + state.health;
@@ -648,6 +651,7 @@ function fitBox(w, s, e, n, pitch, bearing, zc) {
 // points are [lon, lat, z, label]: label 1 = a summit name sits above it and a letter below
 const gz = (lon, lat) => NAV.zAt(NAV.xOf(lon), NAV.yOf(lat));
 function framePts() {
+  if (LIVE()) return TEAM8_LIVE.framePts();
   const sc = state.scen, s = state.step, P = sc.sg.peaks, pts = [], T = sc.truth;
   if (s <= 1 || !P.length) {   // the whole sheet
     [[B[0], B[1]], [B[0], B[3]], [B[2], B[1]], [B[2], B[3]]].forEach(([lon, lat]) => pts.push([lon, lat, gz(lon, lat)]));
@@ -714,7 +718,7 @@ function targetView() {
   return fit3D(v, f.pts);   // the flat map too: labels and the panels decide the fit, not the bare box
 }
 function eyeVS() {
-  const sc = state.scen, p = state.step <= 4 || !sc.est ? sc.truth : sc.est;
+  const sc = state.scen, p = (LIVE() && TEAM8_LIVE.eyePos()) || (state.step <= 4 || !sc.est ? sc.truth : sc.est);
   return {longitude: p[0], latitude: p[1], position: [0, 0, p[2] + 6], bearing: state.heading, pitch: -12, maxPitch: 60, minPitch: -80};
 }
 function frame(instant) {
@@ -752,8 +756,8 @@ function layers() {
   const eye = state.view === 'eye', flat = state.view === '2d', step = state.step, top = eye ? {} : ON_TOP, sc = state.scen;
   const out = [new TerrainLayer({id: 'terrain', elevationData: D.img.terrain, texture: texture(texKey()), bounds: BOUNDS,
     elevationDecoder: DECODER, meshMaxError: 2.0, material: false, loaders: [GridTerrainLoader], pickable: !eye})];
-  const aimedN = aimedAt(step), aimed = sc.sg.peaks.slice(0, aimedN).map((p, i) => ({...p, letter: 'ABC'[i]}));
-  const aimedNames = new Set(aimed.map(p => p.name)), nextP = step <= 4 && aimedN < sc.np ? sc.sg.peaks[aimedN] : null;
+  const aimedN = LIVE() ? 0 : aimedAt(step), aimed = sc.sg.peaks.slice(0, aimedN).map((p, i) => ({...p, letter: 'ABC'[i]}));
+  const aimedNames = new Set(aimed.map(p => p.name)), nextP = !LIVE() && step <= 4 && aimedN < sc.np ? sc.sg.peaks[aimedN] : null;
   const big = p => aimedNames.has(p.name) || (nextP && p.name === nextP.name);
   const peaks = eye ? sc.sg.seen.filter(p => p.visible) : flat ? M.peaks : [...NAMED, ...sc.sg.peaks.filter(p => !p.verified && big(p))];
   const side = p => eye ? 0 : (SIDE.get(p.name) || 0), bigs = peaks.filter(big);
@@ -784,6 +788,7 @@ function layers() {
       getSize: 11, getColor: [42, 74, 116], fontWeight: 600, getPixelOffset: t => t.o, parameters: ON_TOP}));
   }
   if (eye) return out;
+  if (LIVE()) return out.concat(TEAM8_LIVE.layers());
   const T = sc.truth;
   // where the judge dropped the pilot; the phone never sees it
   if (step < 7) {
@@ -918,6 +923,7 @@ function countTo(el, key, to, fmt) {   // the number rolls to its new value (on 
   countRaf = requestAnimationFrame(f);
 }
 function updatePanels() {
+  if (LIVE() && TEAM8_LIVE.panels()) return;
   const sc = state.scen, s = state.step, [title, text] = stepCopy(), P = sc.sg.peaks, j = aimedAt(s), stg = stageAt(s);
   $('stepEyebrow').textContent = s <= 6 ? `Step ${s} of 6` : 'Ground truth';
   $('stepTitle').textContent = title; $('stepText').textContent = NB(text);
@@ -991,6 +997,7 @@ function updateDest() {
 }
 const CROSS = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M7 0.5V4M7 10V13.5M0.5 7H4M10 7H13.5" stroke="currentColor" stroke-width="1.3"/></svg>';
 function updateHint() {
+  if (LIVE()) return;   // team8_live.js owns the hint while live
   const s = state.step, h = $('hint');
   h.classList.toggle('locked', s >= 5 && state.locked);
   let html;
@@ -1062,6 +1069,7 @@ function phoneHeading() {   // where the person faces: the next peak to aim at, 
   return state.heading;
 }
 function updatePhone(now) {
+  if (LIVE() && TEAM8_LIVE.phone()) return;
   const sc = state.scen, s = state.step, P = sc.sg.peaks, j = aimedAt(s), r = R(), stg = stageAt(s);
   let big = '', say = '', target = null, arrowTo = null, coords = null, sig = null, btn = 'Next', stop = false;
   const held = new Set(P.slice(0, j).map(p => p.name));
@@ -1160,6 +1168,7 @@ function tick(now) {
   requestAnimationFrame(tick);
 }
 function go(step, dir, auto) {
+  if (LIVE()) { if (step === 7) { TEAM8_LIVE.toggleReveal(); return; } TEAM8_LIVE.leave(true); }   // a step leaves the live view, Reveal shows the hidden spot
   const sc = state.scen;
   if (!auto) clearTimeout(autoT);
   let s = Math.max(0, Math.min(7, step));
@@ -1188,6 +1197,7 @@ function dropPilot(lon, lat, picked) {
 }
 function mapClick(lon, lat) {
   if (!NAV.inside(lon, lat)) return;
+  if (LIVE()) { TEAM8_LIVE.leave(true); state.step = 0; }   // the judge drops a pilot: back to the judge demo
   if (state.step <= 4 || state.step === 7) { dropPilot(lon, lat, true); return; }
   if (!state.scen.fin) { toast('No fix yet. Drop the pilot where a peak is in view.'); return; }
   if (state.locked) { toast('The destination is locked. Unlock it to pick another spot.'); return; }
@@ -1265,6 +1275,8 @@ function lockNow(on) {
   frame(true); render();
   requestAnimationFrame(tick);
   setTimeout(findPresets, 1500);
+  if (window.TEAM8_LIVE) TEAM8_LIVE.start({deck: {PathLayer, LineLayer, ScatterplotLayer, TextLayer}, state, NAV, M, B, NAMED, $, esc, NB, toast, render, frame,
+    toXY, fromXY, dist, brg, gz, ring, countTo, mgrs, fmtKm2, INK, RED, TXT, ON_TOP, CROSS});
 })();
 function simulateTo(tt) {
   resetWalk(); state.trail = [];
