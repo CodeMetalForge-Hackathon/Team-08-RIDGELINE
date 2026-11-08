@@ -862,14 +862,15 @@ function atakShow() {
 }
 function atakRefresh() {
   if (screen !== 'fix' || !$('cot')) return;
-  const t = timed(3000), get = (u, json) => fetch(u, { cache: 'no-store', signal: t.signal }).then(r => { if (!r.ok) throw new Error(u); return json ? r.json() : r.text(); });
+  const t = timed(3000), get = (u, json) => fetch(u, { cache: 'no-store', signal: t.signal }).then(r => { if (!r.ok) throw Object.assign(new Error(u), { status: r.status }); return json ? r.json() : r.text(); });
   Promise.all([get('/api/atak', true), get('/api/cot', false)]).then(([st, xml]) => {
     const ago = Number.isFinite(st.last_sent) ? Math.max(0, Math.round(Date.now() / 1000 - st.last_sent)) : null;
     atakLast.ok = true; atakLast.cot = String(xml || '').trim() || 'No fix on the PC yet.';
     atakLast.st = `<b>${st.connected ? 'ATAK connected' : 'ATAK not connected'}</b> · ${st.sent || 0} sent${ago == null ? '' : ` · last ${ago < 90 ? ago + ' s' : Math.round(ago / 60) + ' min'} ago`}${!st.connected && st.cot_port ? `. In ATAK add the TAK Server 127.0.0.1, port ${st.cot_port}, TCP.` : ''}`;
-  }, () => {
+  }, err => {
     atakLast.ok = false; atakLast.cot = '';
-    atakLast.st = '<b>Connect the cable to hand off to ATAK.</b>';
+    // 404: the PC answers but runs an older server.py without the ATAK hand-off
+    atakLast.st = err && err.status === 404 ? '<b>ATAK hand-off is not running on the PC.</b> Restart the server with the new server.py.' : '<b>Connect the cable to hand off to ATAK.</b>';
   }).then(() => { t.done(); atakShow(); });
 }
 setInterval(() => { if (screen === 'fix') atakRefresh(); }, 5000);
@@ -1028,10 +1029,10 @@ Promise.all([fetch('/data/moran.json', { cache: 'no-store' }).then(r => { if (!r
 
 // ---------- offline: the service worker keeps a copy of every file opened once ----------
 const CORE = ['/', '/solver.js', '/data/moran.json', '/topo/moran.jpg', '/tv/team8_nav.js', '/tv/data/moran/bundle.js'];
-let offReady = false, offTimer = null;
+let offReady = false, offTimer = null, swFailed = false;
 function setOff(cls, text) { const el = $('st-off'); if (el) { el.className = 'nb ' + cls; el.lastChild.textContent = text; } }
 function checkOffline() {
-  if (!('serviceWorker' in navigator) || !window.caches) { setOff('', 'No offline copy'); return; }
+  if (swFailed || !('serviceWorker' in navigator) || !window.caches) { setOff('', 'No offline copy'); return; }
   const need = CORE.concat(window.RidgelineHide ? ['/hide.js'] : [], window.RidgelineSkyline ? ['/skyline.js'] : []);
   Promise.all(need.map(u => caches.match(u).then(Boolean, () => false))).then(hits => {
     const n = hits.filter(Boolean).length, active = !!navigator.serviceWorker.controller;
@@ -1041,7 +1042,7 @@ function checkOffline() {
   });
 }
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => setOff('', 'No offline copy'));
+  navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => { swFailed = true; setOff('', 'No offline copy'); });   // an older server.py has no /sw.js
   navigator.serviceWorker.addEventListener('controllerchange', checkOffline);
 }
 checkOffline();
