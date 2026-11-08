@@ -64,7 +64,7 @@ Peaks are found with Rohan's `find_true_peaks` rule converted to meters (800 m i
 
 ## Hand-off to ATAK
 
-The server creates Cursor on Target events for the fix, its modelled 95% circle, the candidate route, HIDE and SIGNAL marks, and a disagreeing simulated GPS point. These are intended for ATAK native items, but their display inside real ATAK is not yet verified. The point is labelled GPS DISAGREES and states that the cause is unknown. `ce` is the 1 sigma circular error in the CoT base event schema, so ce = r95 / 2.4477. `hae` is ground + 1.7 m plus the GEOID18 offset for the tile (about −8.7 m), because the lidar heights are NAVD88. The fix reaches ATAK only with 2 or more Locks and no mismatch, and a reset deletes the items.
+The server creates Cursor on Target events for the fix, its modelled 95% circle, the candidate route, HIDE and SIGNAL marks, and a disagreeing simulated GPS point. These are intended for ATAK native items, but their display inside real ATAK is not yet verified. The point is labelled GPS DISAGREES and states that the cause is unknown. `ce` is the 1 sigma circular error in the CoT base event schema, so ce = r95 / 2.4477. `hae` is ground + 1.7 m plus the GEOID18 offset for the tile (about −8.7 m), because the lidar heights are NAVD88. The fix reaches ATAK only with 2 or more Locks and no mismatch, and a reset deletes the items. The server resends every 15 s with fresh `time` and `stale`, so the survivor's remarks carry the age in words, for example "Position as of 14:05Z, 12 min ago." Past 10 minutes they add "the person may have moved since". A new route or new marks around the same fix keep its time, a new position or radius resets it.
 
 1. Keep the server running and run `adb reverse tcp:8087 tcp:8087`.
 2. In ATAK-CIV, Settings, Network Preferences, Manage Server Connections, Add. Address 127.0.0.1, no authentication, Advanced Options, TCP, then set the port to 8087.
@@ -98,7 +98,7 @@ Other tests, run on Nov 8, 2026.
 | `node --test ridgeline/test/skyline.test.js` | 6 of 6. The skyline at the 3 wall peaks is within 0.001° of the predicted summit angles, agrees with the visibility masks on 99.9% of visible pairs over 300 random cells, and stays within 0.062° of the wall cards. About 1.5 ms per call |
 | Gate B, by hand on the real phone (Galaxy S24 Ultra, Chrome 156, Nov 8 4:56 EST) | Three paper marks on a wall, measured with a tape and Locked by hand. The angles between Locks were within 2° of the layout (24.2° left and 56.1° right against 25.8° and 54.4°), the phone said Enough, and the fix landed 42 m from the true spot inside its ±293 m bubble. Again at 5:01 on the current version, 90 m off inside ±278 m, Enough, with Rendezvous selected on its own and a 3.40 km route on the phone screen. An earlier try at 4:28 with the marks 5 to 6° off landed 360 m away, inside its ±363 m bubble. Three earlier tries with the marks in the wrong order were each flagged as a mismatch with a request to aim at the last card again |
 | Offline on the real phone (Nov 8 5:03 EST) | Cable out. The page reloaded from the service worker copy with no PC, three Locks gave Enough, ±298 m, 212 m from the true spot, and about 1 s after the cable went back in the board showed that fix |
-| `python -I -m unittest discover -s ridgeline/test -p "test_cot.py"` | 10 of 10. Point, ce, hae, circle, route, marks, the disagreeing GPS test point, ping and pong, a late client, deletes after reset, push mode, a busy CoT port. The Lock relay stays under 0.25 s with ATAK connected |
+| `python -I -m unittest discover -s ridgeline/test -p "test_cot.py"` | 12 of 12. Point, ce, hae, circle, route, marks, the disagreeing GPS test point, ping and pong, a late client, deletes after reset, push mode, a busy CoT port, and the age of the position in the remarks (kept by a new route, reset by a new position). The Lock relay stays under 0.25 s with ATAK connected |
 
 Barometer reference error at the demo wall, 3° aim error, 200 fixes per row (from `/trust`).
 
@@ -143,6 +143,7 @@ A reference up to 30 m off still leaves the truth inside the bubble in at least 
 | `skyline.js`, `test/skyline.test.js` | Expected horizon toward the next peak. |
 | `cot.py`, `test/test_cot.py` | Cursor on Target events and the ATAK link (server mode on 8087, push mode). |
 | `phone/sw.js`, `phone/manifest.webmanifest` | Offline copy and home-screen install. |
+| `scripts/preflight.py`, `test/test_preflight.py` | Read-only pre-demo check (server, `adb reverse`, ATAK link, airplane mode, battery, a run left on the board). Exit code 1 when something must be fixed. |
 
 ## Credits
 
