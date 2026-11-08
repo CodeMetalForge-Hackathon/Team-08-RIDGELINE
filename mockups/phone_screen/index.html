@@ -106,6 +106,8 @@ async function camStart(){
  try{
   const st=await md.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
   if(screen!=='aim'){st.getTracks().forEach(t=>t.stop());return;}
+  // a camera can hand over a track that has already ended (it failed to start): say so instead of showing a dead picture
+  if(!st.getVideoTracks().some(t=>t.readyState==='live')){st.getTracks().forEach(t=>t.stop());camStream=null;camOn=false;camLostAt=Date.now();camApply();announce('The camera did not start. Press Camera to try again, or aim with the skyline.');return;}
   // another app took the camera, permission was withdrawn or the device went away: the track ends by itself
   // (stop() above does not fire this), so drop back to the skyline and say so
   st.getVideoTracks().forEach(t=>t.addEventListener('ended',()=>{if(camStream!==st)return;camStream=null;camOn=false;camLostAt=Date.now();camApply();if(screen==='aim')announce('The camera stopped. Press Camera to start it again.');}));
