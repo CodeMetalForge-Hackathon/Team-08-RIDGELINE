@@ -1,0 +1,238 @@
+{
+ "native": {
+  "width": 10359,
+  "height": 7967,
+  "res_m": [
+   1.0000000000001559,
+   1.0000000000001115
+  ],
+  "crs": "EPSG:26912",
+  "file_mb": 221.9
+ },
+ "area_km2": 82.5,
+ "bounds_utm": [
+  512281.9999777346,
+  4851575.000044453,
+  522640.9999777362,
+  4859542.000044454
+ ],
+ "lake_share": 0.06,
+ "grid_30m": [
+  266,
+  345
+ ],
+ "peaks": [
+  {
+   "z": 3843.2060546875,
+   "r5": 1194,
+   "c5": 1135,
+   "iso_m": 1000000000,
+   "relief_m": 1140,
+   "lon": -110.77655,
+   "lat": 43.83507,
+   "name": "Mt Moran",
+   "visible_share": 0.289
+  },
+  {
+   "z": 3665.69384765625,
+   "r5": 1293,
+   "c5": 836,
+   "iso_m": 1082,
+   "relief_m": 1037,
+   "lon": -110.79518,
+   "lat": 43.83066,
+   "name": "Pk 3666",
+   "visible_share": 0.171
+  },
+  {
+   "z": 3387.798583984375,
+   "r5": 1451,
+   "c5": 651,
+   "iso_m": 768,
+   "relief_m": 644,
+   "lon": -110.80671,
+   "lat": 43.82358,
+   "name": "Pk 3388",
+   "visible_share": 0.141
+  },
+  {
+   "z": 3368.689208984375,
+   "r5": 467,
+   "c5": 838,
+   "iso_m": 2879,
+   "relief_m": 1038,
+   "lon": -110.79493,
+   "lat": 43.86778,
+   "name": "Pk 3369",
+   "visible_share": 0.238
+  },
+  {
+   "z": 3335.905517578125,
+   "r5": 1252,
+   "c5": 385,
+   "iso_m": 1571,
+   "relief_m": 602,
+   "lon": -110.82324,
+   "lat": 43.83255,
+   "name": "Pk 3336",
+   "visible_share": 0.123
+  },
+  {
+   "z": 3325.765625,
+   "r5": 403,
+   "c5": 342,
+   "iso_m": 2425,
+   "relief_m": 820,
+   "lon": -110.82581,
+   "lat": 43.87071,
+   "name": "Pk 3326",
+   "visible_share": 0.287
+  },
+  {
+   "z": 3316.28125,
+   "r5": 1467,
+   "c5": 93,
+   "iso_m": 1224,
+   "relief_m": 396,
+   "lon": -110.84144,
+   "lat": 43.82291,
+   "name": "Pk 3316",
+   "visible_share": 0.115
+  },
+  {
+   "z": 3309.60009765625,
+   "r5": 142,
+   "c5": 101,
+   "iso_m": 1741,
+   "relief_m": 469,
+   "lon": -110.84079,
+   "lat": 43.88246,
+   "name": "Pk 3310",
+   "visible_share": 0.21
+  },
+  {
+   "z": 3292.6396484375,
+   "r5": 1483,
+   "c5": 273,
+   "iso_m": 756,
+   "relief_m": 453,
+   "lon": -110.83024,
+   "lat": 43.82218,
+   "name": "Pk 3293",
+   "visible_share": 0.127
+  },
+  {
+   "z": 3112.15087890625,
+   "r5": 163,
+   "c5": 350,
+   "iso_m": 751,
+   "relief_m": 365,
+   "lon": -110.82528,
+   "lat": 43.8815,
+   "name": "Pk 3112",
+   "visible_share": 0.123
+  }
+ ],
+ "coverage": {
+  "share_3plus": 0.31,
+  "share_2": 0.164
+ },
+ "example": {
+  "truth_latlon": [
+   43.8612,
+   -110.82605
+  ],
+  "truth_elev_m": 2526,
+  "est_latlon": [
+   43.86147,
+   -110.82643
+  ],
+  "err_m": 42,
+  "area95_km2": 0.124,
+  "baro_obs_m": 2530,
+  "first_peak_true": "Pk 3666",
+  "first_peak_model_guess": "Pk 3666",
+  "bearings": [
+   {
+    "asked": "tallest-looking",
+    "peak": "Pk 3666",
+    "obs_deg": 147.8
+   },
+   {
+    "asked": "by name",
+    "peak": "Mt Moran",
+    "obs_deg": 127.6
+   },
+   {
+    "asked": "by name",
+    "peak": "Pk 3388",
+    "obs_deg": 153.0
+   }
+  ],
+  "not_visible_asks": []
+ },
+ "monte_carlo": [
+  {
+   "condition": "good phone, compass 3 deg, barometer 10 m",
+   "n": 200,
+   "median_err_m": 64,
+   "p90_err_m": 256,
+   "within_100m": 0.635,
+   "truth_inside_95pct_region": 1.0,
+   "median_95pct_area_km2": 0.141
+  },
+  {
+   "condition": "typical phone, compass 6 deg, barometer 15 m",
+   "n": 200,
+   "median_err_m": 134,
+   "p90_err_m": 484,
+   "within_100m": 0.425,
+   "truth_inside_95pct_region": 0.985,
+   "median_95pct_area_km2": 0.156
+  },
+  {
+   "condition": "bad, compass 10 deg, barometer 40 m",
+   "n": 200,
+   "median_err_m": 242,
+   "p90_err_m": 1757,
+   "within_100m": 0.215,
+   "truth_inside_95pct_region": 0.735,
+   "median_95pct_area_km2": 0.173
+  },
+  {
+   "condition": "declination not corrected, +10.5 deg bias",
+   "n": 200,
+   "median_err_m": 385,
+   "p90_err_m": 1409,
+   "within_100m": 0.14,
+   "truth_inside_95pct_region": 0.75,
+   "median_95pct_area_km2": 0.209
+  }
+ ],
+ "routes": {
+  "healthy": {
+   "limit_deg": 30,
+   "length_km": 6.72,
+   "climb_m": 13,
+   "time_min": 140
+  },
+  "injured": null
+ },
+ "rendezvous_latlon": [
+  43.86619,
+  -110.75168
+ ],
+ "on_device_mb": {
+  "native_1m_uncompressed": 221.9,
+  "5m_deflate": 6.51,
+  "10m_deflate": 1.73,
+  "30m_deflate": 0.21
+ },
+ "assumptions": [
+  "same DEM for truth and model (no DEM-vs-reality error)",
+  "peaks outside the data are ignored",
+  "user can tell which peak is meant (predicted skyline shown)",
+  "clear view, eye height 1.7 m",
+  "Tobler off-path speed; injured time doubled"
+ ]
+}

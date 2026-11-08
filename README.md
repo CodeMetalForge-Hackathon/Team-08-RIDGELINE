@@ -73,6 +73,10 @@ Pre-existing open-source libraries, frameworks, SDKs, and datasets used in this 
 | USGS 3DEP 1 m lidar (via OpenTopography) | U.S. Government data, public domain | Grand Teton terrain for the judge view (`terrain_viewer/data/`) |
 | deck.gl 9.3.11 | MIT | 3D terrain rendering in `terrain_viewer/`, shipped locally in `terrain_viewer/lib/` |
 | Noto Sans JP, B612 Mono (via Fontsource) | SIL OFL 1.1 | Fonts in `terrain_viewer/`, license texts in `terrain_viewer/lib/fonts/` |
+| loaders.gl 4.4.3 terrain worker | MIT | Terrain decoding in `mockups/map_3d/`, shipped in `mockups/map_3d/lib/` |
+| NumPy, SciPy, rasterio, pyserial | BSD-3-Clause | Offline data prep scripts, and the USB reader in `mockups/sighting_box/` |
+| Pillow | MIT-CMU (HPND) | Writing map images in the data prep scripts |
+| OpenCV (opencv-python) | Apache 2.0 | Outlines of the probability regions in `mockups/map_3d/export_3d_assets.py` |
 
 ## Submission checklist
 

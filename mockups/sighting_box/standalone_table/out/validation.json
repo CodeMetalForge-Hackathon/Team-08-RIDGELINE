@@ -1,0 +1,104 @@
+{
+  "peaks": [
+    "Mt Moran",
+    "Pk 3666",
+    "Pk 3388"
+  ],
+  "rows": 164,
+  "lattice_m": 60,
+  "bytes": 2624,
+  "area_all_three_visible_km2": 0.63,
+  "share_of_land": 0.008,
+  "leg_m": 500.0,
+  "paces_per_100m": 65.0,
+  "sigma_deg": {
+    "elev": 1.5,
+    "turn": 2.5
+  },
+  "cost_max": 51.26,
+  "simulation": {
+    "ideal (no noise, only the table's spacing)": {
+      "trials": 701,
+      "position_error_m": {
+        "median": 30,
+        "p90": 95,
+        "p99": 1353
+      },
+      "walk_direction_error_deg": {
+        "median": 3.1,
+        "within_30": 0.984,
+        "within_45": 0.989,
+        "over_90": 0.008
+      },
+      "stay_agreement": 0.989,
+      "cost_p99": 2.11
+    },
+    "typical (pitch 1.5 deg, turn 2.5 deg)": {
+      "trials": 701,
+      "position_error_m": {
+        "median": 153,
+        "p90": 696,
+        "p99": 4220
+      },
+      "walk_direction_error_deg": {
+        "median": 6.4,
+        "within_30": 0.951,
+        "within_45": 0.997,
+        "over_90": 0.003
+      },
+      "stay_agreement": 0.877,
+      "cost_p99": 12.62
+    },
+    "rough (pitch 3 deg, turn 5 deg)": {
+      "trials": 701,
+      "position_error_m": {
+        "median": 300,
+        "p90": 2518,
+        "p99": 5421
+      },
+      "walk_direction_error_deg": {
+        "median": 7.2,
+        "within_30": 0.888,
+        "within_45": 0.934,
+        "over_90": 0.023
+      },
+      "stay_agreement": 0.776,
+      "cost_p99": 51.26
+    }
+  },
+  "demo": {
+    "cell_features": [
+      14.65,
+      17.55,
+      33.19,
+      14.8,
+      10.62
+    ],
+    "scene_features": [
+      14.65,
+      17.55,
+      33.2,
+      14.8,
+      10.62
+    ],
+    "all_three_visible": true,
+    "eligible": true,
+    "row": 67,
+    "row_cost": 0.0,
+    "row_distance_m": 0,
+    "box_says": {
+      "walk_from_moran_deg": -9.5,
+      "paces": 330,
+      "total_km": 6.7,
+      "stay": false,
+      "stay_injured": true
+    },
+    "box_walk_abs": 116.6,
+    "own_route_walk_abs": 116.5,
+    "own_route_total_km": 6.75,
+    "phone_route_walk_abs": 116.5,
+    "phone_route_total_km": 6.72,
+    "box_vs_phone_deg": 0.1
+  },
+  "rules": "30 m cells, lake mask from hydro-flattened 3DEP, slope limit 30 deg (injured 18), 5 m slope over 45 deg is a cliff, Tobler off-path speed x0.6, goal = nearest reachable lakeshore"
+}
