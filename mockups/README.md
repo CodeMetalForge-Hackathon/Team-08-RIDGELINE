@@ -18,7 +18,7 @@ These are snapshots from the evening of Nov 7 EST. Each one replays a fixed scen
 
 ```mermaid
 flowchart LR
-  DEM[5 m terrain, phone_screen/input] --> Samples[map_samples/stats.json]
+  DEM[5 m terrain, kept outside the repo] --> Samples[map_samples/stats.json]
   Samples --> Phone[phone_screen]
   Samples --> Map3D[map_3d]
   Phone --> Box[sighting_box/box_scene.json]
@@ -32,7 +32,7 @@ The phone and the box describe a Lock with the same four things (which peak, bea
 
 **phone_screen** Five screens, keyboard driven (J jams GPS, arrows aim, Enter locks, I toggles injury, R opens the radio report). It records the Lock but plays back fixed estimates, so changing the peak order does not change the answer. Magnetic declination is a placeholder 0°. Full controls and limits are in its README.
 
-To rebuild `phone_state.json` from this repo, run `python -I export_phone_state.py --stats ../map_samples/stats.json` in the folder. The default `--stats` path points to a folder outside this repo.
+The page runs on `phone_state.json` alone. To rebuild that file, run `python -I export_phone_state.py --dem <dem_5m.tif> --stats ../map_samples/stats.json` in the folder. Both flags are needed, because the default DEM file is not in the repo and the default stats path points outside it.
 
 **map_3d** Arrow keys step through the fix, I switches healthy 30° and injured 18°, G jams GPS, W shows where three or more peaks are in view. It needs the local server because the page reads `state.json`. The terrain tifs were left out because the page does not use them. `export_3d_assets.py` rebuilds `data/` and `state.json` from a DEM and `../map_samples/stats.json` (not re-run from this folder).
 
@@ -43,11 +43,11 @@ The server streams named events at `http://localhost:8765/events`. Listen for `l
 **standalone_table** 164 rows on a 60 m grid. In a simulation with normal sensor noise (1.5° tilt, 2.5° turn), the walking direction is within 30° in 95% of cases, the median position error is 153 m, and the Stay call matches 88% of the time. The main limit is that all three peaks are visible from only 0.63 km² (about 0.8% of the land), so a wider version needs more peak sets. To rebuild, run this from `mockups/`.
 
 ```
-python -I sighting_box/standalone_table/make_standalone_table.py phone_screen/input/dem_5m.tif map_samples/stats.json sighting_box/standalone_table/out --scene sighting_box/box_scene.json --phone-state phone_screen/phone_state.json
+python -I sighting_box/standalone_table/make_standalone_table.py <dem_5m.tif> map_samples/stats.json sighting_box/standalone_table/out --scene sighting_box/box_scene.json --phone-state phone_screen/phone_state.json
 ```
 
 **map_samples** `make_map_preview.py <dem.tif> <out_dir> <scratch_dir>` makes all six PNGs and `stats.json`, including a Monte Carlo check of the fix.
 
 ## Data
 
-Terrain is derived from the USGS 3DEP 1 m lidar (public domain) through OpenTopography. The 1 m source (about 222 MB) is not in the repo. The only DEM here is `phone_screen/input/dem_5m.tif` (6.5 MB). The "true spot" in every mockup is a simulated hiker.
+Terrain is derived from the USGS 3DEP 1 m lidar (public domain) through OpenTopography. No elevation files are in the repo. The 1 m source (about 222 MB) and the 5 m file the rebuild scripts read (6.5 MB) stay local. Ask Seika for the 5 m file, or make it from the 1 m USGS tiles. The pages themselves need neither. The "true spot" in every mockup is a simulated hiker.
