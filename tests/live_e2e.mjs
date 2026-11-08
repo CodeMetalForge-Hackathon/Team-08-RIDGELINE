@@ -73,10 +73,10 @@ async function waitHttp(url, ms) { const t0 = Date.now(); for (;;) { try { const
 
 // one headless Chrome per page: a second window or tab in headless mode does not paint, so the phone gets its own
 const procs = [], profiles = [];
-async function openPage(url, w, h, name, port) {
+async function openPage(url, w, h, name, port, extra = []) {
   const prof = mkdtempSync(join(tmpdir(), 'ridgeline-e2e-')); profiles.push(prof);
   procs.push(spawn(CHROME, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${prof}`, '--no-first-run', '--no-default-browser-check',
-    '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--enable-unsafe-swiftshader', `--window-size=${w},${h}`, 'about:blank'], {stdio: 'ignore'}));
+    '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--enable-unsafe-swiftshader', `--window-size=${w},${h}`, ...extra, 'about:blank'], {stdio: 'ignore'}));
   await waitHttp(`http://127.0.0.1:${port}/json/version`, 15000);
   let t = null;
   for (let i = 0; i < 40 && !t; i++) { t = (await json(`http://127.0.0.1:${port}/json/list`)).find(x => x.type === 'page'); if (!t) await sleep(150); }
@@ -142,7 +142,8 @@ async function main() {
     pages.push(viewer);
     await viewer.until('!!(window.TEAM8_READY && window.TEAM8_DECK)', 60000, 200);
     log('viewer ready');
-    const phone = await openPage(`${BASE}/mockups/phone_screen/`, 430, 932, 'phone', DPORT + 1);
+    // Chrome's fake camera (a test pattern) and auto-accepted permission, for the camera crosshair
+    const phone = await openPage(`${BASE}/mockups/phone_screen/`, 430, 932, 'phone', DPORT + 1, ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream']);
     pages.push(phone);
     await phone.until(`/Live solver ready/.test(document.getElementById('live-status').textContent)`, 20000);
     res.checks.phone_live_ready = await phone.eval(`document.getElementById('live-status').textContent`);
@@ -153,6 +154,21 @@ async function main() {
     await viewer.until(`window.TEAM8_LIVE && TEAM8_LIVE.on && document.getElementById('stepTitle').textContent === 'Phone ready'`, 5000);
     res.checks.viewer_phone_ready = true;
     await phone.shot('phone_0_aim.png'); await viewer.shot('viewer_0_ready.png');
+    // P1.3: camera behind a crosshair on the Lock screen. Headless Chrome's fake camera opens only once per process (a
+    // second getUserMedia gives NotFoundError, see .local/camprobe.mjs), so the Camera off button is checked first on a
+    // canvas stream, then the fake camera is opened once and stays on through the locks until Use this fix leaves the screen.
+    const camUp = `(() => { const v = document.getElementById('cam'); return !!(camOn && v && !v.hidden && v.videoWidth > 0 && document.getElementById('sky-wrap').classList.contains('cam-on')); })()`;
+    await phone.eval(`(() => { const c = document.createElement('canvas'); c.width = 64; c.height = 48; const x = c.getContext('2d'); x.fillStyle = '#486'; x.fillRect(0, 0, 64, 48);
+      camStream = c.captureStream(5); camOn = true; camApply(); window.__camTracks = camStream.getTracks(); document.getElementById('cam-toggle').click(); })()`);
+    const offEnds = await phone.eval(`!camOn && camStream === null && __camTracks.length > 0 && __camTracks.every(t => t.readyState === 'ended') && document.getElementById('cam').hidden && !document.getElementById('sky-wrap').classList.contains('cam-on')`);
+    await phone.eval(`document.getElementById('cam-toggle').click()`);
+    await phone.until(camUp, 8000);
+    res.checks.camera = {notice: await phone.eval(`document.getElementById('notice').textContent`), size: await phone.eval(`[document.getElementById('cam').videoWidth, document.getElementById('cam').videoHeight]`),
+      track: await phone.eval(`camStream.getVideoTracks()[0].label`), settings: await phone.eval(`(({width, height, frameRate}) => ({width, height, frameRate}))(camStream.getVideoTracks()[0].getSettings())`),
+      focus_on_main: await phone.eval(`document.activeElement === document.getElementById('main')`), skyline_hidden: await phone.eval(`getComputedStyle(document.getElementById('sky')).visibility === 'hidden'`),
+      off_ends_tracks: offEnds};
+    log('  camera:', JSON.stringify(res.checks.camera));
+    await phone.shot('phone_1_camera.png');
 
     const target = () => phone.eval('liveTarget().id');
     for (let n = 1; n <= 2; n++) {
@@ -160,6 +176,7 @@ async function main() {
       res.locks.push({...(await lockAndTime(phone, viewer, n, `lock ${n} ${id} (${presses} key presses)`)), peak: id, presses});
       await phone.shot(`phone_${n}.png`); await viewer.shot(`viewer_${n}.png`);
     }
+    res.checks.camera.on_after_two_locks = await phone.until(camUp, 4000).then(() => true, () => false);
     // lock 3 on purpose at the wrong peak: the phone asks for one peak, the person aims at an already locked one
     const want = await target(), wrongAt = (await phone.eval(`locks.map(l => l.peak_id)`))[1];
     const pw = await aim(phone, wrongAt);
@@ -205,8 +222,10 @@ async function main() {
     await phone.shot('phone_6_relock.png'); await viewer.shot('viewer_6_relock.png');
     // Enter on the phone uses the fix, then P1.2: a destination and a safe route, followed on the judge map
     if (/Enough/.test(fin2)) {
+      await phone.eval(`window.__camTracks = camStream ? camStream.getTracks() : []`);
       await phone.key('Enter');
       await phone.until(`screen === 'guide' && !!document.getElementById('destmap')`, 3000);
+      res.checks.camera.stopped_off_aim = await phone.eval(`!camOn && camStream === null && __camTracks.length > 0 && __camTracks.every(t => t.readyState === 'ended')`);
       res.checks.phone_guide = await phone.eval(`[...document.querySelectorAll('.dest-list button')].map(b => b.textContent)`);
       await phone.shot('phone_7_dest.png');
       // a saved point at the able limit
@@ -280,6 +299,8 @@ async function main() {
       pin_locked_by_long_press: !!(res.checks.pin && res.checks.pin.did_not_move && res.checks.pin.after_tap.locked),
       unlock_needs_two_actions: !!(res.checks.pin && res.checks.pin.unlock_after_one_action_still_locked === true && res.checks.pin.unlock_after_two_actions_locked === false),
       keyboard_pin: !!(res.checks.keyboard_pin && res.checks.keyboard_pin.moved_west && res.checks.keyboard_pin.dropped_unlocked && res.checks.keyboard_pin.locked_by_hold)};
+    const cam = res.checks.camera;
+    res.summary.camera = !!(cam && cam.size[0] > 0 && cam.focus_on_main && cam.skyline_hidden && cam.off_ends_tracks && cam.on_after_two_locks && cam.stopped_off_aim);
     log('summary', JSON.stringify(res.summary));
   } catch (err) {
     res.error = String(err && err.stack || err);
@@ -287,6 +308,8 @@ async function main() {
     for (const p of pages) {
       res.debug[p.name] = {errors: p.errors, loading: await p.eval(`(document.getElementById('loading') || {}).textContent || ''`).catch(e => String(e)),
         url: await p.eval('location.href').catch(() => null)};
+      if (p.name === 'phone') res.debug.phone.state = await p.eval(`({screen, camOn, stream: !!camStream, tracks: camStream ? camStream.getTracks().map(t => t.readyState) : null, notice,
+        video: (() => { const v = document.getElementById('cam'); return v && {hidden: v.hidden, w: v.videoWidth, h: v.videoHeight, rs: v.readyState, paused: v.paused, src: !!v.srcObject}; })()})`).catch(e => String(e));
       await p.shot(`fail_${p.name}.png`).catch(() => null);
     }
     console.error(res.error, JSON.stringify(res.debug, null, 1));
@@ -300,7 +323,7 @@ async function main() {
   const s = res.summary;
   const ok = s && s.within_1s && s.wrong_aim_flagged && !s.page_errors && s.same_r95_phone_and_viewer && s.target_is_flagged_peak && s.second_wrong_flagged &&
     s.relock_replaced && s.phone_used_fix && s.route_shown_on_viewer_ms < 1500 && s.injured_stay_signal_wait && s.pin_locked_by_long_press &&
-    s.unlock_needs_two_actions && s.keyboard_pin;
+    s.unlock_needs_two_actions && s.keyboard_pin && s.camera;
   if (!ok) { console.error('E2E FAILED'); process.exitCode = 1; } else log('E2E PASSED, results in', OUT);
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });
