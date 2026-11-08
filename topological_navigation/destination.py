@@ -294,9 +294,10 @@ class Planner:
         """Fixed-width text table of the routes (for the picker's message box / printing)."""
         rows = [f"{'#':>2} {'route':<40}{'time':>10}{'dist':>9}{'climb':>7}{'snow':>13}{'streams':>8}  severity"]
         for k, r in enumerate(alts, 1):
-            snow = f"{r['snow_m']:.0f}m/{r['snow_max_cm']:.0f}cm" if r["snow_m"] else "-"
-            rows.append(f"{k:>2} {r['label']:<40}{fmt_duration(r['eta_min']):>10}{r['distance_m'] / 1000:>6.2f} km"
-                        f"{r['ascent_m']:>6.0f}m{snow:>13}{r['n_crossings']:>8}  {r['severity']}")
+            snow = f"{r['snow_m']:.0f}m/{r['snow_max_cm']:.0f}cm" if r.get("snow_m") else "-"
+            rows.append(f"{k:>2} {r['label']:<40}{fmt_duration(r.get('eta_min', float('nan'))):>10}"
+                        f"{r.get('distance_m', 0.0) / 1000:>6.2f} km{r.get('ascent_m', 0.0):>6.0f}m{snow:>13}"
+                        f"{r.get('n_crossings', 0):>8}  {r['severity']}")
         for k, r in enumerate(alts, 1):
             if r.get("advantage"):
                 rows.append(f"   {k}: {r['advantage']}")
@@ -732,14 +733,19 @@ def pick_destination(planner: Planner, radius_m: float | None = None, show: bool
             return
         plan_rc(g.xy_to_rc(x, y))
 
-    def show_alts():
+    def show_alts(keep=False):
         if locked():
             return say("ROUTE LOCKED: press 'l' to disengage before comparing routes.")
         if state["goal"] is None:
             return say("Click a destination first, then press 'a'.")
         busy("Computing alternative routes (a few seconds)...")
+        prev_idx = state["sel"]
+        prev = state["alts"][state["sel"]] if (keep and state["alts"]) else None
         state["alts"] = planner.plan_alternatives(state["goal"])
         state["sel"] = 0
+        if prev is not None:                       # keep the route the user had highlighted, if it still exists
+            same = [k for k, r in enumerate(state["alts"]) if r.get("profile") == prev.get("profile")]
+            state["sel"] = same[0] if same else min(prev_idx, len(state["alts"]) - 1)
         redraw_alts()
 
     def redraw_alts():
@@ -800,7 +806,12 @@ def pick_destination(planner: Planner, radius_m: float | None = None, show: bool
 
     def lock_toggle():
         if locked():
+            r = state["lres"]
             state["nav"] = state["lres"] = state["fix"] = state["sug"] = state["offer"] = None
+            clear_art()
+            state["art"] = draw_plan(ax, planner, r)
+            state["res"] = r
+            ax.set_title(f"Unlocked - {r['label']}: {_summary(r)}")
             return say("Route disengaged. You can choose a new destination or compare routes again.")
         r = state["alts"][state["sel"]] if state["alts"] else state["res"]
         if r is None or len(r["path"]) < 2 or r["severity"] in ("unreachable", "invalid"):
@@ -887,10 +898,16 @@ def pick_destination(planner: Planner, radius_m: float | None = None, show: bool
         t_view += hours * 3600
         apply_conditions(g, cond, t=t_view)
         refresh_weather_view()
-        if locked():
-            conditions_changed()
+        if state["nav"] is not None:                 # a route is engaged: NEVER re-plan or re-select anything
+            try:
+                conditions_changed()
+            except Exception as e:                   # show the failure, keep the locked route on screen
+                import traceback
+                traceback.print_exc()
+                draw_locked(f"Could not re-check the locked route against the new weather ({type(e).__name__}: "
+                            f"{e}). Your route is unchanged.")
         elif state["alts"] is not None:
-            show_alts()
+            show_alts(keep=True)
         elif state["goal"] is not None:
             plan_rc(state["goal"])
         else:
@@ -942,6 +959,12 @@ def pick_destination(planner: Planner, radius_m: float | None = None, show: bool
             set_view()
         elif ev.key == "z":
             set_view(sx, sy, 1500.0)
+        elif ev.key == "f":
+            try:
+                fig.canvas.manager.full_screen_toggle()
+            except Exception:
+                pass
+            return
         elif ev.key == "x":
             if locked():
                 return say("ROUTE LOCKED: press 'l' to disengage first.")
@@ -978,6 +1001,11 @@ def pick_destination(planner: Planner, radius_m: float | None = None, show: bool
         else:
             return
         fig.canvas.draw_idle()
+
+    try:                                             # our keys replace matplotlib's default shortcuts
+        fig.canvas.mpl_disconnect(fig.canvas.manager.key_press_handler_id)
+    except Exception:
+        pass
 
     for name, fn in (("button_press_event", on_press), ("motion_notify_event", on_motion),
                      ("button_release_event", on_release), ("scroll_event", on_scroll),
