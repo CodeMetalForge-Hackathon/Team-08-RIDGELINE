@@ -67,7 +67,7 @@ function checkList(list, kind, out) {
     // nobody walks faster than Tobler's best speed in a straight line
     assert.ok(c.walk_min * 60 + 30 >= sep(c, demo) / (VK * (out.injured ? 0.5 : 1)), 'walk time is physical');
     assert.ok(!/safe/i.test(c.why), 'never says safe');
-    assert.ok(!/[—–;:]/.test(c.why), 'no dash, semicolon or colon');
+    assert.ok(!/[\u2014\u2013;:]/.test(c.why), 'no dash, semicolon or colon');
     assert.match(c.why, kind === 'HIDE' ? /^Out of sight of .* summits\. .*min walk\.$/ : /^Seen from .* summits on .* ground\. .*min walk\.$/);
   });
   for (let a = 0; a < list.length; a++) for (let b = a + 1; b < list.length; b++) {
