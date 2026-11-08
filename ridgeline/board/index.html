@@ -6,7 +6,7 @@
 <title>RIDGELINE Board</title>
 <link rel="icon" href="data:,">
 <style>
-:root{--paper:#f3efe4;--paper2:#e9e3d3;--ink:#1f2326;--ink2:#4c5257;--rule:#cfc6b0;--red:#b3261e;--blue:#145f7a;--amber:#a86b00;--font:"Noto Sans JP","Noto Sans",system-ui,sans-serif;--mono:ui-monospace,"Cascadia Mono",Consolas,monospace}
+:root{--paper:#f3efe4;--paper2:#e9e3d3;--ink:#1f2326;--ink2:#4c5257;--rule:#cfc6b0;--red:#b3261e;--blue:#145f7a;--amber:#a86b00;--hide:#5b2f86;--sig:#e0580f;--sig-ink:#9a3a06;--green:#2b7a3d;--font:"Noto Sans JP","Noto Sans",system-ui,sans-serif;--mono:ui-monospace,"Cascadia Mono",Consolas,monospace}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font-family:var(--font)}
 .wrap{display:grid;grid-template-columns:minmax(0,1fr) 360px;height:100vh}
@@ -45,12 +45,25 @@ td.r{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
 .live.on i{background:var(--red);animation:blink 1.2s infinite}
 @keyframes blink{50%{opacity:.25}}
 @media (prefers-reduced-motion:reduce){.live.on i{animation:none}.meter span{transition:none}}
+[hidden]{display:none!important}
+.legend svg{display:block}
+.legend .wide{grid-column:1/-1;font-size:12px;color:var(--ink2);border-top:1px solid var(--rule);margin-top:4px;padding-top:2px}
+.legend:not(.has-marks) .lg-m,.legend:not(.has-gps) .lg-g{display:none}
+.marks{display:flex;flex-direction:column;gap:6px;border-top:2px solid var(--ink);padding-top:12px}
+.marks .mr{display:grid;grid-template-columns:22px 26px 1fr;gap:6px;align-items:start;font-size:13px;line-height:1.4}
+.marks .mr svg{margin-top:1px}
+.marks b{font:800 14px/1.3 var(--mono)}.marks b.h{color:var(--hide)}.marks b.s{color:var(--sig-ink)}
+.atak{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--ink2)}
+.atak b{letter-spacing:.08em;color:var(--ink)}
+.atak i{width:8px;height:8px;border-radius:50%;background:#8a8f93}
+.atak.on i{background:var(--green)}
+.atak .err{color:var(--red)}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="mapbox" id="mapbox"><canvas id="cv"></canvas>
-    <div class="legend"><i></i><span>Pencil line from a locked peak</span><i class="t"></i><span>Error triangle</span><i class="b"></i><span>95% bubble</span><i class="x"></i><span>Best estimate</span></div>
+    <div class="legend" id="legend"><i></i><span>Pencil line from a locked peak</span><i class="t"></i><span>Error triangle</span><i class="b"></i><span>95% bubble</span><i class="x"></i><span>Best estimate</span><span class="lg-m" id="lg-h"></span><span class="lg-m">HIDE, seen by the fewest summits</span><span class="lg-m" id="lg-s"></span><span class="lg-m">SIGNAL, open ground seen by the most summits</span><span class="lg-g" id="lg-g"></span><span class="lg-g">Phone GPS reading</span><span class="wide lg-m">Terrain only. Trees and buildings are not in the model.</span></div>
   </div>
   <aside class="side">
     <div class="brand"><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><path d="M2 26 13 6 19 17 23 10 30 26M9 26l7-12 7 12" fill="none" stroke="#1f2326" stroke-width="2.4" stroke-linejoin="round"/></svg>RIDGELINE <small>live fix</small><span class="live" id="live" style="margin-left:auto"><i></i><span>WAITING</span></span></div>
@@ -61,19 +74,88 @@ td.r{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
     <table id="locks"></table>
     <div id="others" class="sub"></div>
     <div id="route" class="route" hidden></div>
+    <div id="marks" class="marks" hidden></div>
     <div class="reveal" id="reveal" hidden></div>
+    <div class="atak" id="atak" hidden><b>ATAK</b><i></i><span id="atak-t"></span></div>
     <div class="keys"><kbd>R</kbd> answer check &nbsp; <kbd>C</kbd> clear &nbsp; <kbd>F</kbd> full screen &nbsp; <kbd>T</kbd> trust numbers<br>Click the map to drop a test pilot there. RIDGELINE simulates three Locks with 3° aim error from that spot and solves again.<br><span id="foot"></span></div>
   </aside>
 </div>
 <script src="/solver.js"></script>
+<script src="/hide.js"></script>
 <script>
 'use strict';
 const S = window.RidgelineSolver;
+const HD = window.RidgelineHide;   // HIDE and SIGNAL (terrain only), used here for the test pilot
 const $ = id => document.getElementById(id);
 const rad = d => d * Math.PI / 180;
 const fmtM = m => m >= 1000 ? (m / 1000).toFixed(2) + ' km' : Math.round(m) + ' m';
+const fmtKm = m => m >= 1000 ? (m / 1000).toFixed(1) + ' km' : Math.round(m) + ' m';
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-let model, topo, state = null, version = -1, res = null, overlay = null, truth = null, showTruth = false, view = null, viewTarget = null, drawT0 = 0, lastLockCount = 0, shown = null;
+let model, topo, state = null, version = -1, res = null, overlay = null, truth = null, showTruth = false, view = null, viewTarget = null, drawT0 = 0, lastLockCount = 0, shown = null, simMarks = null;
+
+// HIDE and SIGNAL marks: the phone's summary.marks, or the board's own for a test pilot.
+function marksNow() {
+  const ph = state && state.phone;
+  const list = ph && Array.isArray(ph.marks) ? ph.marks : simMarks || [];
+  return list.filter(k => k && (k.kind === 'HIDE' || k.kind === 'SIGNAL') && Number.isFinite(+k.lat) && Number.isFinite(+k.lon)).slice(0, 12);
+}
+function gpsNow() {
+  const g = state && state.phone && state.phone.gps;
+  return g && typeof g === 'object' && Number.isFinite(+g.lat) && Number.isFinite(+g.lon) ? g : null;
+}
+// the fix the GPS is compared with: the board's own solve, else the phone's
+function fixEN() {
+  if (res && res.n_locks >= 2) return { e: res.estimate.e_m, n: res.estimate.n_m };
+  const ph = state && state.phone;
+  return ph && Number.isFinite(+ph.lat) && Number.isFinite(+ph.lon) ? S.toEN(model, +ph.lon, +ph.lat) : null;
+}
+const gpsLook = g => {
+  const v = String(g.verdict || '').toUpperCase();
+  return v === 'REJECTED' ? { col: '#b3261e', say: d => `GPS rejected, ${d} off` } : v === 'AGREE' ? { col: '#2b7a3d', say: d => `GPS agrees, ${d}` } : { col: '#1f2326', say: d => `GPS reading, ${d} off` };
+};
+// map symbols, the same shapes on the canvas and in the legend
+function symSvg(kind, col) {
+  if (kind === 'HIDE') {
+    let t = '';
+    for (let a = 0; a < 8; a++) { const c = Math.cos(a * Math.PI / 4), s = Math.sin(a * Math.PI / 4); t += `M${(11 + c * 7).toFixed(2)} ${(10 + s * 7).toFixed(2)}L${(11 + c * 3.9).toFixed(2)} ${(10 + s * 3.9).toFixed(2)}`; }
+    return `<svg width="22" height="20" viewBox="0 0 22 20" aria-hidden="true"><circle cx="11" cy="10" r="7" fill="rgba(91,47,134,.16)" stroke="#5b2f86" stroke-width="2.2"/><path d="${t}" stroke="#5b2f86" stroke-width="1.5"/></svg>`;
+  }
+  if (kind === 'SIGNAL') return '<svg width="22" height="20" viewBox="0 0 22 20" aria-hidden="true"><path d="M7 18V2" stroke="#1f2326" stroke-width="2" stroke-linecap="round"/><path d="M7 2l12 4-12 4z" fill="#e0580f" stroke="#1f2326" stroke-width="1.2" stroke-linejoin="round"/><circle cx="7" cy="17.5" r="2.3" fill="#1f2326"/></svg>';
+  return `<svg width="22" height="20" viewBox="0 0 22 20" aria-hidden="true"><path d="M5 4l12 12M17 4L5 16" stroke="${col || '#1f2326'}" stroke-width="2.6" stroke-linecap="round"/></svg>`;
+}
+function hideSym(ctx, x, y, s) {
+  const r = 9 * s;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.lineWidth = 6 * s; ctx.strokeStyle = 'rgba(243,239,228,.92)'; ctx.stroke();
+  ctx.fillStyle = 'rgba(91,47,134,.18)'; ctx.fill();
+  ctx.lineWidth = 2.6 * s; ctx.strokeStyle = '#5b2f86'; ctx.stroke();
+  ctx.beginPath();   // inward ticks, the way a topo map marks a hollow
+  for (let a = 0; a < 8; a++) { const c = Math.cos(a * Math.PI / 4), d = Math.sin(a * Math.PI / 4); ctx.moveTo(x + c * r, y + d * r); ctx.lineTo(x + c * r * .56, y + d * r * .56); }
+  ctx.lineWidth = 1.7 * s; ctx.stroke();
+}
+function signalSym(ctx, x, y, s) {
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 26 * s);
+  ctx.lineWidth = 5.5 * s; ctx.strokeStyle = 'rgba(243,239,228,.92)'; ctx.stroke();
+  ctx.lineWidth = 2.2 * s; ctx.strokeStyle = '#1f2326'; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x, y - 26 * s); ctx.lineTo(x + 17 * s, y - 20.5 * s); ctx.lineTo(x, y - 15 * s); ctx.closePath();
+  ctx.lineWidth = 4.5 * s; ctx.strokeStyle = 'rgba(243,239,228,.92)'; ctx.stroke();
+  ctx.fillStyle = '#e0580f'; ctx.fill(); ctx.lineWidth = 1.4 * s; ctx.strokeStyle = '#1f2326'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, 3.2 * s, 0, Math.PI * 2); ctx.fillStyle = '#1f2326'; ctx.fill();
+  ctx.lineWidth = 1.5 * s; ctx.strokeStyle = '#f3efe4'; ctx.stroke();
+}
+// a label with a paper halo, put where it does not cover a label already drawn
+function haloLabel(ctx, txt, tries, col, boxes, s) {
+  const w = ctx.measureText(txt).width, h = 14 * s;
+  let at = tries[0];
+  for (const t of tries) {
+    const b = { x0: t[0] - 2 * s, y0: t[1] - h, x1: t[0] + w + 2 * s, y1: t[1] + 3 * s };
+    if (!boxes.some(o => b.x0 < o.x1 && o.x0 < b.x1 && b.y0 < o.y1 && o.y0 < b.y1)) { at = t; break; }
+  }
+  boxes.push({ x0: at[0] - 2 * s, y0: at[1] - h, x1: at[0] + w + 2 * s, y1: at[1] + 3 * s });
+  ctx.strokeText(txt, at[0], at[1]); ctx.fillStyle = col; ctx.fillText(txt, at[0], at[1]);
+}
 
 function solveFrom(obs) {
   const cands = state && state.source === 'board-sim' ? undefined : model.demo.wall.map(w => w.peak_id);
@@ -90,6 +172,11 @@ function solveFrom(obs) {
     }
     ctx.putImageData(img, 0, 0); overlay = c;
   }
+  // a test pilot gets the board's own HIDE and SIGNAL (healthy, 30 min), a phone sends its own
+  simMarks = null;
+  if (HD && res && res.n_locks >= 3 && state && state.source === 'board-sim') {
+    try { simMarks = HD.marks(HD.candidates(model, res, { minutes: 30 })); } catch (e) { simMarks = null; }
+  }
   // camera: the locked peaks and the bubble, or the whole sheet
   const fullE = model.nx * model.dx, fullN = model.ny * model.dy;
   if (res && res.n_locks >= 1) {
@@ -103,6 +190,12 @@ function solveFrom(obs) {
     if (rt) {
       for (const run of rt.runs || []) for (const p of run.path) { const q = S.toEN(model, p[0], p[1]); add(q.e, q.n, 250); }
       if (rt.dest) { const q = S.toEN(model, rt.dest.lon, rt.dest.lat); add(q.e, q.n, 400); }
+    }
+    for (const k of marksNow()) { const q = S.toEN(model, +k.lon, +k.lat); add(q.e, q.n, 250); }
+    const g = gpsNow(), f = fixEN();
+    if (g && f) {   // a GPS reading on the sheet and within 4 km joins the frame, a farther one gets an edge arrow
+      const q = S.toEN(model, +g.lon, +g.lat);
+      if (q.e >= 0 && q.n >= 0 && q.e <= fullE && q.n <= fullN && Math.hypot(q.e - f.e, q.n - f.n) <= 4000) add(q.e, q.n, 700);
     }
     viewTarget = { e0: Math.max(0, e0), e1: Math.min(fullE, e1), n0: Math.max(0, n0), n1: Math.min(fullN, n1) };
   } else viewTarget = { e0: 0, e1: fullE, n0: 0, n1: fullN };
@@ -192,12 +285,73 @@ function draw(now) {
     ctx.strokeText(rt.dest.label, tx, y - 14 * s); ctx.fillStyle = '#1f2326'; ctx.fillText(rt.dest.label, tx, y - 14 * s);
     ctx.restore();
   }
+  const boxes = [];   // label boxes drawn so far, so HIDE, SIGNAL and GPS labels do not cover each other
+  const g = gpsNow();
+  let gpsLabel = null;
+  if (g) {   // the phone's GPS reading: a cross, a thin line to the fix, and the verdict
+    const look = gpsLook(g), f = fixEN(), q = S.toEN(model, +g.lon, +g.lat);
+    const fx = f && X(f.e), fy = f && Y(f.n);
+    let x = X(q.e), y = Y(q.n), edge = false;
+    const pad = 18 * dpr;
+    if (x < pad || y < pad || x > W - pad || y > H - pad) {   // off the frame: clip the line at the edge and point at it
+      if (!f) x = null;
+      else {
+        let t = 1;
+        const dx = x - fx, dy = y - fy;
+        if (dx) t = Math.min(t, ((dx > 0 ? W - pad : pad) - fx) / dx);
+        if (dy) t = Math.min(t, ((dy > 0 ? H - pad : pad) - fy) / dy);
+        x = fx + dx * Math.max(0, t); y = fy + dy * Math.max(0, t); edge = true;
+      }
+    }
+    if (x != null) {
+      ctx.save(); ctx.lineCap = 'round';
+      if (f) {
+        ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(x, y);
+        ctx.lineWidth = 3.5 * dpr; ctx.strokeStyle = 'rgba(243,239,228,.75)'; ctx.stroke();
+        ctx.lineWidth = 1.4 * dpr; ctx.strokeStyle = look.col; ctx.stroke();
+      }
+      ctx.beginPath();
+      if (edge) {   // arrowhead toward the reading
+        const a = Math.atan2(y - fy, x - fx), s = 12 * dpr;
+        ctx.moveTo(x - Math.cos(a - .45) * s, y - Math.sin(a - .45) * s); ctx.lineTo(x, y); ctx.lineTo(x - Math.cos(a + .45) * s, y - Math.sin(a + .45) * s);
+      } else { const s = 8 * dpr; ctx.moveTo(x - s, y - s); ctx.lineTo(x + s, y + s); ctx.moveTo(x + s, y - s); ctx.lineTo(x - s, y + s); }
+      ctx.lineWidth = 6.5 * dpr; ctx.strokeStyle = 'rgba(243,239,228,.92)'; ctx.stroke();
+      ctx.lineWidth = 3 * dpr; ctx.strokeStyle = look.col; ctx.stroke();
+      ctx.restore();
+      const d = Number.isFinite(+g.dist_m) ? +g.dist_m : f ? Math.hypot(q.e - f.e, q.n - f.n) : null;
+      gpsLabel = { txt: d == null ? 'GPS reading' : look.say(fmtKm(d)), col: look.col, x, y, right: !f || x >= fx };
+    }
+  }
   if (res && res.n_locks >= 2) {
     const x = X(res.estimate.e_m), y = Y(res.estimate.n_m), r = res.r95_m / (v.e1 - v.e0) * W;
     ctx.save(); ctx.setLineDash([7 * dpr, 5 * dpr]); ctx.strokeStyle = res.status === 'mismatch' ? '#b3261e' : '#145f7a'; ctx.lineWidth = 2.2 * dpr;
     ctx.beginPath(); ctx.arc(x, y, Math.max(8 * dpr, r), 0, Math.PI * 2); ctx.stroke(); ctx.restore();
     ctx.strokeStyle = '#b3261e'; ctx.lineWidth = 3 * dpr;
     ctx.beginPath(); ctx.moveTo(x - 12 * dpr, y); ctx.lineTo(x + 12 * dpr, y); ctx.moveTo(x, y - 12 * dpr); ctx.lineTo(x, y + 12 * dpr); ctx.stroke();
+  }
+  const mk = marksNow();
+  if (mk.length || gpsLabel) {   // HIDE hollows and SIGNAL flags, then all labels on top
+    ctx.save();
+    const pts = mk.map(k => { const q = S.toEN(model, +k.lon, +k.lat); return { k, x: X(q.e), y: Y(q.n) }; });
+    for (const p of pts) if (p.k.kind === 'HIDE') hideSym(ctx, p.x, p.y, dpr); else signalSym(ctx, p.x, p.y, dpr);
+    for (const p of pts) boxes.push(p.k.kind === 'HIDE' ? { x0: p.x - 10 * dpr, y0: p.y - 10 * dpr, x1: p.x + 10 * dpr, y1: p.y + 10 * dpr } : { x0: p.x - 3 * dpr, y0: p.y - 27 * dpr, x1: p.x + 18 * dpr, y1: p.y + 4 * dpr });
+    ctx.lineJoin = 'round'; ctx.lineWidth = 3.5 * dpr; ctx.strokeStyle = 'rgba(243,239,228,.95)';
+    ctx.font = `800 ${14 * dpr}px "Noto Sans JP",sans-serif`;
+    for (const p of pts) {
+      const txt = (p.k.kind === 'HIDE' ? 'H' : 'S') + (Math.round(+p.k.rank) || ''), w = ctx.measureText(txt).width, s = dpr;
+      const tries = p.k.kind === 'HIDE'
+        ? [[p.x + 13 * s, p.y + 5 * s], [p.x - 13 * s - w, p.y + 5 * s], [p.x - w / 2, p.y + 25 * s], [p.x - w / 2, p.y - 14 * s]]
+        : [[p.x + 21 * s, p.y - 15 * s], [p.x - 6 * s - w, p.y - 15 * s], [p.x + 8 * s, p.y + 16 * s], [p.x - w / 2, p.y - 31 * s]];
+      haloLabel(ctx, txt, tries, p.k.kind === 'HIDE' ? '#5b2f86' : '#9a3a06', boxes, s);
+    }
+    if (gpsLabel) {
+      ctx.font = `800 ${13 * dpr}px "Noto Sans JP",sans-serif`;
+      const w = ctx.measureText(gpsLabel.txt).width, s = dpr, { x, y } = gpsLabel;
+      const side = gpsLabel.right ? [[x + 13 * s, y - 9 * s], [x - 13 * s - w, y - 9 * s]] : [[x - 13 * s - w, y - 9 * s], [x + 13 * s, y - 9 * s]];
+      const tries = side.concat([[x - w / 2, y + 26 * s], [x - w / 2, y - 18 * s]]).map(([a, b]) => [Math.min(Math.max(a, 6 * s), W - w - 6 * s), Math.min(Math.max(b, 18 * s), H - 6 * s)]);
+      haloLabel(ctx, gpsLabel.txt, tries, gpsLabel.col, boxes, s);
+    }
+    ctx.restore();
   }
   if (truth && showTruth) {
     const x = X(truth.e_m), y = Y(truth.n_m);
@@ -220,6 +374,15 @@ function panel() {
   const L = obs.locks.length;
   $('live').classList.toggle('on', !!(state && state.updated && Date.now() / 1000 - state.updated < 600));
   $('live').lastElementChild.textContent = state && state.source === 'board-sim' ? 'TEST PILOT' : state && state.updated ? 'PHONE LIVE' : 'WAITING';
+  const mk = marksNow(), g = gpsNow(), mbox = $('marks');
+  $('legend').classList.toggle('has-marks', mk.length > 0);
+  $('legend').classList.toggle('has-gps', !!g);
+  if (g) $('lg-g').innerHTML = symSvg('GPS', gpsLook(g).col);
+  const mkKey = JSON.stringify(mk);
+  if (mbox.dataset.key !== mkKey) {   // rebuild only when the marks change
+    mbox.dataset.key = mkKey; mbox.hidden = !mk.length;
+    mbox.innerHTML = mk.length ? `<div class="muted">HIDE and SIGNAL, terrain only</div>` + mk.map(k => `<div class="mr">${symSvg(k.kind)}<b class="${k.kind === 'HIDE' ? 'h' : 's'}">${k.kind[0]}${Math.round(+k.rank) || ''}</b><span>${esc(String(k.why || '').slice(0, 160))}</span></div>`).join('') : '';
+  }
   if (!res) {
     $('pm').textContent = '—'; $('pm-sub').textContent = 'no Lock yet'; $('meter').style.width = '0';
     $('state').className = 'state'; $('state').textContent = 'Aim the phone at the first card.';
@@ -278,6 +441,41 @@ async function poll() {
 }
 setInterval(() => { if (model) panel(); }, 5000);
 
+// ATAK link status from the server (GET /api/atak every 2 s). Hidden when the server has no ATAK endpoint.
+let atakBusy = false;
+function agoText(v) {
+  if (typeof v === 'string' && /^\d+(\.\d+)?$/.test(v.trim())) v = +v;
+  const t = typeof v === 'number' ? (v > 1e12 ? v : v * 1000) : typeof v === 'string' ? Date.parse(v) : NaN;
+  if (!Number.isFinite(t) || t <= 0) return '';
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  return s < 60 ? `${Math.round(s)} s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`;
+}
+async function atakPoll() {
+  if (atakBusy) return;
+  atakBusy = true;
+  const el = $('atak'), ac = typeof AbortController === 'function' ? new AbortController() : null, to = ac && setTimeout(() => ac.abort(), 1800);
+  try {
+    const r = await fetch('/api/atak', { cache: 'no-store', signal: ac ? ac.signal : undefined });
+    if (!r.ok) { el.hidden = true; return; }
+    const a = await r.json();
+    if (!a || typeof a !== 'object') { el.hidden = true; return; }
+    const on = a.connected === true || (typeof a.connected === 'number' && a.connected > 0);
+    const n = Array.isArray(a.clients) ? a.clients.length : Number.isFinite(+a.clients) && a.clients !== null && a.clients !== '' ? +a.clients : null;
+    const parts = [];
+    if (a.mode) parts.push(esc(String(a.mode).slice(0, 24)));
+    parts.push(on ? 'linked' : 'not linked');
+    if (n != null) parts.push(`${n} client${n === 1 ? '' : 's'}`);
+    if (Number.isFinite(+a.sent) && a.sent !== null && a.sent !== '') parts.push(`${+a.sent} sent`);
+    const ago = agoText(a.last_sent);
+    if (ago) parts.push('last ' + ago);
+    if (a.last_error) parts.push(`<span class="err">${esc(String(a.last_error).slice(0, 80))}</span>`);
+    $('atak-t').innerHTML = parts.join(' · ');
+    el.classList.toggle('on', on);
+    el.hidden = false;
+  } catch (e) { el.hidden = true; /* no server or no ATAK */ }
+  finally { if (to) clearTimeout(to); atakBusy = false; }
+}
+
 function testPilot(ev) {
   const cv = $('cv'), r = cv.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
   const v = fitView(view, cv.width, cv.height);
@@ -310,6 +508,9 @@ $('cv').addEventListener('click', testPilot);
 Promise.all([fetch('/data/moran.json', { cache: 'no-store' }).then(r => r.json()), new Promise((res, rej) => { topo = new Image(); topo.onload = res; topo.onerror = rej; topo.src = '/topo/moran.jpg'; })])
   .then(([json]) => {
     model = S.load(json);
+    if (HD) HD.layers(model);   // slope and summit counts once, so the first test pilot redraws as fast as before
+    $('lg-h').innerHTML = symSvg('HIDE'); $('lg-s').innerHTML = symSvg('SIGNAL');
+    atakPoll(); setInterval(atakPoll, 2000);
     $('area').textContent = `${json.name}, ${json.region}. ${json.peaks.length} peaks from the 1 m lidar, 30 m grid. Phone in airplane mode, Locks over USB.`;
     $('foot').textContent = `Demo card wall: ${model.demo.wall.map(w => `${w.name} ${w.rel_deg >= 0 ? '+' : ''}${w.rel_deg}°`).join(' · ')} (relative to the middle card).`;
     solveFrom({ locks: [] }); requestAnimationFrame(draw); poll();
