@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a1016">
 <title>RIDGELINE</title>
-<link rel="icon" href="data:,">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/phone/icon-192.png">
+<link rel="apple-touch-icon" href="/phone/icon-192.png">
 <style>
 :root{color-scheme:dark;--bg:#0a1016;--panel:#111b23;--raise:#16232d;--line:#243440;--line2:#33464f;--text:#f1f5f6;--muted:#97a9b2;--faint:#5f737d;--cyan:#86dce9;--amber:#ffcf5c;--red:#ff8c89;--r:8px;--font:"Noto Sans JP","Noto Sans",system-ui,sans-serif;--mono:ui-monospace,"Roboto Mono","Cascadia Mono",Consolas,monospace}
 *{box-sizing:border-box}
@@ -131,6 +133,10 @@ h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em;font-weight:75
 .stay p{margin:8px 0 0;color:var(--muted);font-size:14px;line-height:1.45}
 .key{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .key i{display:inline-block;width:14px;height:4px;border-radius:2px;margin-right:4px;vertical-align:middle}
+.netbar{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding-top:16px;font:600 11px var(--mono);letter-spacing:.04em;color:var(--faint)}
+.nb i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--faint);vertical-align:1px}
+.nb.ok{color:var(--muted)}.nb.ok i{background:var(--cyan)}
+.nb.warn{color:var(--amber)}.nb.warn i{background:var(--amber)}
 @media (prefers-reduced-motion:reduce){.lock[data-state=ready]{animation:none;box-shadow:0 0 0 3px rgba(255,207,92,.6)}.ripple,.sweep{display:none}.meter .arc,.dots span{transition:none}}
 @media (min-height:860px){.scope{max-height:46svh}}
 </style>
@@ -144,6 +150,7 @@ h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em;font-weight:75
     <button class="icon-btn" id="open-settings" aria-label="Settings"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg></button>
   </header>
   <main id="main"><p class="lead">Loading terrain…</p></main>
+  <footer class="netbar" aria-live="polite"><span class="nb" id="st-link"><i></i>Board link waiting</span><span class="nb" id="st-off"><i></i>Offline not ready</span></footer>
 </div>
 <section class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="Settings">
   <div class="in">
@@ -240,12 +247,49 @@ function predictedHeading(id) {
   if (k && R < 0.97) return null;   // circular spread above about 14 deg
   return W360(S.bearingFrom(model, model.E[at], model.N[at], id) + off);
 }
+function summaryForBoard() {
+  return { status: result.status, r95_m: Math.round(result.r95_m), lat: result.estimate.lat, lon: result.estimate.lon, n: locks.length };
+}
 function post() {
   // the board solves on its own, so a Lock is sent before this phone finishes solving
   const fresh = result && result.n_locks === locks.length;
-  const body = { source: 'phone', obs: { baro_m: baro, locks }, summary: fresh ? { status: result.status, r95_m: Math.round(result.r95_m), lat: result.estimate.lat, lon: result.estimate.lon, n: locks.length } : null, route: fresh && screen === 'fix' ? routeForBoard() : null };
-  lastPost = fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+  const body = { source: 'phone', obs: { baro_m: baro, locks }, summary: fresh ? summaryForBoard() : null, route: fresh && screen === 'fix' ? routeForBoard() : null };
+  relay.body = JSON.stringify(body); relay.seq++;
+  flush();
 }
+
+// ---------- relay to the PC ----------
+// Only the newest state matters. While the cable or the server is down the newest body waits here
+// (older ones are dropped), retries every 2 s and on 'online', and goes out once the link is back.
+const relay = { body: null, seq: 0, busy: false, live: null, checked: 0 };
+function timed(ms) {
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  const t = setTimeout(() => { if (ctl) ctl.abort(); }, ms);
+  return { signal: ctl ? ctl.signal : undefined, done: () => clearTimeout(t) };
+}
+function setLink(ok) {
+  relay.live = ok; relay.checked = performance.now();
+  const el = $('st-link');
+  if (el) { el.className = 'nb ' + (ok && relay.body == null ? 'ok' : 'warn'); el.lastChild.textContent = ok && relay.body == null ? 'Board link live' : 'Board link waiting'; }
+}
+function flush() {
+  if (relay.busy || relay.body == null) return;
+  relay.busy = true;
+  const seq = relay.seq, t = timed(4000);
+  lastPost = fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: relay.body, cache: 'no-store', signal: t.signal })
+    .then(r => { if (r.status >= 500) throw new Error('HTTP ' + r.status); if (relay.seq === seq) relay.body = null; return true; })
+    .catch(() => false)
+    .then(ok => { t.done(); relay.busy = false; setLink(ok); if (ok && relay.body != null) flush(); return ok; });
+}
+function ping() {
+  if (relay.busy || relay.body != null) return;
+  relay.busy = true;
+  const t = timed(4000);
+  fetch('/api/state', { cache: 'no-store', signal: t.signal }).then(r => r.ok, () => false)
+    .then(ok => { t.done(); relay.busy = false; setLink(ok); if (relay.body != null && ok) flush(); });
+}
+setInterval(() => { if (relay.body != null) flush(); else if (performance.now() - relay.checked > 5000) ping(); }, 2000);
+window.addEventListener('online', () => { if (relay.body != null) flush(); else ping(); });
 
 // ---------- route: the viewer's planner (terrain_viewer/team8_nav.js), loaded on demand ----------
 // Dijkstra with Tobler walking time, water and cliffs blocked, slope limit by walking ability.
@@ -511,6 +555,7 @@ function render() {
       drawMap($('map'), done >= 2);
     });
   } else if (screen === 'fix') {
+    if (NAV) computeRoute();   // the route always starts from the newest fix
     const e = result.estimate, o = result.others[0];
     const ns = `${Math.abs(e.lat).toFixed(5)}° ${e.lat >= 0 ? 'N' : 'S'}`, ew = `${Math.abs(e.lon).toFixed(5)}° ${e.lon >= 0 ? 'E' : 'W'}`;
     const dir = o ? ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(W360(deg(Math.atan2(o.lon - e.lon, o.lat - e.lat))) / 45) % 8] : '';
@@ -572,7 +617,7 @@ function wireGo() {
     computeRoute(); renderGo(); post();
   };
 }
-function go(next) { if (next !== 'aim') camStop(); screen = next; render(); window.scrollTo(0, 0); }
+function go(next) { if (next !== 'aim') camStop(); screen = next; render(); window.scrollTo(0, 0); if (next === 'fix') post(); }
 
 // ---------- rear camera behind the crosshair ----------
 // localhost counts as a secure page, so getUserMedia works over adb reverse without HTTPS.
@@ -615,7 +660,7 @@ function doLock(ev) {
   skip = 0;
   post();
   sweep($('map-wrap'));
-  setTimeout(() => { solveNow(); render(); }, reduce ? 0 : 120);
+  setTimeout(() => { solveNow(); render(); post(); }, reduce ? 0 : 120);   // second post carries the phone's own summary
 }
 function skipTarget() {
   const rest = wallIds.filter(id => !locks.some(l => l.peak_id === id));
@@ -730,7 +775,28 @@ Promise.all([fetch('/data/moran.json', { cache: 'no-store' }).then(r => { if (!r
     window.addEventListener('resize', () => { if ($('map')) drawMap($('map'), screen === 'fix' || locks.length >= 2); });
   })
   .catch(err => { $('main').innerHTML = `<p class="err">${err.message}. Start the server with python -I ridgeline/server.py and open http://localhost:8768.</p>`; });
-window.RIDGELINE_DEBUG = { get locks() { return locks; }, get result() { return result; }, get target() { return target; }, lock: doLock, kb, assist: () => $('assist').onclick() };
+
+// ---------- offline: the service worker keeps a copy of every file opened once ----------
+const CORE = ['/', '/solver.js', '/data/moran.json', '/topo/moran.jpg', '/tv/team8_nav.js', '/tv/data/moran/bundle.js'];
+let offReady = false, offTimer = null;
+function setOff(cls, text) { const el = $('st-off'); if (el) { el.className = 'nb ' + cls; el.lastChild.textContent = text; } }
+function checkOffline() {
+  if (!('serviceWorker' in navigator) || !window.caches) { setOff('', 'No offline copy'); return; }
+  const need = CORE.concat(window.RidgelineHide ? ['/hide.js'] : [], window.RidgelineSkyline ? ['/skyline.js'] : []);
+  Promise.all(need.map(u => caches.match(u).then(Boolean, () => false))).then(hits => {
+    const n = hits.filter(Boolean).length, active = !!navigator.serviceWorker.controller;
+    offReady = active && n === need.length;
+    setOff(offReady ? 'ok' : 'warn', offReady ? 'Offline ready' : `Saving for offline ${n}/${need.length}`);
+    clearTimeout(offTimer); offTimer = setTimeout(checkOffline, offReady ? 30000 : 2000);
+  });
+}
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => setOff('', 'No offline copy'));
+  navigator.serviceWorker.addEventListener('controllerchange', checkOffline);
+}
+checkOffline();
+ping();
+window.RIDGELINE_DEBUG = { relay, checkOffline, get locks() { return locks; }, get result() { return result; }, get target() { return target; }, lock: doLock, kb, assist: () => $('assist').onclick() };
 </script>
 </body>
 </html>
