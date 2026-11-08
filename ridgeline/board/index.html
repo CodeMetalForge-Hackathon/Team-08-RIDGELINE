@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RIDGELINE Board</title>
+<link rel="icon" href="data:,">
+<style>
+:root{--paper:#f3efe4;--paper2:#e9e3d3;--ink:#1f2326;--ink2:#4c5257;--rule:#cfc6b0;--red:#b3261e;--blue:#145f7a;--amber:#a86b00;--hide:#5b2f86;--sig:#e0580f;--sig-ink:#9a3a06;--green:#2b7a3d;--font:"Noto Sans JP","Noto Sans",system-ui,sans-serif;--mono:ui-monospace,"Cascadia Mono",Consolas,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font-family:var(--font)}
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) 360px;height:100vh}
+.mapbox{position:relative;overflow:hidden;background:#d9d2bf;border-right:2px solid var(--ink)}
+canvas{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+.legend{position:absolute;left:16px;bottom:16px;background:rgba(243,239,228,.92);border:1px solid var(--ink);padding:8px 12px;font-size:13px;line-height:1.6;display:grid;grid-template-columns:auto 1fr;gap:0 10px;align-items:center}
+.legend i{display:inline-block;width:26px;height:0;border-top:2px solid #3b3a36}
+.legend i.b{height:12px;border:1.5px dashed var(--blue);background:rgba(20,95,122,.25);border-radius:6px}
+.legend i.t{height:12px;border:0;background:repeating-linear-gradient(45deg,rgba(179,38,30,.45) 0 2px,transparent 2px 5px)}
+.legend i.x{width:12px;height:12px;border:0;background:radial-gradient(circle,var(--red) 0 2px,transparent 3px)}
+.side{display:flex;flex-direction:column;padding:24px;gap:16px;overflow:auto}
+.brand{display:flex;align-items:center;gap:8px;font-weight:800;letter-spacing:.14em}
+.brand small{font-weight:500;letter-spacing:.02em;color:var(--ink2)}
+.sub{font-size:13px;color:var(--ink2);line-height:1.5;margin:0}
+.big{font:800 64px/1 var(--mono);letter-spacing:-.04em}
+.big small{font:600 16px var(--font);letter-spacing:.02em;color:var(--ink2);margin-left:6px}
+.state{font-size:20px;font-weight:700}
+.state.bad{color:var(--red)}.state.ok{color:var(--blue)}
+.meter{height:10px;border:1.5px solid var(--ink);border-radius:5px;overflow:hidden}
+.meter span{display:block;height:100%;width:0;background:var(--blue);transition:width .7s cubic-bezier(.2,.8,.2,1)}
+table{border-collapse:collapse;width:100%;font-size:15px}
+td{padding:8px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+td.n{width:28px;font-weight:800}
+td.r{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink2)}
+.reveal{border:2px solid var(--ink);padding:12px;background:var(--paper2)}
+.reveal b{font-size:22px}
+.route{display:flex;flex-direction:column;gap:6px;border-top:2px solid var(--ink);padding-top:12px}
+.route .rt{font-size:18px}.route .rt b{font:800 26px var(--mono);letter-spacing:-.02em}
+.route .stay{font:850 24px/1.2 var(--font);letter-spacing:.14em;color:var(--red)}
+.rbar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--rule)}.rbar i{display:block;height:100%}
+.keys{margin-top:auto;font-size:12px;color:var(--ink2);line-height:1.7}
+.keys kbd{font:600 11px var(--mono);border:1px solid var(--ink2);border-bottom-width:2px;border-radius:3px;padding:0 4px;color:var(--ink)}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--ink2)}
+.live i{width:8px;height:8px;border-radius:50%;background:#8a8f93}
+.live.on i{background:var(--red);animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.live.on i{animation:none}.meter span{transition:none}}
+[hidden]{display:none!important}
+.legend svg{display:block}
+.legend .wide{grid-column:1/-1;font-size:12px;color:var(--ink2);border-top:1px solid var(--rule);margin-top:4px;padding-top:2px}
+.legend:not(.has-marks) .lg-m,.legend:not(.has-gps) .lg-g{display:none}
+.marks{display:flex;flex-direction:column;gap:3px;border-top:2px solid var(--ink);padding-top:12px}
+.marks .mr{display:grid;grid-template-columns:22px 26px 1fr;gap:6px;align-items:start;font-size:13px;line-height:1.35}
+.marks .mr svg{margin-top:1px}
+.marks b{font:800 14px/1.3 var(--mono)}.marks b.h{color:var(--hide)}.marks b.s{color:var(--sig-ink)}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:2px 18px}
+.mgrid .mh{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:800;letter-spacing:.1em;padding-bottom:2px;border-bottom:1px solid var(--rule)}
+.mgrid .mh svg{width:18px;height:16px}
+.mgrid .mc{display:grid;grid-template-columns:24px 1fr auto;gap:4px;align-items:baseline;font:600 14px/1.55 var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mgrid .mc span:last-child{text-align:right}
+.marks .note{font-size:12px;color:var(--ink2)}
+.atak{font-size:12px;line-height:1.5;color:var(--ink2)}
+.atak b{letter-spacing:.08em;color:var(--ink);margin-right:6px}
+.atak i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#8a8f93;margin-right:6px;vertical-align:1px}
+.atak.on i{background:var(--green)}
+.atak .err{color:var(--red)}.atak .nw{white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="mapbox" id="mapbox"><canvas id="cv"></canvas>
+    <div class="legend" id="legend"><i></i><span>Pencil line from a locked peak</span><i class="t"></i><span>Error triangle</span><i class="b"></i><span>95% bubble</span><i class="x"></i><span>Best estimate</span><span class="lg-m" id="lg-h"></span><span class="lg-m">HIDE, seen by the fewest summits</span><span class="lg-m" id="lg-s"></span><span class="lg-m">SIGNAL, open ground seen by the most summits</span><span class="lg-g" id="lg-g"></span><span class="lg-g">Test GPS reading</span><span class="wide lg-m">Terrain only. Trees and buildings are not in the model.</span></div>
+  </div>
+  <aside class="side">
+    <div class="brand"><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><path d="M2 26 13 6 19 17 23 10 30 26M9 26l7-12 7 12" fill="none" stroke="#1f2326" stroke-width="2.4" stroke-linejoin="round"/></svg>RIDGELINE <small>live fix</small><span class="live" id="live" style="margin-left:auto"><i></i><span>WAITING</span></span></div>
+    <p class="sub" id="area">Phone in airplane mode. Locks travel over USB to this screen.</p>
+    <div><div class="big" id="pm">—</div><div class="sub" id="pm-sub">no Lock yet</div></div>
+    <div class="meter"><span id="meter"></span></div>
+    <div class="state" id="state">Aim the phone at the first card.</div>
+    <table id="locks"></table>
+    <div id="others" class="sub"></div>
+    <div id="route" class="route" hidden></div>
+    <div id="marks" class="marks" hidden></div>
+    <div class="reveal" id="reveal" hidden></div>
+    <div class="atak" id="atak" hidden><b>ATAK</b><i></i><span id="atak-t"></span></div>
+    <div class="keys"><kbd>R</kbd> answer check &nbsp; <kbd>C</kbd> clear &nbsp; <kbd>F</kbd> full screen &nbsp; <kbd>T</kbd> trust numbers<br>Click the map to drop a test pilot there. RIDGELINE simulates three Locks with 3° aim error from that spot and solves again.<br><span id="foot"></span></div>
+  </aside>
+</div>
+<script src="/solver.js"></script>
+<script src="/hide.js"></script>
+<script>
+'use strict';
+const S = window.RidgelineSolver;
+const HD = window.RidgelineHide;   // HIDE and SIGNAL (terrain only), used here for the test pilot
+const $ = id => document.getElementById(id);
+const rad = d => d * Math.PI / 180;
+const fmtM = m => m >= 1000 ? (m / 1000).toFixed(2) + ' km' : Math.round(m) + ' m';
+const fmtKm = m => m >= 9950 ? Math.round(m / 1000) + ' km' : m >= 1000 ? (m / 1000).toFixed(1) + ' km' : Math.round(m) + ' m';
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let model, topo, state = null, version = -1, res = null, overlay = null, truth = null, showTruth = false, view = null, viewTarget = null, drawT0 = 0, lastLockCount = 0, shown = null, simMarks = null, simStay = false;
+
+// HIDE and SIGNAL marks: the phone's summary.marks, or the board's own for a test pilot.
+function marksNow() {
+  const ph = state && state.phone;
+  const list = ph && Array.isArray(ph.marks) ? ph.marks : simMarks || [];
+  return list.filter(k => k && (k.kind === 'HIDE' || k.kind === 'SIGNAL') && Number.isFinite(+k.lat) && Number.isFinite(+k.lon)).slice(0, 12);
+}
+function gpsNow() {
+  const g = state && state.phone && state.phone.gps;
+  return g && typeof g === 'object' && Number.isFinite(+g.lat) && Number.isFinite(+g.lon) ? g : null;
+}
+// the fix the GPS is compared with: the board's own solve, else the phone's
+function fixEN() {
+  if (res && res.n_locks >= 2) return { e: res.estimate.e_m, n: res.estimate.n_m };
+  const ph = state && state.phone;
+  return ph && Number.isFinite(+ph.lat) && Number.isFinite(+ph.lon) ? S.toEN(model, +ph.lon, +ph.lat) : null;
+}
+const gpsLook = g => {
+  const v = String(g.verdict || '').toUpperCase();
+  return v === 'REJECTED' ? { col: '#b3261e', say: d => `GPS disagrees, ${d} off` } : v === 'AGREE' ? { col: '#2b7a3d', say: d => `GPS consistent, ${d}` } : { col: '#1f2326', say: d => `GPS reading, ${d} off` };
+};
+// map symbols, the same shapes on the canvas and in the legend
+function symSvg(kind, col) {
+  if (kind === 'HIDE') return '<svg width="22" height="20" viewBox="0 0 22 20" aria-hidden="true"><circle cx="11" cy="10" r="7" fill="#f3efe4"/><path d="M4 10A7 7 0 0 0 18 10Z" fill="#5b2f86"/><circle cx="11" cy="10" r="7" fill="none" stroke="#5b2f86" stroke-width="2"/></svg>';
+  if (kind === 'SIGNAL') return '<svg width="22" height="20" viewBox="0 0 22 20" aria-hidden="true"><path d="M7 18V2" stroke="#1f2326" stroke-width="2" stroke-linecap="round"/><path d="M7 2l12 4-12 4z" fill="#e0580f" stroke="#1f2326" stroke-width="1.2" stroke-linejoin="round"/><circle cx="7" cy="17.5" r="2.3" fill="#1f2326"/></svg>';
+  return `<svg width="22" height="20" viewBox="0 0 22 20" aria-hidden="true"><path d="M5 4l12 12M17 4L5 16" stroke="${col || '#1f2326'}" stroke-width="2.6" stroke-linecap="round"/></svg>`;
+}
+function hideSym(ctx, x, y, s) {   // a disc with its lower half filled, below the skyline
+  const r = 8.5 * s;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.lineWidth = 6 * s; ctx.strokeStyle = 'rgba(243,239,228,.92)'; ctx.stroke();
+  ctx.fillStyle = '#f3efe4'; ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI); ctx.closePath(); ctx.fillStyle = '#5b2f86'; ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.lineWidth = 2.4 * s; ctx.strokeStyle = '#5b2f86'; ctx.stroke();
+}
+function signalSym(ctx, x, y, s) {
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 26 * s);
+  ctx.lineWidth = 5.5 * s; ctx.strokeStyle = 'rgba(243,239,228,.92)'; ctx.stroke();
+  ctx.lineWidth = 2.2 * s; ctx.strokeStyle = '#1f2326'; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x, y - 26 * s); ctx.lineTo(x + 17 * s, y - 20.5 * s); ctx.lineTo(x, y - 15 * s); ctx.closePath();
+  ctx.lineWidth = 4.5 * s; ctx.strokeStyle = 'rgba(243,239,228,.92)'; ctx.stroke();
+  ctx.fillStyle = '#e0580f'; ctx.fill(); ctx.lineWidth = 1.4 * s; ctx.strokeStyle = '#1f2326'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, 3.2 * s, 0, Math.PI * 2); ctx.fillStyle = '#1f2326'; ctx.fill();
+  ctx.lineWidth = 1.5 * s; ctx.strokeStyle = '#f3efe4'; ctx.stroke();
+}
+// Side panel list. With the numbers (hide.js marks) a compact two-column table, else the plain sentences.
+function marksTable(mk) {
+  const num = v => v !== null && v !== '' && Number.isFinite(+v);
+  const label = k => `<b class="${k.kind === 'HIDE' ? 'h' : 's'}">${k.kind[0]}${Math.round(+k.rank) || ''}</b>`;
+  if (!mk.every(k => num(k.seen_by) && num(k.of) && num(k.walk_min))) {
+    return mk.map(k => `<div class="mr">${symSvg(k.kind)}${label(k)}<span>${esc(String(k.why || '').slice(0, 160))}</span></div>`).join('');
+  }
+  const cell = k => k ? `<div class="mc">${label(k)}<span>${+k.seen_by} of ${+k.of}</span><span>${+k.walk_min < 1 ? '&lt;1' : Math.round(+k.walk_min)} min</span></div>` : '<div></div>';
+  const hs = mk.filter(k => k.kind === 'HIDE'), ss = mk.filter(k => k.kind === 'SIGNAL');
+  let rows = `<div class="mh">${symSvg('HIDE')}HIDE</div><div class="mh">${symSvg('SIGNAL')}SIGNAL</div>`;
+  for (let i = 0; i < Math.max(hs.length, ss.length); i++) rows += cell(hs[i]) + cell(ss[i]);
+  return `<div class="mgrid">${rows}</div><div class="note">Summits that can see the spot, then the walk.</div>`;
+}
+// a label with a paper halo, put where it does not cover a label already drawn
+function haloLabel(ctx, txt, tries, col, boxes, s) {
+  const w = ctx.measureText(txt).width, h = 14 * s;
+  let at = tries[0];
+  for (const t of tries) {
+    const b = { x0: t[0] - 2 * s, y0: t[1] - h, x1: t[0] + w + 2 * s, y1: t[1] + 3 * s };
+    if (!boxes.some(o => b.x0 < o.x1 && o.x0 < b.x1 && b.y0 < o.y1 && o.y0 < b.y1)) { at = t; break; }
+  }
+  boxes.push({ x0: at[0] - 2 * s, y0: at[1] - h, x1: at[0] + w + 2 * s, y1: at[1] + 3 * s });
+  ctx.strokeText(txt, at[0], at[1]); ctx.fillStyle = col; ctx.fillText(txt, at[0], at[1]);
+}
+
+function solveFrom(obs) {
+  const cands = state && state.source === 'board-sim' ? undefined : model.demo.wall.map(w => w.peak_id);
+  res = obs.locks.length ? S.solve(model, obs, cands ? { candidates: cands } : {}) : null;
+  overlay = null;
+  if (res) {
+    const c = document.createElement('canvas'); c.width = model.nx; c.height = model.ny;
+    const ctx = c.getContext('2d'), img = ctx.createImageData(model.nx, model.ny);
+    const bad = res.status === 'mismatch';
+    for (let i = 0; i < model.n; i++) {
+      const a = res.hpd50[i] ? 120 : res.hpd95[i] ? 66 : 0;
+      if (!a) continue;
+      img.data[i * 4] = bad ? 179 : 20; img.data[i * 4 + 1] = bad ? 38 : 95; img.data[i * 4 + 2] = bad ? 30 : 122; img.data[i * 4 + 3] = a;
+    }
+    ctx.putImageData(img, 0, 0); overlay = c;
+  }
+  // a test pilot gets the board's own HIDE and SIGNAL (healthy, 30 min), a phone sends its own
+  simMarks = null; simStay = false;
+  if (HD && res && res.n_locks >= 3 && state && state.source === 'board-sim') {
+    try { const out = HD.candidates(model, res, { minutes: 30 }); simMarks = HD.marks(out); simStay = out.note === 'STAY'; } catch (e) { simMarks = null; }
+  }
+  // camera: the locked peaks and the bubble, or the whole sheet
+  const fullE = model.nx * model.dx, fullN = model.ny * model.dy;
+  if (res && res.n_locks >= 1) {
+    let e0 = Infinity, e1 = -Infinity, n0 = Infinity, n1 = -Infinity;
+    const add = (e, n, pad) => { e0 = Math.min(e0, e - pad); e1 = Math.max(e1, e + pad); n0 = Math.min(n0, n - pad); n1 = Math.max(n1, n + pad); };
+    for (const l of obs.locks) { const p = model.byId[l.peak_id]; if (p) add(p.e_m, p.n_m, 400); }
+    if (res.n_locks >= 2) add(res.estimate.e_m, res.estimate.n_m, Math.max(700, res.r95_m * 1.6));
+    else { e0 = 0; e1 = fullE; n0 = 0; n1 = fullN; }
+    if (truth && showTruth) add(truth.e_m, truth.n_m, 500);
+    const rt = state && state.route;
+    if (rt) {
+      for (const run of rt.runs || []) for (const p of run.path) { const q = S.toEN(model, p[0], p[1]); add(q.e, q.n, 250); }
+      if (rt.dest) { const q = S.toEN(model, rt.dest.lon, rt.dest.lat); add(q.e, q.n, 400); }
+    }
+    for (const k of marksNow()) { const q = S.toEN(model, +k.lon, +k.lat); add(q.e, q.n, 250); }
+    const g = gpsNow(), f = fixEN();
+    if (g && f) {   // a GPS reading on the sheet and within 4 km joins the frame, a farther one gets an edge arrow
+      const q = S.toEN(model, +g.lon, +g.lat);
+      if (q.e >= 0 && q.n >= 0 && q.e <= fullE && q.n <= fullN && Math.hypot(q.e - f.e, q.n - f.n) <= 4000) add(q.e, q.n, 700);
+    }
+    viewTarget = { e0: Math.max(0, e0), e1: Math.min(fullE, e1), n0: Math.max(0, n0), n1: Math.min(fullN, n1) };
+  } else viewTarget = { e0: 0, e1: fullE, n0: 0, n1: fullN };
+  if (!view) view = Object.assign({}, viewTarget);
+}
+
+function fitView(v, W, H) {
+  let { e0, e1, n0, n1 } = v;
+  const aspect = W / H, we = e1 - e0, wn = n1 - n0;
+  if (we / wn < aspect) { const d = wn * aspect - we; e0 -= d / 2; e1 += d / 2; } else { const d = we / aspect - wn; n0 -= d / 2; n1 += d / 2; }
+  // slide the frame back onto the map sheet when it fits, center it when it does not
+  const keep = (a, b, max) => b - a >= max ? [(max - (b - a)) / 2, (max + (b - a)) / 2] : a < 0 ? [0, b - a] : b > max ? [a - (b - max), max] : [a, b];
+  [e0, e1] = keep(e0, e1, model.nx * model.dx);
+  [n0, n1] = keep(n0, n1, model.ny * model.dy);
+  return { e0, e1, n0, n1 };
+}
+
+function draw(now) {
+  requestAnimationFrame(draw);
+  if (!model || !topo.complete) return;
+  const cv = $('cv'), dpr = Math.min(2, devicePixelRatio || 1);
+  const W = Math.round(cv.clientWidth * dpr), H = Math.round(cv.clientHeight * dpr);
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  // ease the camera
+  const k = reduce ? 1 : 0.08;
+  for (const key of ['e0', 'e1', 'n0', 'n1']) view[key] += (viewTarget[key] - view[key]) * k;
+  const v = fitView(view, W, H);
+  const fullE = model.nx * model.dx, fullN = model.ny * model.dy;
+  const X = e => (e - v.e0) / (v.e1 - v.e0) * W, Y = n => (v.n1 - n) / (v.n1 - v.n0) * H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#d9d2bf'; ctx.fillRect(0, 0, W, H);
+  const iw = topo.naturalWidth, ih = topo.naturalHeight;
+  ctx.drawImage(topo, 0, 0, iw, ih, X(0), Y(fullN), X(fullE) - X(0), Y(0) - Y(fullN));
+  if (overlay) { ctx.imageSmoothingEnabled = true; ctx.drawImage(overlay, 0, 0, model.nx, model.ny, X(0), Y(fullN), X(fullE) - X(0), Y(0) - Y(fullN)); }
+  const obs = state ? state.obs : { locks: [] };
+  // peaks
+  for (const p of model.peaks) {
+    const x = X(p.e_m), y = Y(p.n_m);
+    if (x < -50 || y < -50 || x > W + 50 || y > H + 50) continue;
+    const onWall = model.demo.wall.some(w => w.peak_id === p.id), locked = obs.locks.some(l => l.peak_id === p.id);
+    const s = (onWall ? 9 : 6) * dpr;
+    ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s * .9, y + s * .6); ctx.lineTo(x - s * .9, y + s * .6); ctx.closePath();
+    ctx.fillStyle = locked ? '#b3261e' : onWall ? '#1f2326' : 'rgba(31,35,38,.35)'; ctx.fill();
+    if (onWall || locked) { ctx.font = `700 ${13 * dpr}px "Noto Sans JP",sans-serif`; ctx.lineWidth = 3 * dpr; ctx.strokeStyle = 'rgba(243,239,228,.9)'; ctx.strokeText(p.name, x + 11 * dpr, y + 5 * dpr); ctx.fillStyle = '#1f2326'; ctx.fillText(p.name, x + 11 * dpr, y + 5 * dpr); }
+  }
+  if (res && res.lines.length) {
+    // pencil lines, the newest one drawn in over 0.8 s
+    const segs = res.lines.map(ln => {
+      const p = model.byId[ln.peak_id], back = rad(ln.bearing_true_deg + 180);
+      const len = Math.hypot(p.e_m - res.estimate.e_m, p.n_m - res.estimate.n_m) * 1.3 + 400;
+      return { x0: p.e_m, y0: p.n_m, x1: p.e_m + Math.sin(back) * len, y1: p.n_m + Math.cos(back) * len };
+    });
+    // error triangle from pairwise intersections
+    if (segs.length >= 3) {
+      const pts = [];
+      for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) { const q = inter(segs[i], segs[j]); if (q) pts.push(q); }
+      if (pts.length >= 3) {
+        ctx.save(); ctx.beginPath(); pts.slice(0, 3).forEach((q, i) => i ? ctx.lineTo(X(q.e), Y(q.n)) : ctx.moveTo(X(q.e), Y(q.n))); ctx.closePath();
+        ctx.fillStyle = 'rgba(179,38,30,.22)'; ctx.fill(); ctx.strokeStyle = 'rgba(179,38,30,.8)'; ctx.lineWidth = 1.2 * dpr; ctx.stroke(); ctx.restore();
+      }
+    }
+    segs.forEach((s, i) => {
+      const grow = i === segs.length - 1 && !reduce ? Math.min(1, (now - drawT0) / 800) : 1;
+      const ex = s.x0 + (s.x1 - s.x0) * grow, ey = s.y0 + (s.y1 - s.y0) * grow;
+      for (const [w, a, o] of [[2.2, .8, 0], [1, .35, .8]]) {
+        ctx.beginPath(); ctx.moveTo(X(s.x0) + o, Y(s.y0) - o); ctx.lineTo(X(ex) + o, Y(ey) - o);
+        ctx.strokeStyle = `rgba(52,50,46,${a})`; ctx.lineWidth = w * dpr; ctx.stroke();
+      }
+    });
+  }
+  const rt = state && state.route;
+  if (rt && rt.runs && rt.runs.length) {   // the route the phone planned, coloured by difficulty
+    const col = ['#e3ab06', '#ea7a1c', '#d4386c'];
+    const line = pts => { ctx.beginPath(); pts.forEach((p, i) => { const q = S.toEN(model, p[0], p[1]); if (i) ctx.lineTo(X(q.e), Y(q.n)); else ctx.moveTo(X(q.e), Y(q.n)); }); ctx.stroke(); };
+    ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(35,28,18,.85)'; ctx.lineWidth = 8 * dpr; rt.runs.forEach(r => line(r.path));
+    rt.runs.forEach(r => { ctx.strokeStyle = col[r.cls]; ctx.lineWidth = 5 * dpr; line(r.path); });
+    ctx.restore();
+  }
+  if (rt && rt.dest) {
+    const q = S.toEN(model, rt.dest.lon, rt.dest.lat), x = X(q.e), y = Y(q.n), s = dpr * 1.3;
+    ctx.save(); ctx.fillStyle = rt.stay ? '#b3261e' : '#145f7a'; ctx.strokeStyle = '#f3efe4'; ctx.lineWidth = 2.5 * s;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.bezierCurveTo(x - 11 * s, y - 14 * s, x - 9 * s, y - 26 * s, x, y - 26 * s); ctx.bezierCurveTo(x + 9 * s, y - 26 * s, x + 11 * s, y - 14 * s, x, y); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#f3efe4'; ctx.beginPath(); ctx.arc(x, y - 18 * s, 3.5 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.font = `800 ${13 * dpr}px "Noto Sans JP",sans-serif`; ctx.lineWidth = 3 * dpr; ctx.strokeStyle = 'rgba(243,239,228,.95)';
+    const tw = ctx.measureText(rt.dest.label).width, tx = x + 14 * s + tw > W - 8 * s ? x - 14 * s - tw : x + 14 * s;
+    ctx.strokeText(rt.dest.label, tx, y - 14 * s); ctx.fillStyle = '#1f2326'; ctx.fillText(rt.dest.label, tx, y - 14 * s);
+    ctx.restore();
+  }
+  const boxes = [];   // label boxes drawn so far, so HIDE, SIGNAL and GPS labels do not cover each other
+  const g = gpsNow();
+  let gpsLabel = null;
+  if (g) {   // the phone's GPS reading: a cross, a thin line to the fix, and the verdict
+    const look = gpsLook(g), f = fixEN(), q = S.toEN(model, +g.lon, +g.lat);
+    const fx = f && X(f.e), fy = f && Y(f.n);
+    let x = X(q.e), y = Y(q.n), edge = false;
+    const pad = 18 * dpr;
+    if (x < pad || y < pad || x > W - pad || y > H - pad) {   // off the frame: clip the line at the edge and point at it
+      if (!f) x = null;
+      else {
+        let t = 1;
+        const dx = x - fx, dy = y - fy;
+        if (dx) t = Math.min(t, ((dx > 0 ? W - pad : pad) - fx) / dx);
+        if (dy) t = Math.min(t, ((dy > 0 ? H - pad : pad) - fy) / dy);
+        x = fx + dx * Math.max(0, t); y = fy + dy * Math.max(0, t); edge = true;
+      }
+    }
+    if (x != null) {
+      ctx.save(); ctx.lineCap = 'round';
+      if (f) {
+        ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(x, y);
+        ctx.lineWidth = 3.5 * dpr; ctx.strokeStyle = 'rgba(243,239,228,.75)'; ctx.stroke();
+        ctx.lineWidth = 1.4 * dpr; ctx.strokeStyle = look.col; ctx.stroke();
+      }
+      ctx.beginPath();
+      if (edge) {   // arrowhead toward the reading
+        const a = Math.atan2(y - fy, x - fx), s = 12 * dpr;
+        ctx.moveTo(x - Math.cos(a - .45) * s, y - Math.sin(a - .45) * s); ctx.lineTo(x, y); ctx.lineTo(x - Math.cos(a + .45) * s, y - Math.sin(a + .45) * s);
+      } else { const s = 8 * dpr; ctx.moveTo(x - s, y - s); ctx.lineTo(x + s, y + s); ctx.moveTo(x + s, y - s); ctx.lineTo(x - s, y + s); }
+      ctx.lineWidth = 6.5 * dpr; ctx.strokeStyle = 'rgba(243,239,228,.92)'; ctx.stroke();
+      ctx.lineWidth = 3 * dpr; ctx.strokeStyle = look.col; ctx.stroke();
+      ctx.restore();
+      const d = Number.isFinite(+g.dist_m) ? +g.dist_m : f ? Math.hypot(q.e - f.e, q.n - f.n) : null;
+      gpsLabel = { txt: d == null ? 'GPS reading' : look.say(fmtKm(d)), col: look.col, x, y, right: !f || x >= fx };
+    }
+  }
+  if (res && res.n_locks >= 2) {
+    const x = X(res.estimate.e_m), y = Y(res.estimate.n_m), r = res.r95_m / (v.e1 - v.e0) * W;
+    ctx.save(); ctx.setLineDash([7 * dpr, 5 * dpr]); ctx.strokeStyle = res.status === 'mismatch' ? '#b3261e' : '#145f7a'; ctx.lineWidth = 2.2 * dpr;
+    ctx.beginPath(); ctx.arc(x, y, Math.max(8 * dpr, r), 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    ctx.strokeStyle = '#b3261e'; ctx.lineWidth = 3 * dpr;
+    ctx.beginPath(); ctx.moveTo(x - 12 * dpr, y); ctx.lineTo(x + 12 * dpr, y); ctx.moveTo(x, y - 12 * dpr); ctx.lineTo(x, y + 12 * dpr); ctx.stroke();
+  }
+  const mk = marksNow();
+  if (mk.length || gpsLabel) {   // HIDE hollows and SIGNAL flags, then all labels on top
+    ctx.save();
+    const pts = mk.map(k => { const q = S.toEN(model, +k.lon, +k.lat); return { k, x: X(q.e), y: Y(q.n) }; });
+    for (const p of pts) if (p.k.kind === 'HIDE') hideSym(ctx, p.x, p.y, dpr); else signalSym(ctx, p.x, p.y, dpr);
+    for (const p of pts) boxes.push(p.k.kind === 'HIDE' ? { x0: p.x - 10 * dpr, y0: p.y - 10 * dpr, x1: p.x + 10 * dpr, y1: p.y + 10 * dpr } : { x0: p.x - 3 * dpr, y0: p.y - 27 * dpr, x1: p.x + 18 * dpr, y1: p.y + 4 * dpr });
+    ctx.lineJoin = 'round'; ctx.lineWidth = 3.5 * dpr; ctx.strokeStyle = 'rgba(243,239,228,.95)';
+    ctx.font = `800 ${14 * dpr}px "Noto Sans JP",sans-serif`;
+    for (const p of pts) {
+      const txt = (p.k.kind === 'HIDE' ? 'H' : 'S') + (Math.round(+p.k.rank) || ''), w = ctx.measureText(txt).width, s = dpr;
+      const tries = p.k.kind === 'HIDE'
+        ? [[p.x + 13 * s, p.y + 5 * s], [p.x - 13 * s - w, p.y + 5 * s], [p.x - w / 2, p.y + 25 * s], [p.x - w / 2, p.y - 14 * s]]
+        : [[p.x + 21 * s, p.y - 15 * s], [p.x - 6 * s - w, p.y - 15 * s], [p.x + 8 * s, p.y + 16 * s], [p.x - w / 2, p.y - 31 * s]];
+      haloLabel(ctx, txt, tries, p.k.kind === 'HIDE' ? '#5b2f86' : '#9a3a06', boxes, s);
+    }
+    if (gpsLabel) {
+      ctx.font = `800 ${13 * dpr}px "Noto Sans JP",sans-serif`;
+      const w = ctx.measureText(gpsLabel.txt).width, s = dpr, { x, y } = gpsLabel;
+      const side = gpsLabel.right ? [[x + 13 * s, y - 9 * s], [x - 13 * s - w, y - 9 * s]] : [[x - 13 * s - w, y - 9 * s], [x + 13 * s, y - 9 * s]];
+      const tries = side.concat([[x - w / 2, y + 26 * s], [x - w / 2, y - 18 * s]]).map(([a, b]) => [Math.min(Math.max(a, 6 * s), W - w - 6 * s), Math.min(Math.max(b, 18 * s), H - 6 * s)]);
+      haloLabel(ctx, gpsLabel.txt, tries, gpsLabel.col, boxes, s);
+    }
+    ctx.restore();
+  }
+  if (truth && showTruth) {
+    const x = X(truth.e_m), y = Y(truth.n_m);
+    if (res && res.n_locks >= 2) { ctx.setLineDash([3 * dpr, 4 * dpr]); ctx.strokeStyle = '#1f2326'; ctx.lineWidth = 1.5 * dpr; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(X(res.estimate.e_m), Y(res.estimate.n_m)); ctx.stroke(); ctx.setLineDash([]); }
+    ctx.fillStyle = '#1f2326'; ctx.beginPath(); ctx.arc(x, y, 6 * dpr, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#f3efe4'; ctx.lineWidth = 2 * dpr; ctx.stroke();
+    ctx.font = `800 ${13 * dpr}px "Noto Sans JP",sans-serif`; ctx.lineWidth = 3 * dpr; ctx.strokeStyle = 'rgba(243,239,228,.95)';
+    ctx.strokeText('True position', x + 10 * dpr, y - 8 * dpr); ctx.fillStyle = '#1f2326'; ctx.fillText('True position', x + 10 * dpr, y - 8 * dpr);
+  }
+}
+function inter(a, b) {
+  const d = (a.x1 - a.x0) * (b.y1 - b.y0) - (a.y1 - a.y0) * (b.x1 - b.x0);
+  if (Math.abs(d) < 1e-9) return null;
+  const t = ((b.x0 - a.x0) * (b.y1 - b.y0) - (b.y0 - a.y0) * (b.x1 - b.x0)) / d;
+  return { e: a.x0 + t * (a.x1 - a.x0), n: a.y0 + t * (a.y1 - a.y0) };
+}
+
+function panel() {
+  const obs = state ? state.obs : { locks: [] };
+  const L = obs.locks.length;
+  $('live').classList.toggle('on', !!(state && state.updated && Date.now() / 1000 - state.updated < 600));
+  $('live').lastElementChild.textContent = state && state.source === 'board-sim' ? 'TEST PILOT' : state && state.updated ? 'PHONE LIVE' : 'WAITING';
+  const mk = marksNow(), g = gpsNow(), mbox = $('marks');
+  $('legend').classList.toggle('has-marks', mk.length > 0);
+  $('legend').classList.toggle('has-gps', !!g);
+  if (g) $('lg-g').innerHTML = symSvg('GPS', gpsLook(g).col);
+  const stay = !mk.length && simStay && state && state.source === 'board-sim';
+  const mkKey = JSON.stringify(mk) + stay;
+  if (mbox.dataset.key !== mkKey) {   // rebuild only when the marks change
+    mbox.dataset.key = mkKey; mbox.hidden = !mk.length && !stay;
+    mbox.innerHTML = mk.length ? `<div class="muted">HIDE and SIGNAL, terrain only</div>` + marksTable(mk)
+      : stay ? '<div class="muted">HIDE and SIGNAL, terrain only</div><div class="sub">No ground under 30° within a 30 min walk. Stay and signal from here.</div>' : '';
+  }
+  if (!res) {
+    $('pm').textContent = '—'; $('pm-sub').textContent = 'no Lock yet'; $('meter').style.width = '0';
+    $('state').className = 'state'; $('state').textContent = 'Aim the phone at the first card.';
+    $('locks').innerHTML = ''; $('others').textContent = ''; $('reveal').hidden = true; $('route').hidden = true; shown = null; return;
+  }
+  countTo(res.r95_m);
+  $('pm-sub').textContent = `95% radius · ${L} lock${L > 1 ? 's' : ''} · solved in ${Math.round(res.ms)} ms`;
+  $('meter').style.width = Math.round(100 * Math.max(0.04, res.confidence)) + '%';
+  const sus = res.suspect, nm = id => (model.byId[id] || {}).name || id;
+  const msg = { start: 'Aim at the first card.', more: L === 1 ? 'One peak: you are on a band. Next card.' : L === 2 ? 'Two peaks: still two places fit.' : 'Close. One more peak would settle it.', enough: 'Enough. The peaks agree.', mismatch: sus ? (sus.repeat ? `Lock ${sus.lock_index + 1} looks like ${nm(sus.peak_id)} again.` : `Lock ${sus.lock_index + 1} does not fit. Re-aim ${nm(sus.was_peak_id)}.`) : 'The Locks disagree.' }[res.status];
+  $('state').className = 'state ' + (res.status === 'mismatch' ? 'bad' : res.status === 'enough' ? 'ok' : '');
+  $('state').textContent = msg;
+  $('locks').innerHTML = obs.locks.map((l, i) => `<tr><td class="n">${i + 1}</td><td>${nm(l.peak_id)}${res.lines[i] ? `<div class="muted">bearing ${res.lines[i].bearing_true_deg.toFixed(1)}° true</div>` : ''}</td><td class="r">${res.lines[i] ? (res.lines[i].residual_deg >= 0 ? '+' : '') + res.lines[i].residual_deg.toFixed(1) + '°' : '—'}</td></tr>`).join('');
+  const o = res.others && res.others[0];
+  $('others').innerHTML = res.n_locks >= 2 ? (o && o.mass >= 0.02 ? `<b>Second place ${Math.round(o.mass * 100)}%</b>, ${fmtM(o.distance_m)} away.` : 'No second place above 2%.') : 'A single angle only says which slopes can see that peak.';
+  const rt = state && state.route, rbox = $('route');
+  if (rt && rt.dest) {
+    const tot = rt.length_m || 1, t = rt.time_s || 0;
+    const hm = t >= 3600 ? `${Math.floor(t / 3600)} h ${String(Math.round((t % 3600) / 60)).padStart(2, '0')} min` : `${Math.max(1, Math.round(t / 60))} min`;
+    rbox.hidden = false;
+    rbox.innerHTML = rt.stay
+      ? `<div class="muted">Route to ${rt.dest.label}, ${rt.health} (${rt.cap_deg}° limit)</div><div class="stay">STAY · SIGNAL · WAIT</div><div class="sub">No way out stays under ${rt.cap_deg}° from here.</div>`
+      : `<div class="muted">Route to ${rt.dest.label}, ${rt.health} (${rt.cap_deg}° limit)</div><div class="rt"><b>${fmtM(rt.length_m)}</b> &nbsp;${hm}</div>
+         <div class="rbar">${rt.runs.map(q => { let L = 0; for (let k = 1; k < q.path.length; k++) L += Math.hypot((q.path[k][0] - q.path[k - 1][0]) * 80300, (q.path[k][1] - q.path[k - 1][1]) * 111200); return `<i style="flex:${L.toFixed(0)} 0 0;background:${['#e3ab06', '#ea7a1c', '#d4386c'][q.cls]}"></i>`; }).join('')}</div>
+         <div class="sub">${rt.say || ''}</div>`;
+  } else rbox.hidden = true;
+  if (truth && showTruth && res.n_locks >= 2) {
+    const err = Math.hypot(res.estimate.e_m - truth.e_m, res.estimate.n_m - truth.n_m);
+    const inside = res.hpd95[S.cellAt(model, truth.e_m, truth.n_m)] === 1;
+    $('reveal').hidden = false;
+    $('reveal').innerHTML = `<div class="muted">Answer check</div><b>${fmtM(err)} from the true position</b><div>${inside ? 'Inside the 95% bubble.' : 'Outside the 95% bubble.'}</div>`;
+  } else $('reveal').hidden = true;
+}
+function countTo(value) {
+  const el = $('pm'), from = shown == null ? value * 3 : shown, t0 = performance.now(), dur = reduce ? 0 : 700;
+  if (shown === value) return;
+  shown = value;
+  const step = now => { const k = dur ? Math.min(1, (now - t0) / dur) : 1, e = 1 - Math.pow(1 - k, 3); el.innerHTML = '±' + fmtM(from + (value - from) * e).replace(' ', '<small>') + '</small>'; if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+
+// Long poll: /api/wait answers the moment the phone posts a Lock (or after 20 s with no change).
+async function poll() {
+  let wait = 0;
+  try {
+    const s = await (await fetch('/api/wait?v=' + version, { cache: 'no-store' })).json();
+    if (s.version !== version) {
+      version = s.version; state = s;
+      if (s.source !== 'board-sim') truth = { e_m: model.demo.e_m, n_m: model.demo.n_m };
+      if (s.obs.locks.length !== lastLockCount) { drawT0 = performance.now(); lastLockCount = s.obs.locks.length; }
+      solveFrom(s.obs);
+    }
+    panel();
+  } catch (e) { wait = 1000; /* server restarting */ }
+  setTimeout(poll, wait);
+}
+setInterval(() => { if (model) panel(); }, 5000);
+
+// ATAK link status from the server (GET /api/atak every 2 s). Hidden when the server has no ATAK endpoint.
+let atakBusy = false;
+function agoText(v) {
+  if (typeof v === 'string' && /^\d+(\.\d+)?$/.test(v.trim())) v = +v;
+  const t = typeof v === 'number' ? (v > 1e12 ? v : v * 1000) : typeof v === 'string' ? Date.parse(v) : NaN;
+  if (!Number.isFinite(t) || t <= 0) return '';
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  return s < 60 ? `${Math.round(s)} s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`;
+}
+async function atakPoll() {
+  if (atakBusy) return;
+  atakBusy = true;
+  const el = $('atak'), ac = typeof AbortController === 'function' ? new AbortController() : null, to = ac && setTimeout(() => ac.abort(), 1800);
+  try {
+    const r = await fetch('/api/atak', { cache: 'no-store', signal: ac ? ac.signal : undefined });
+    if (!r.ok) { el.hidden = true; return; }
+    const a = await r.json();
+    if (!a || typeof a !== 'object') { el.hidden = true; return; }
+    const on = a.connected === true || (typeof a.connected === 'number' && a.connected > 0);
+    const n = Array.isArray(a.clients) ? a.clients.length : Number.isFinite(+a.clients) && a.clients !== null && a.clients !== '' ? +a.clients : null;
+    const parts = [];
+    if (a.mode) parts.push(esc(String(a.mode).slice(0, 24).replace('server', a.cot_port ? 'server ' + (+a.cot_port || '') : 'server')));
+    parts.push(on ? 'linked' : 'not linked');
+    if (n != null) parts.push(`${n} client${n === 1 ? '' : 's'}`);
+    if (Number.isFinite(+a.sent) && a.sent !== null && a.sent !== '') parts.push(`${+a.sent} sent`);
+    const ago = agoText(a.last_sent);
+    if (ago) parts.push('last ' + ago);
+    const html = parts.map(p => `<span class="nw">${p}</span>`);   // wrap between the parts, not inside one
+    if (a.last_error) html.push(`<span class="err">${esc(String(a.last_error).slice(0, 80))}</span>`);
+    $('atak-t').innerHTML = html.join(' · ');
+    el.classList.toggle('on', on);
+    el.hidden = false;
+  } catch (e) { el.hidden = true; /* no server or no ATAK */ }
+  finally { if (to) clearTimeout(to); atakBusy = false; }
+}
+
+function testPilot(ev) {
+  const cv = $('cv'), r = cv.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+  const v = fitView(view, cv.width, cv.height);
+  const e = v.e0 + (ev.clientX - r.left) * dpr / cv.width * (v.e1 - v.e0), n = v.n1 - (ev.clientY - r.top) * dpr / cv.height * (v.n1 - v.n0);
+  const i = S.cellAt(model, e, n);
+  if (i < 0 || !model.land[i]) return;
+  const vis = model.peaks.filter(p => p.vis[i]).map(p => p.id);
+  let best = null;
+  for (let a = 0; a < vis.length; a++) for (let b = a + 1; b < vis.length; b++) for (let c = b + 1; c < vis.length; c++) {
+    const br = [vis[a], vis[b], vis[c]].map(id => S.bearingFrom(model, e, n, id)).sort((x, y) => x - y);
+    const gaps = [br[1] - br[0], br[2] - br[1], 360 - br[2] + br[0]];
+    const score = Math.min(...gaps);
+    if (!best || score > best.score) best = { score, ids: [vis[a], vis[b], vis[c]] };
+  }
+  if (!best) { $('state').textContent = 'Fewer than 3 peaks are visible from there. Try another spot.'; return; }
+  const obs = S.simulate(model, { e_m: e, n_m: n }, best.ids, { noise_deg: 3, offset_deg: Math.random() * 360 });
+  truth = { e_m: e, n_m: n }; showTruth = false;
+  fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: 'board-sim', obs }) });
+}
+
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'r') { showTruth = !showTruth; if (state) solveFrom(state.obs); panel(); }
+  if (k === 'c') { showTruth = false; fetch('/api/reset', { method: 'POST' }); }
+  if (k === 't') location.href = '/trust';
+  if (k === 'f') { if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); else document.exitFullscreen(); }
+});
+$('cv').addEventListener('click', testPilot);
+
+Promise.all([fetch('/data/moran.json', { cache: 'no-store' }).then(r => r.json()), new Promise((res, rej) => { topo = new Image(); topo.onload = res; topo.onerror = rej; topo.src = '/topo/moran.jpg'; })])
+  .then(([json]) => {
+    model = S.load(json);
+    if (HD) HD.layers(model);   // slope and summit counts once, so the first test pilot redraws as fast as before
+    $('lg-h').innerHTML = symSvg('HIDE'); $('lg-s').innerHTML = symSvg('SIGNAL');
+    atakPoll(); setInterval(atakPoll, 2000);
+    $('area').textContent = `${json.name}, ${json.region}. ${json.peaks.length} peaks from the 1 m lidar, 30 m grid. Phone in airplane mode, Locks over USB.`;
+    $('foot').textContent = `Demo card wall: ${model.demo.wall.map(w => `${w.name} ${w.rel_deg >= 0 ? '+' : ''}${w.rel_deg}°`).join(' · ')} (relative to the middle card).`;
+    solveFrom({ locks: [] }); requestAnimationFrame(draw); poll();
+  });
+</script>
+</body>
+</html>

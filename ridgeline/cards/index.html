@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RIDGELINE Wall Cards</title>
+<link rel="icon" href="data:,">
+<style>
+@page { size: letter landscape; margin: 0; }
+:root { --ink: #1f2326; --ink2: #4c5257; --rule: #cfc6b0; --paper: #ffffff; --desk: #e7e3d8; --red: #b3261e; --blue: #145f7a; --font: "Noto Sans JP", "Noto Sans", system-ui, sans-serif; --mono: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--desk); color: var(--ink); font-family: var(--font); }
+.bar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; padding: 12px 24px; background: var(--ink); color: #fff; }
+.bar b { letter-spacing: .14em; }
+.bar label { font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.bar input { width: 80px; font: inherit; padding: 4px 8px; border-radius: 8px; border: 0; }
+.bar button { margin-left: auto; font: 700 14px var(--font); padding: 8px 16px; border-radius: 8px; border: 0; background: #fff; color: var(--ink); cursor: pointer; }
+.bar button:focus-visible, .bar input:focus-visible { outline: 3px solid #f2b705; outline-offset: 2px; }
+.page { width: 11in; height: 8.5in; margin: 24px auto; background: var(--paper); box-shadow: 0 1px 3px rgba(0, 0, 0, .18); position: relative; overflow: hidden; padding: .45in .55in; display: flex; flex-direction: column; gap: 12px; break-after: page; page-break-after: always; }
+.eyebrow { font: 700 13px var(--font); letter-spacing: .16em; color: var(--ink2); }
+.eyebrow b { color: var(--red); }
+h1 { margin: 0; font-size: 64px; line-height: 1.05; letter-spacing: -.01em; }
+h2 { margin: 0; font-size: 34px; }
+.facts { display: flex; gap: 24px; font-size: 16px; color: var(--ink2); }
+.facts b { color: var(--ink); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.cardno { font: 800 120px/0.8 var(--mono); color: #e3e6e8; letter-spacing: -.06em; }
+svg.pano { width: 100%; flex: 1; min-height: 0; display: block; }
+.fine { font-size: 11px; line-height: 1.5; color: var(--ink2); margin: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 16px; }
+th { text-align: left; font-size: 12px; letter-spacing: .12em; color: var(--ink2); padding: 6px 8px; border-bottom: 2px solid var(--ink); }
+td { padding: 8px; border-bottom: 1px solid var(--rule); }
+td.r { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.steps { margin: 0; padding-left: 0; list-style: none; font-size: 15px; line-height: 1.55; }
+.steps li { display: grid; grid-template-columns: 28px 1fr; }
+.grid2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px; flex: 1; min-height: 0; }
+svg.plan { width: 100%; height: 100%; }
+@media print { html, body { background: #fff; } .bar { display: none; } .page { margin: 0; box-shadow: none; } }
+@media (max-width: 1100px) { .page { transform-origin: top left; } }
+</style>
+</head>
+<body>
+<div class="bar"><b>RIDGELINE</b><span>Wall cards for the live demo</span>
+  <label>Judge to wall <input id="dist" type="number" min="1" max="6" step="0.05" value="2.00"> m</label>
+  <label>Aim marks at <input id="eye" type="number" min="1" max="2" step="0.05" value="1.50"> m high</label>
+  <button id="print">Print or save as PDF</button></div>
+<main id="pages"></main>
+<script src="/solver.js"></script>
+<script>
+'use strict';
+const S = window.RidgelineSolver;
+const rad = d => d * Math.PI / 180, deg = r => r * 180 / Math.PI;
+const fmt = (v, d = 0) => v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+let model;
+
+function elevAt(m, e, n) {
+  const f = e / m.dx - 0.5, g = m.ny - n / m.dy - 0.5;
+  const c0 = Math.floor(f), r0 = Math.floor(g);
+  if (c0 < 0 || r0 < 0 || c0 + 1 >= m.nx || r0 + 1 >= m.ny) return null;
+  const fx = f - c0, fy = g - r0, i = r0 * m.nx + c0;
+  return (m.elev[i] * (1 - fx) + m.elev[i + 1] * fx) * (1 - fy) + (m.elev[i + m.nx] * (1 - fx) + m.elev[i + m.nx + 1] * fx) * fy;
+}
+
+// Horizon from the demo spot, split by distance so nearer ridges print darker (aerial perspective).
+const BANDS = [1500, 3000, 6000, Infinity];
+function panorama(m, spot, azCenter, fov, cols) {
+  const z0 = elevAt(m, spot.e_m, spot.n_m) + m.eye;
+  const out = BANDS.map(() => new Float32Array(cols));
+  for (let c = 0; c < cols; c++) {
+    const az = rad(azCenter - fov / 2 + fov * (c + 0.5) / cols), se = Math.sin(az), ce = Math.cos(az);
+    let best = -30, k = 0;
+    for (let r = 45; r < 30000; r += 15) {
+      while (k < BANDS.length - 1 && r > BANDS[k]) { out[k][c] = best; k++; }
+      const z = elevAt(m, spot.e_m + se * r, spot.n_m + ce * r);
+      if (z == null) break;
+      const a = deg(Math.atan2(z - z0 - r * r / (2 * m.rEff), r));
+      if (a > best) best = a;
+    }
+    for (; k < BANDS.length; k++) out[k][c] = best;
+  }
+  return { layers: out, z0 };
+}
+
+function cardSvg(m, w, idx) {
+  const d = m.demo, fov = 24, cols = 480, W = 1000;
+  const { layers, z0 } = panorama(m, d, w.bearing_deg, fov, cols);
+  const p = m.byId[w.peak_id];
+  const dist = Math.hypot(p.e_m - d.e_m, p.n_m - d.n_m);
+  const summit = deg(Math.atan2(p.elev_m - z0 - dist * dist / (2 * m.rEff), dist));
+  // frame the skyline near the summit; terrain outside the frame is clipped, not squeezed
+  const sky = layers[BANDS.length - 1];
+  let lo = Infinity, hi = summit;
+  for (let c = 0; c < cols; c++) {
+    if (Math.abs((c + 0.5) / cols * fov - fov / 2) > 8) continue;
+    lo = Math.min(lo, sky[c]); hi = Math.max(hi, sky[c]);
+  }
+  lo -= 3; hi += 0.6;
+  const pxDeg = W / fov, H = 520, top = 70, ground = 34;
+  const vex = Math.max(0.6, Math.min(2.2, (H - top - ground) / ((hi - lo) * pxDeg)));
+  const Y = a => top + (hi - a) * pxDeg * vex;
+  const X = c => (c + 0.5) / cols * W;
+  const fills = ['#e4e7e9', '#c6cdd1', '#9ba5ab', '#68737b'];
+  let svg = `<svg class="pano" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Horizon toward ${p.name} from the demo spot">`;
+  svg += `<defs><clipPath id="frame${idx}"><rect x="0" y="0" width="${W}" height="${H - ground}"/></clipPath></defs>`;
+  svg += `<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/><g clip-path="url(#frame${idx})">`;
+  for (let k = BANDS.length - 1; k >= 0; k--) {
+    let path = `M0 ${H}`;
+    for (let c = 0; c < cols; c++) path += `L${X(c).toFixed(1)} ${Y(layers[k][c]).toFixed(1)}`;
+    path += `L${W} ${H}Z`;
+    svg += `<path d="${path}" fill="${fills[BANDS.length - 1 - k]}"/>`;
+  }
+  let line = '';
+  for (let c = 0; c < cols; c++) line += (c ? 'L' : 'M') + X(c).toFixed(1) + ' ' + Y(sky[c]).toFixed(1);
+  svg += `<path d="${line}" fill="none" stroke="#1f2326" stroke-width="1.6" stroke-linejoin="round"/></g>`;
+  // bearing scale relative to the summit, like a theodolite strip
+  svg += `<rect x="0" y="${H - ground}" width="${W}" height="${ground}" fill="#fff"/><path d="M0 ${H - ground}H${W}" stroke="#1f2326" stroke-width="1.2"/>`;
+  for (let t = -Math.floor(fov / 2); t <= Math.floor(fov / 2); t += 1) {
+    const x = W / 2 + t * pxDeg, major = t % 5 === 0;
+    svg += `<path d="M${x} ${H - ground}v${major ? 12 : 6}" stroke="#1f2326" stroke-width="${major ? 1.4 : .8}"/>`;
+    if (major) svg += `<text x="${x}" y="${H - 6}" font-size="13" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" fill="#4c5257">${t > 0 ? '+' : ''}${t}°</text>`;
+  }
+  // aim mark: the phone crosshair goes on this vertical line, over the summit
+  const ys = Y(summit), g = 30, Lb = 14;
+  svg += `<path d="M${W / 2} ${top - 40}V${H - ground}" stroke="#b3261e" stroke-width="1.2" stroke-dasharray="6 5"/>`;
+  svg += `<g stroke="#b3261e" stroke-width="3" fill="none">` +
+    `<path d="M${W / 2 - g} ${ys - g + Lb}V${ys - g}H${W / 2 - g + Lb}"/><path d="M${W / 2 + g - Lb} ${ys - g}H${W / 2 + g}V${ys - g + Lb}"/>` +
+    `<path d="M${W / 2 + g} ${ys + g - Lb}V${ys + g}H${W / 2 + g - Lb}"/><path d="M${W / 2 - g + Lb} ${ys + g}H${W / 2 - g}V${ys + g - Lb}"/></g>`;
+  svg += `<circle cx="${W / 2}" cy="${ys}" r="3.2" fill="#b3261e"/>`;
+  svg += `<rect x="${W / 2 - 52}" y="${top - 62}" width="104" height="26" rx="4" fill="#b3261e"/><text x="${W / 2}" y="${top - 44}" font-size="15" font-weight="800" letter-spacing="2" text-anchor="middle" fill="#fff" font-family="Noto Sans JP,sans-serif">AIM HERE</text>`;
+  svg += '</svg>';
+  return { svg, dist, summit, vex };
+}
+
+function layoutPage(m) {
+  const d = Number(document.getElementById('dist').value) || 2;
+  const eye = Number(document.getElementById('eye').value) || 1.5;
+  const wall = m.demo.wall;
+  const rels = wall.map(w => S.wrap180(w.bearing_deg - wall[1].bearing_deg));
+  const face = (Math.min(...rels) + Math.max(...rels)) / 2;   // the judge faces the middle of the span
+  const rows = wall.map((w, i) => {
+    const a = rels[i] - face, x = d * Math.tan(rad(a));
+    return { w, i, a, x, slant: Math.hypot(d, x) };
+  });
+  const span = rels[rels.length - 1] - rels[0];
+  const maxX = Math.max(...rows.map(r => Math.abs(r.x))) + 0.4;
+  const sc = 420 / (2 * maxX), cx = 260, wy = 40, jy = wy + d * sc;
+  let plan = `<svg class="plan" viewBox="0 0 520 ${jy + 70}" role="img" aria-label="Top view of the card wall">`;
+  plan += `<rect x="${cx - maxX * sc}" y="${wy - 14}" width="${2 * maxX * sc}" height="14" fill="#e4e7e9"/><path d="M${cx - maxX * sc} ${wy}H${cx + maxX * sc}" stroke="#1f2326" stroke-width="2"/>`;
+  plan += `<text x="${cx - maxX * sc}" y="${wy - 20}" font-size="12" fill="#4c5257">WALL (top view)</text>`;
+  plan += `<path d="M${cx} ${jy}V${wy}" stroke="#4c5257" stroke-dasharray="4 4"/><text x="${cx + 6}" y="${(wy + jy) / 2}" font-size="12" fill="#4c5257">${d.toFixed(2)} m</text>`;
+  for (const r of rows) {
+    const x = cx + r.x * sc;
+    plan += `<path d="M${cx} ${jy}L${x} ${wy}" stroke="#b3261e" stroke-width="1.4"/>`;
+    plan += `<rect x="${x - 16}" y="${wy - 10}" width="32" height="8" fill="#1f2326"/><text x="${x}" y="${wy + 18}" font-size="13" font-weight="800" text-anchor="middle">${r.i + 1}</text>`;
+  }
+  plan += `<path d="M${cx - 10} ${jy - 10}l20 20M${cx + 10} ${jy - 10}l-20 20" stroke="#1f2326" stroke-width="3"/><text x="${cx}" y="${jy + 32}" font-size="13" font-weight="700" text-anchor="middle">Judge stands on the X</text>`;
+  plan += '</svg>';
+  const side = v => v === 0 ? 'on the center mark' : `${Math.abs(v).toFixed(2)} m ${v < 0 ? 'left' : 'right'} of center`;
+  return `<section class="page">
+    <div class="eyebrow">RIDGELINE · LIVE DEMO SETUP</div>
+    <h2>Card wall layout</h2>
+    <div class="grid2">
+      <div>
+        <table><thead><tr><th>CARD</th><th>PEAK</th><th>AIM MARK ON THE WALL</th><th style="text-align:right">FROM X</th></tr></thead><tbody>
+        ${rows.map(r => `<tr><td><b>${r.i + 1}</b></td><td>${r.w.name}</td><td>${side(r.x)}</td><td class="r">${r.slant.toFixed(2)} m</td></tr>`).join('')}
+        </tbody></table>
+        <ol class="steps" style="margin-top:16px">
+          <li><span>①</span><span>Tape an X on the floor <b>${d.toFixed(2)} m</b> from the wall, measured square to the wall. Mark the wall point straight ahead of the X as the center.</span></li>
+          <li><span>②</span><span>Tape each card so its red aim mark sits at the offset above and <b>${eye.toFixed(2)} m</b> high. Only left and right matter, height is for comfort.</span></li>
+          <li><span>③</span><span>The judge stands on the X and Locks the cards in any order. RIDGELINE uses only the angles between them, so the phone's own north does not matter.</span></li>
+          <li><span>④</span><span>Check: from the X, card 1 to card 3 spans <b>${span.toFixed(1)}°</b>. Standing 20 cm off the X shifts the angles by up to about ${deg(Math.atan(0.2 / d)).toFixed(0)}°, so keep feet on the mark.</span></li>
+        </ol>
+      </div>
+      <div>${plan}</div>
+    </div>
+    <p class="fine">Angles are the true bearings from the demo spot ${Math.abs(m.demo.lat).toFixed(5)}° N, ${Math.abs(m.demo.lon).toFixed(5)}° W (ground ${fmt(m.demo.ground_m)} m) to each summit: ${wall.map(w => `${w.name} ${w.bearing_deg.toFixed(1)}°`).join(', ')}. The judge faces ${S.wrap360(wall[1].bearing_deg + face).toFixed(1)}° true, the middle of the span.</p>
+  </section>`;
+}
+
+function render() {
+  const m = model, d = m.demo;
+  let html = layoutPage(m);
+  d.wall.forEach((w, i) => {
+    const c = cardSvg(m, w, i), p = m.byId[w.peak_id];
+    html += `<section class="page">
+      <div class="head"><div><div class="eyebrow">CARD ${i + 1} OF ${d.wall.length} · <b>CENTER THE PHONE ON THE AIM MARK, THEN LOCK</b></div><h1>${p.name}</h1>
+        <div class="facts"><span>Summit <b>${fmt(p.elev_m)} m</b> (${fmt(p.elev_m * 3.28084)} ft)</span><span>Distance <b>${(c.dist / 1000).toFixed(2)} km</b></span><span>Bearing <b>${w.bearing_deg.toFixed(1)}°</b> true</span><span>Up <b>${c.summit.toFixed(1)}°</b></span></div></div>
+        <div class="cardno" aria-hidden="true">${i + 1}</div></div>
+      ${c.svg}
+      <p class="fine">Horizon seen from the RIDGELINE demo spot ${Math.abs(d.lat).toFixed(5)}° N, ${Math.abs(d.lon).toFixed(5)}° W, ground ${fmt(d.ground_m)} m, eye 1.7 m. Drawn from USGS 3DEP 1 m lidar resampled to a 30 m grid, earth curvature and refraction included, vertical scale ×${c.vex.toFixed(2)}, darker ridges are closer. ${p.verified_name ? 'Name from Wikidata.' : 'Unnamed summit, labeled by its height.'} Tape per the layout sheet.</p>
+    </section>`;
+  });
+  document.getElementById('pages').innerHTML = html;
+}
+
+fetch('/data/moran.json', { cache: 'no-store' }).then(r => r.json()).then(json => {
+  model = S.load(json);
+  render();
+  document.getElementById('dist').onchange = render;
+  document.getElementById('eye').onchange = render;
+  document.getElementById('print').onclick = () => window.print();
+  document.title = 'RIDGELINE Wall Cards';
+  window.RIDGELINE_CARDS_READY = true;
+});
+</script>
+</body>
+</html>
