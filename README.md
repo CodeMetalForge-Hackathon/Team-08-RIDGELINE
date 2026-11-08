@@ -214,7 +214,7 @@ Pre-existing libraries, frameworks, SDKs and datasets used across this repositor
 | NOAA NDBC buoy 44013 | U.S. Government data, public domain | Snapshot of water temperature, wind and waves (`data/ndbc/`). From our first concept (maritime search), kept in data/ for reference, not used by RIDGELINE |
 | SeaDronesSee Multi-Object Tracking | CC0 1.0 | Planned for our first concept (maritime search). Never added to the repo (`data/raw/` stays local) and not used by RIDGELINE |
 | USGS 3DEP 1 m lidar (via OpenTopography) | U.S. Government data, public domain | Mount Moran terrain for the judge view (`terrain_viewer/data/moran/`) |
-| USGS 3DEP 1/3 arc-second DEM | U.S. Government data, public domain | Mount Washington terrain (`terrain_viewer/data/washington/`) |
+| USGS 3DEP 1/3 arc-second DEM | U.S. Government data, public domain | Mount Washington terrain (`terrain_viewer/data/washington/`), and the 48 × 40 km surroundings of the Moran sheet in the judge view (`terrain_viewer/data/moran_context/`), display only, not used by the solver |
 | Copernicus DEM GLO-30 | Copernicus DEM licence, free use with attribution (© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the EU and ESA) | Mount Fuji terrain (`terrain_viewer/data/fuji/`) |
 | ESA WorldCover 10 m 2021 v200 | CC BY 4.0 | Woods, rock and water tints on the map (`terrain_viewer/data/*/topo.jpg`) |
 | Wikidata | CC0 1.0 | Summit, lake and glacier names in `terrain_viewer/` |
