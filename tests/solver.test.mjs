@@ -51,6 +51,7 @@ const stats = rows => ({
   enough_share: r3(share(rows, r => r.enough)),
   poor_fit_share: r3(share(rows, r => r.poor)),
   no_feasible_cell_share: r3(share(rows, r => !r.feasible)),
+  errors_m: rows.map(r => Math.round(r.err)).sort((a, b) => a - b),   // every trial, sorted: the viewer's trust card draws them
 });
 const MC = {1: stats(byN[1]), 2: stats(byN[2]), 3: stats(byN[3])};
 
@@ -119,7 +120,8 @@ const EVAL = {
   frame_independence: FRAMES,
   timing: TIME,
 };
-writeFileSync(EVAL_URL, JSON.stringify(EVAL, null, 2) + '\n');
+// readable, but arrays of plain numbers (cell sizes, the sorted errors) on one line each
+writeFileSync(EVAL_URL, JSON.stringify(EVAL, null, 2).replace(/\[\s+(-?[\d.]+(?:,\s+-?[\d.]+)*)\s+\]/g, (m, a) => '[' + a.split(/,\s+/).join(', ') + ']') + '\n');
 console.log(`solver_eval.json: 3 locks median ${MC[3].median_err_m} m, p90 ${MC[3].p90_err_m} m, truth in 95% ${(100 * MC[3].truth_in_95_share).toFixed(1)}%, `
   + `enough ${(100 * MC[3].enough_share).toFixed(1)}%, wrong aim named ${(100 * WRONG.detectable_noisy_named_share).toFixed(1)}%, `
   + `false alarms ${(100 * WRONG.false_alarm_share_without_swap).toFixed(1)}%, solve median ${TIME.median_ms} ms max ${TIME.max_ms} ms`);
