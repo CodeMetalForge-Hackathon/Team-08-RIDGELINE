@@ -28,6 +28,8 @@
  *   note         'OK', or 'STAY' with empty lists when no other cell can be reached under the slope limit
  *
  *   RidgelineHide.marks(out) -> [{kind, rank, lat, lon, why}]   the small list the phone posts as summary.marks
+ *   RidgelineHide.layers(grid) -> {slope, seen, of}   per cell slope (deg) and summit count, cached. Call it once
+ *          after loading to move the one-time cost (about 40 ms in Node) out of the first fix.
  *
  * Reach: Dijkstra from the fix cell over the 30 m grid (8 neighbours), Tobler off-trail walking time
  * 6 km/h x exp(-3.5 |grade + 0.05|) x 0.6 (the same rule as terrain_viewer/team8_nav.js), half speed when injured,
