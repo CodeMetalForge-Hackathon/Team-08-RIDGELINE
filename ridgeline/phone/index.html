@@ -133,6 +133,14 @@ h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em;font-weight:75
 .stay p{margin:8px 0 0;color:var(--muted);font-size:14px;line-height:1.45}
 .key{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .key i{display:inline-block;width:14px;height:4px;border-radius:2px;margin-right:4px;vertical-align:middle}
+:root{--green:#8fe3a1}
+.gps{border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:4px;font-size:14px;line-height:1.45}
+.gps b{font:850 18px/1.2 var(--font);letter-spacing:.12em}
+.gps span{color:var(--muted)}
+.gps.bad{border:2px solid var(--red);background:rgba(255,140,137,.08)}.gps.bad b{color:var(--red)}
+.gps.good{border:2px solid var(--green);background:rgba(143,227,161,.07)}.gps.good b{color:var(--green)}
+.mgrs{font:700 20px/1.3 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:.02em;margin-top:-8px}
+.mgrs small{font:600 12px var(--font);color:var(--muted);letter-spacing:.04em;margin-left:8px}
 .netbar{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding-top:16px;font:600 11px var(--mono);letter-spacing:.04em;color:var(--faint)}
 .nb i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--faint);vertical-align:1px}
 .nb.ok{color:var(--muted)}.nb.ok i{background:var(--cyan)}
@@ -159,6 +167,9 @@ h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em;font-weight:75
     <p class="foot" id="sensor-debug">No motion data yet.</p>
     <label class="check"><input type="checkbox" id="camopt"> Rear camera behind the crosshair</label>
     <label>Aim error assumed (deg, 1 sigma)<input id="sigma" type="number" min="0.5" max="10" step="0.5" value="3"></label>
+    <label>Test GPS<select id="gpsopt"><option value="off">Off</option><option value="spoof">Spoofed, 2.5 km NE of the demo spot</option><option value="honest">Honest, 40 m from the demo spot</option><option value="custom">Custom lat lon</option></select></label>
+    <div class="pair" id="gps-custom" hidden><label>Lat<input id="gps-lat" type="number" step="0.00001" inputmode="decimal"></label><label>Lon<input id="gps-lon" type="number" step="0.00001" inputmode="decimal"></label></div>
+    <p class="foot">A pretend GPS reading, checked against the terrain fix to show spoofing. The phone GPS is never read.</p>
     <label>Barometer altitude (m, simulated)<input id="baro" type="number" step="1"></label>
     <button class="btn" id="assist">Demo assist: aim at the current card (keyboard only)</button>
     <button class="btn" id="reset">Start a new fix</button>
@@ -247,8 +258,62 @@ function predictedHeading(id) {
   if (k && R < 0.97) return null;   // circular spread above about 14 deg
   return W360(S.bearingFrom(model, model.E[at], model.N[at], id) + off);
 }
+// mgrs-begin (tested in Node against an independent UTM formula, see the commit)
+// WGS84 to UTM with the Krüger series to n^4 (Karney 2011), then the MGRS 100 km square letters (AA scheme).
+// Digits are truncated, as MGRS does, so the reference names the square the point is in.
+function mgrsOf(lat, lon, digits) {
+  const D = Math.PI / 180, a = 6378137, f = 1 / 298.257223563, k0 = 0.9996;
+  const zone = Math.min(60, Math.floor((lon + 180) / 6) + 1), lon0 = (zone - 1) * 6 - 177;
+  const n = f / (2 - f), n2 = n * n, n3 = n2 * n, n4 = n3 * n, e = Math.sqrt(f * (2 - f));
+  const A = a / (1 + n) * (1 + n2 / 4 + n4 / 64);
+  const al = [n / 2 - 2 * n2 / 3 + 5 * n3 / 16 + 41 * n4 / 180, 13 * n2 / 48 - 3 * n3 / 5 + 557 * n4 / 1440, 61 * n3 / 240 - 103 * n4 / 140, 49561 * n4 / 161280];
+  const phi = lat * D, lam = (lon - lon0) * D;
+  const t = Math.sinh(Math.atanh(Math.sin(phi)) - e * Math.atanh(e * Math.sin(phi)));
+  const xi1 = Math.atan2(t, Math.cos(lam)), eta1 = Math.atanh(Math.sin(lam) / Math.sqrt(1 + t * t));
+  let xi = xi1, eta = eta1;
+  for (let j = 1; j <= 4; j++) { xi += al[j - 1] * Math.sin(2 * j * xi1) * Math.cosh(2 * j * eta1); eta += al[j - 1] * Math.cos(2 * j * xi1) * Math.sinh(2 * j * eta1); }
+  const E = 500000 + k0 * A * eta, N = k0 * A * xi + (lat < 0 ? 10000000 : 0);
+  const band = 'CDEFGHJKLMNPQRSTUVWXX'[Math.max(0, Math.min(20, Math.floor((lat + 80) / 8)))];
+  const set = zone % 6 || 6;
+  const col = ['ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ'][(set - 1) % 3][Math.floor(E / 100000) - 1];
+  const row = 'ABCDEFGHJKLMNPQRSTUV'[(Math.floor(N / 100000) + (set % 2 ? 0 : 5)) % 20];
+  const k = Math.pow(10, 5 - digits), pad = v => String(Math.floor((v % 100000) / k)).padStart(digits, '0');
+  return { text: `${zone}${band} ${col}${row} ${pad(E)} ${pad(N)}`, zone, band, E, N };
+}
+// mgrs-end
+const mgrsDigits = () => result && result.r95_m < 50 ? 4 : 3;   // 10 m squares only when the fix is that good
+function fixMgrs() { return result && result.n_locks ? mgrsOf(result.estimate.lat, result.estimate.lon, mgrsDigits()).text : null; }
+
+// ---------- test GPS: a terrain integrity check against GPS spoofing ----------
+// The phone GPS is never read. A test reading is set in Settings and compared with the terrain fix.
+let gpsMode = 'off', gpsCustom = null;
+function gpsPoint() {
+  if (!model || gpsMode === 'off') return null;
+  const d = model.demo;
+  if (gpsMode === 'spoof') return S.lonLat(model, d.e_m + 2500 * Math.SQRT1_2, d.n_m + 2500 * Math.SQRT1_2);   // 2.5 km NE of the demo spot
+  if (gpsMode === 'honest') return S.lonLat(model, d.e_m - 20, d.n_m - 34.6);   // 40 m SSW of the demo spot
+  return gpsMode === 'custom' && gpsCustom ? gpsCustom : null;
+}
+function distM(lat1, lon1, lat2, lon2) {
+  const D = Math.PI / 180, s1 = Math.sin((lat2 - lat1) * D / 2), s2 = Math.sin((lon2 - lon1) * D / 2);
+  return 2 * 6371008.8 * Math.asin(Math.min(1, Math.sqrt(s1 * s1 + Math.cos(lat1 * D) * Math.cos(lat2 * D) * s2 * s2)));
+}
+function gpsCheck() {
+  const g = gpsPoint();
+  if (!g || !result || result.n_locks < 2 || result.status === 'mismatch') return null;
+  const dist = distM(result.estimate.lat, result.estimate.lon, g.lat, g.lon);
+  return { lat: +g.lat.toFixed(6), lon: +g.lon.toFixed(6), verdict: dist > result.r95_m ? 'REJECTED' : 'AGREE', dist_m: Math.round(dist) };
+}
+function gpsHtml() {
+  const g = gpsCheck();
+  if (!g) return '';
+  return g.verdict === 'REJECTED'
+    ? `<div class="gps bad" role="status"><b>GPS REJECTED</b><span>The GPS reading is ${fmtM(g.dist_m)} from the terrain fix, outside the 95% circle. Possible spoofing, do not trust it.</span></div>`
+    : `<div class="gps good" role="status"><b>GPS AGREES</b><span>The GPS reading is ${fmtM(g.dist_m)} from the terrain fix, inside the 95% circle.</span></div>`;
+}
+
 function summaryForBoard() {
-  return { status: result.status, r95_m: Math.round(result.r95_m), lat: result.estimate.lat, lon: result.estimate.lon, n: locks.length };
+  return { status: result.status, r95_m: Math.round(result.r95_m), lat: result.estimate.lat, lon: result.estimate.lon, n: locks.length, mgrs: fixMgrs(), gps: gpsCheck() };
 }
 function post() {
   // the board solves on its own, so a Lock is sent before this phone finishes solving
@@ -391,6 +456,7 @@ function drawMap(canvas, zoom) {
     if (screen === 'fix') {   // the route and the destination stay in the frame
       const pts = nav.route ? nav.route.path.map(p => S.toEN(model, p[0], p[1])) : [];
       if (nav.dest) pts.push(S.toEN(model, nav.dest.lon, nav.dest.lat));
+      const gc = gpsCheck(); if (gc) pts.push(S.toEN(model, gc.lon, gc.lat));
       for (const q of pts) { a0 = Math.min(a0, q.e - 300); a1 = Math.max(a1, q.e + 300); b0 = Math.min(b0, q.n - 300); b1 = Math.max(b1, q.n + 300); }
     }
     let we = a1 - a0, wn = b1 - b0;
@@ -450,6 +516,17 @@ function drawMap(canvas, zoom) {
       ctx.font = `600 ${11 * dpr}px "Noto Sans JP",sans-serif`; ctx.fillStyle = '#2b2418';
       ctx.fillText(p.name, x + 9 * dpr, y + 4 * dpr);
     }
+  }
+  const gc = screen === 'fix' ? gpsCheck() : null;
+  if (gc) {   // the test GPS reading: red X when the terrain rejects it, green ring when it agrees
+    const q = S.toEN(model, gc.lon, gc.lat), x = X(q.e), y = Y(q.n), s = dpr, bad = gc.verdict === 'REJECTED';
+    ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(245,241,230,.95)'; ctx.lineWidth = 7 * s;
+    const mark = () => { ctx.beginPath(); if (bad) { ctx.moveTo(x - 8 * s, y - 8 * s); ctx.lineTo(x + 8 * s, y + 8 * s); ctx.moveTo(x + 8 * s, y - 8 * s); ctx.lineTo(x - 8 * s, y + 8 * s); } else ctx.arc(x, y, 8 * s, 0, Math.PI * 2); ctx.stroke(); };
+    mark(); ctx.strokeStyle = bad ? '#b42318' : '#2b7a3d'; ctx.lineWidth = 3.2 * s; mark();
+    ctx.font = `800 ${11 * s}px "Noto Sans JP",sans-serif`; ctx.lineWidth = 3 * s; ctx.strokeStyle = 'rgba(245,241,230,.95)';
+    const lab = bad ? 'GPS REJECTED' : 'GPS', tw = ctx.measureText(lab).width, tx = x + 12 * s + tw > W - 6 * s ? x - 12 * s - tw : x + 12 * s;
+    ctx.strokeText(lab, tx, y + 4 * s); ctx.fillStyle = bad ? '#b42318' : '#1e5a2c'; ctx.fillText(lab, tx, y + 4 * s);
+    ctx.restore();
   }
   if (result && result.n_locks >= 2) {
     const x = X(result.estimate.e_m), y = Y(result.estimate.n_m), r = result.r95_m / (e1 - e0) * W;
@@ -562,7 +639,9 @@ function render() {
     m.innerHTML = `<div class="eyebrow"><span>03 · POSITION</span><span>NO GPS · NO NETWORK</span></div>
       <h1>You are here.</h1>
       <div class="coords" id="coords"></div>
+      <div class="mgrs" id="mgrs">${fixMgrs()}<small>MGRS · ${mgrsDigits() === 4 ? '10' : '100'} m squares</small></div>
       <div><span class="big-pm" id="pm">±${fmtM(result.r95_m)}</span><small class="foot" style="margin-left:8px">95% · ${locks.length} peaks</small></div>
+      ${gpsHtml()}
       <div class="map big" id="map-wrap"><canvas id="map"></canvas><span class="maplab">${model.json.name} · USGS 3DEP</span></div>
       <p class="status">${o && o.mass >= 0.02 ? `<b>Second place: ${Math.round(o.mass * 100)}%</b>, ${fmtM(o.distance_m)} ${dir}. Lock one more peak to rule it out.` : '<b>One place fits.</b> No second candidate above 2%.'}</p>
       ${goHtml()}
@@ -727,6 +806,24 @@ $('source').onchange = e => { source = e.target.value; samples = []; render(); }
 $('sigma').onchange = e => { const v = Number(e.target.value); if (v >= 0.5 && v <= 10) { sigma = v; if (locks.length) { solveNow(); render(); } } };
 $('baro').onchange = e => { const v = Number(e.target.value); if (Number.isFinite(v)) { baro = v; if (locks.length) { solveNow(); render(); post(); } } };
 $('reset').onclick = () => { $('sheet').hidden = true; resetFix(); };
+function gpsChanged() {
+  $('chip-gps').textContent = gpsMode === 'off' ? 'GPS OFF' : 'GPS TEST';
+  if (screen === 'fix') render();
+  if (result && result.n_locks) post();
+}
+$('gpsopt').onchange = e => {
+  gpsMode = e.target.value; $('gps-custom').hidden = gpsMode !== 'custom';
+  if (gpsMode === 'custom' && !gpsCustom && model) {   // start from the honest point so the fields are never empty
+    const h = S.lonLat(model, model.demo.e_m - 20, model.demo.n_m - 34.6);
+    $('gps-lat').value = h.lat.toFixed(5); $('gps-lon').value = h.lon.toFixed(5); gpsCustom = { lat: +h.lat.toFixed(5), lon: +h.lon.toFixed(5) };
+  }
+  gpsChanged();
+};
+$('gps-lat').onchange = $('gps-lon').onchange = () => {
+  const la = parseFloat($('gps-lat').value), lo = parseFloat($('gps-lon').value);
+  gpsCustom = Number.isFinite(la) && Number.isFinite(lo) && Math.abs(la) <= 90 && Math.abs(lo) <= 180 ? { lat: la, lon: lo } : null;
+  gpsChanged();
+};
 $('assist').onclick = () => {
   if (source !== 'keyboard' || !target) return;
   const d = model.demo, noise = (Math.random() - 0.5) * 3;
