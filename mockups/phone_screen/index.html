@@ -87,7 +87,7 @@ function header(eyebrow,title,step){return `<div class="heading"><div><p class="
 // is hidden meanwhile, because a phone camera sees about 65° across and the drawing shows 120°, so they would not line
 // up. The heading and tilt still come from the motion sensors (or the keyboard); the camera only helps to aim.
 // Needs a secure page (https or localhost). Nothing is recorded or sent.
-let camOn=false,camStream=null;
+let camOn=false,camStream=null,camLostAt=0;
 function camApply(){
  const v=$('cam'),w=$('sky-wrap'),b=$('cam-toggle'),on=!!(camOn&&camStream);
  if(!v||!w)return;
@@ -103,6 +103,9 @@ async function camStart(){
  try{
   const st=await md.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
   if(screen!=='aim'){st.getTracks().forEach(t=>t.stop());return;}
+  // another app took the camera, permission was withdrawn or the device went away: the track ends by itself
+  // (stop() above does not fire this), so drop back to the skyline and say so
+  st.getVideoTracks().forEach(t=>t.addEventListener('ended',()=>{if(camStream!==st)return;camStream=null;camOn=false;camLostAt=Date.now();camApply();if(screen==='aim')announce('The camera stopped. Press Camera to start it again.');}));
   camStream=st;camOn=true;camApply();announce('Camera on. Put the summit in the crosshair, then Lock.');
  }catch(e){
   camStop();camApply();console.warn('RIDGELINE camera',e&&e.name,e&&e.message);
