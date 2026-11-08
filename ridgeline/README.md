@@ -93,6 +93,7 @@ Other tests, run on Nov 8, 2026.
 | --- | --- |
 | `node --test ridgeline/test/hide.test.js` | 6 of 6. The reach (1,244 cells) matches an independent search, every summit count and slope rechecked, 3.5 to 7 ms per call after the first |
 | `node --test ridgeline/test/skyline.test.js` | 6 of 6. The skyline at the 3 wall peaks is within 0.001° of the predicted summit angles, agrees with the visibility masks on 99.9% of visible pairs over 300 random cells, and stays within 0.062° of the wall cards. About 1.5 ms per call |
+| Gate B, by hand on the real phone (Galaxy S24 Ultra, Chrome 156, Nov 8 4:28 EST) | Three paper marks on a wall, Locked by hand. The angles between Locks were 5 to 6° off the layout, and the fix landed 360 m from the true spot, inside its ±363 m bubble. Three earlier tries with the marks in the wrong order were each flagged as a mismatch with a request to aim at the last card again |
 | `python -I -m unittest discover -s ridgeline/test -p "test_cot.py"` | 10 of 10. Point, ce, hae, circle, route, marks, the rejected GPS point, ping and pong, a late client, deletes after reset, push mode, a busy CoT port. The Lock relay stays under 0.25 s with ATAK connected |
 
 Barometer reference error at the demo wall, 3° aim error, 200 fixes per row (from `/trust`).
@@ -112,7 +113,6 @@ A reference up to 30 m off still leaves the truth inside the bubble in at least 
 
 ## Not tested yet
 
-* A full hand-held fix with the wall laid out as page 1 of the cards says. Three hand-held tries on the real phone (Galaxy S24 Ultra, Chrome 156) on Nov 8 between 3:41 and 3:54 EST reached the board in time, and the phone flagged each one as a mismatch and asked for the last card again. The angles fit cards placed in another order about 2.6 m from the wall, so the orientation stream, the relay and the mismatch check worked, and the wall did not match the layout.
 * Anything inside real ATAK (the connection dialog, how the items look, the delete events). ATAK-CIV was not installed on the test phone, so the CoT was checked with a stand-in TAK client only.
 * Offline with the cable out on the real phone. On the Galaxy the service worker is active and holds 11 files, but the reopen with no PC was tested only in headless Chrome. Also untested on the phone are Night mode over a live camera, the Copy button and installing to the home screen.
 * Which orientation stream a held phone uses. Chrome on this Galaxy sends `deviceorientation` (gyro) only while the phone moves and `deviceorientationabsolute` all the time. The page prefers the gyro stream, falls back to the absolute one, and never mixes them within one fix.
