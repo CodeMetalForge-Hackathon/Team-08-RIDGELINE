@@ -14,8 +14,8 @@ FILE_PATH = 'rasters_USGS1m/output_USGS1m.tif'
 BAROMETERIC_PRECISION = 3
 NOISE_STD = 1.0
 ##true position information
-true_lat = 43.84579
-true_long = -110.83303
+# true_lat = 43.84579
+# true_long = -110.83303
 
 def main():
     ##Load Data
@@ -36,37 +36,38 @@ def main():
 
     ##Find Peaks
     ##find true position in grid space
-    transformer = Transformer.from_crs("EPSG:4326", dataset.crs, always_xy=True)
-    (map_x, map_y) = transformer.transform(true_long, true_lat)
-    (true_row, true_col) = dataset.index(map_x, map_y)
+    # transformer = Transformer.from_crs("EPSG:4326", dataset.crs, always_xy=True)
+    # (map_x, map_y) = transformer.transform(true_long, true_lat)
+    # (true_row, true_col) = dataset.index(map_x, map_y)
     
     peaks_mask, peak_cords = find_true_peaks(elevation_data)
     ##find the 3 closest peaks
-    closest_peaks = closest_landmarks(true_row,true_col,peak_cords)
 
     ##Plot basic map
-    plt.figure(figsize=(12,8))
-    im1 = plt.imshow(elevation_data, cmap='terrain')
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax.imshow(elevation_data, cmap='terrain')
+    plt.title('Select Operator Position')
     
-    # Add titles and labels
-    plt.title('Topographical Elevation Map (USGS 1m DEM)', fontsize=14)
-    plt.xlabel('Column (Pixels)')
-    plt.ylabel('Row (Pixels)')
-    plt.tight_layout()
-    
-    ##Plot peaks map
-    plt.figure(figsize=(12, 8))
-    # Base terrain in grayscale so the peaks stand out
-    im2 = plt.imshow(elevation_data, cmap='terrain')
+    # Block execution and wait for 1 click (timeout=0 means wait forever)
+    # show_clicks=True automatically adds a small marker where you click
+    print("Waiting for you to click on the plot...")
+    clicked_coords = plt.ginput(n=1, timeout=0, show_clicks=True)
 
-    # Plot peaks using scatter points based on coordinates and find bearing to 3 closest points
-    if len(peak_cords) > 0:
-        # peak_cords is [row, col]. We extract cols for X, and rows for Y
-        peak_rows = peak_cords[:, 0]
-        peak_cols = peak_cords[:, 1]
+    # clicked_coords returns a list of (x, y) tuples. 
+    if clicked_coords:
+        true_col = int(round(clicked_coords[0][0]))
+        true_row = int(round(clicked_coords[0][1]))
         
-        plt.scatter(peak_cols, peak_rows, color='magenta', marker='^', s=20, 
-                    edgecolor='black', label="True Peaks")
+        print(f"Added marker at Row: {true_row}, Column: {true_col}")
+        
+        # Optional: permanently plot your own custom marker there
+        ax.plot(true_col, true_row, marker='x', color='red', markersize=10, mew=2)
+        fig.canvas.draw()
+
+    print("Proceeding to the next part of the script...")
+    closest_peaks = closest_landmarks(true_row,true_col,peak_cords)
+
+    # --- Script continues immediately here ---
 
 
 
@@ -115,7 +116,7 @@ def main():
     # 3. PLOT THE RESULTS
     # =========================================================
     plt.figure(figsize=(12, 8))
-    plt.imshow(elevation_data, cmap='gray', alpha=0.6)
+    plt.imshow(elevation_data, cmap='terrain', alpha=0.6)
     
     # Plot Landmark Peaks
     plt.scatter(selected_peak_cols, selected_peak_rows, color='magenta', marker='^', s=100, 
@@ -147,7 +148,7 @@ def main():
     plt.ylim(map_height, 0)
     
     plt.legend(loc="upper right", fontsize=10)
-    plt.title(f"3-Point Resection (Compass Error: {compass_error_std}Â°)", fontsize=14)
+    plt.title(f"3-Point Resection", fontsize=14)
     plt.tight_layout()
     plt.show()
 
