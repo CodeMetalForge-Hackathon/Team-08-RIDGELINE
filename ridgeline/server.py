@@ -57,12 +57,14 @@ FILES = {
     '/skyline.js': HERE / 'skyline.js',      # expected horizon toward the next peak
     '/pace.js': HERE / 'pace.js',            # Auto-PACE, the fix keeps living as you walk
     '/follow.js': HERE / 'follow.js',        # Follow, the locked route one instruction at a time
+    '/walk': HERE / 'walk' / 'index.html',   # Walk here, Auto-PACE at the venue (camera, then steps)
+    '/walk/': HERE / 'walk' / 'index.html',
     '/sw.js': HERE / 'phone' / 'sw.js',      # service worker at the root so its scope is the whole app
     '/manifest.webmanifest': HERE / 'phone' / 'manifest.webmanifest',
     '/data/moran.json': HERE / 'data' / 'moran.json',
     '/topo/moran.jpg': REPO / 'terrain_viewer' / 'data' / 'moran' / 'topo.jpg',
 }
-DIRS = {'/phone/': HERE / 'phone', '/board/': HERE / 'board', '/cards/': HERE / 'cards',
+DIRS = {'/phone/': HERE / 'phone', '/board/': HERE / 'board', '/cards/': HERE / 'cards', '/walk/': HERE / 'walk',
         '/tv/': REPO / 'terrain_viewer'}   # read only: the viewer's route planner and terrain bundle
 TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json',
          '.jpg': 'image/jpeg', '.png': 'image/png', '.svg': 'image/svg+xml', '.css': 'text/css; charset=utf-8',
