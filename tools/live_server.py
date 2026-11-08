@@ -79,7 +79,8 @@ class Handler(SimpleHTTPRequestHandler):
             with _lock:
                 return self._json(dict(_state))
         if path == "/health":
-            return self._json({"ok": True, "root": os.path.basename(ROOT)})
+            # the pid lets a test check it reached the server it started, not another one on the same port
+            return self._json({"ok": True, "root": os.path.basename(ROOT), "pid": os.getpid()})
         return super().do_GET()
 
     def do_POST(self):
