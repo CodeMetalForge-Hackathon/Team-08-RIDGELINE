@@ -1,0 +1,960 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#080c0f">
+<title>RIDGELINE Walk here</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/phone/icon-192.png">
+<link rel="stylesheet" href="/tv/lib/fonts/fonts.css">
+<style>
+/* the phone app's tokens (phone/index.html, field console values), so this page reads as part of it */
+:root{color-scheme:dark;--bg:#080c0f;--panel:#111a20;--raise:#1b282f;--line:#2d3d45;--line2:#667c83;--text:#f3f4ee;--muted:#b4c0c1;--faint:#91a3a6;--cyan:#dee6e1;--amber:#ffd15b;--red:#ff8c89;--green:#a5d6ad;--action:#ffd15b;--on-action:#11150d;--glass:rgba(8,12,15,.8);--glass2:rgba(17,26,32,.92);--scrim:rgba(0,0,0,.7);--r:2px;--font:"Noto Sans JP","Noto Sans",system-ui,sans-serif;--mono:"B612 Mono",ui-monospace,"Cascadia Mono",Consolas,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);-webkit-tap-highlight-color:transparent}
+body{min-height:100svh;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+button:focus-visible,a:focus-visible{outline:3px solid var(--action);outline-offset:2px}
+[hidden]{display:none!important}
+#gl{position:fixed;inset:0;width:100vw;height:100svh;display:block;z-index:0}
+#ui{position:fixed;inset:0;z-index:1;background:transparent}
+/* home */
+.home{position:absolute;inset:0;overflow-y:auto;background:var(--bg)}
+.wrap{max-width:560px;margin:0 auto;padding:0 max(16px,env(safe-area-inset-right)) max(28px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:16px}
+.top{height:56px;flex-shrink:0;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line2)}
+.brand{font-weight:800;letter-spacing:.14em;font-size:14px;margin-right:auto;display:flex;align-items:center;gap:8px}
+.brand i{width:9px;height:9px;background:var(--action);transform:rotate(45deg);display:inline-block}
+.link{font-size:12px;color:var(--muted);text-decoration:none;border:1px solid var(--line2);padding:7px 9px;border-radius:var(--r)}
+.eyebrow{font-size:12px;letter-spacing:.16em;color:var(--muted);margin:8px 0 0}
+h1{margin:-8px 0 0;font-size:36px;line-height:1.1;font-weight:800;letter-spacing:-.01em}
+h1 em{font-style:normal;color:var(--action)}
+.lead{margin:0;color:var(--muted);line-height:1.55;font-size:16px}
+.rows{border-top:1px solid var(--line)}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px}
+.row .v{text-align:right;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.v.ok{color:var(--green)}.v.warn{color:var(--amber)}.v.off{color:var(--red)}
+.btn{min-height:52px;border-radius:var(--r);border:1px solid var(--line2);background:var(--raise);font-weight:650;font-size:16px;padding:8px 14px;color:var(--text)}
+.btn.primary{background:var(--action);border-color:var(--action);color:var(--on-action)}
+.btn.ghost{background:transparent}
+.btn.arm{border-color:var(--red);color:var(--red);background:var(--panel)}
+.btn:disabled{opacity:.4;cursor:default}
+.stack{display:flex;flex-direction:column;gap:8px}
+.hint{font-size:14px;color:var(--muted);margin:0;line-height:1.5}
+.err{font-size:14px;color:var(--red);margin:0;line-height:1.5}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.card h2,.sec{margin:0 0 10px;font-size:12px;letter-spacing:.16em;color:var(--muted);font-weight:700}
+.card ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;font-size:15px;line-height:1.5}
+.card ol li{display:flex;gap:10px}
+.card ol b{color:var(--action);flex-shrink:0;font-weight:700}
+table.tr{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+table.tr th{font-weight:600;color:var(--muted);text-align:right;padding:6px 4px;border-bottom:1px solid var(--line2);font-size:10px;letter-spacing:.08em}
+table.tr td{text-align:right;padding:8px 4px;border-bottom:1px solid var(--line);font-family:var(--mono)}
+table.tr th:first-child,table.tr td:first-child{text-align:left}
+table.tr td.src{font-family:var(--font);font-size:12px;color:var(--muted)}
+.simtag{font-family:var(--font);font-size:9px;letter-spacing:.08em;color:var(--on-action);background:var(--action);padding:1px 4px;margin-left:4px;vertical-align:1px}
+.sum{font-size:15px;line-height:1.5;margin:12px 0 0}
+.sum b{color:var(--action)}
+.pair{display:flex;gap:8px}.pair>*{flex:1;min-width:0}
+.copybox{width:100%;min-height:140px;background:var(--panel);color:var(--text);border:1px solid var(--line2);font-family:var(--mono);font-size:11px;padding:8px}
+/* HUD over the camera */
+.hud{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;gap:8px;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
+.hud .bar,.hud .guide,.hud .panel,.hud .note,.hud .simpad,.hud .again,.hud #bigmap{pointer-events:auto}
+.hud>*:not(#labels){position:relative;z-index:1}
+#labels{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.bar{display:flex;align-items:center;gap:6px}
+.bar .brand{font-size:12px;letter-spacing:.14em;text-shadow:0 1px 3px #000}
+.chip{font-family:var(--mono);font-size:11px;letter-spacing:.06em;padding:5px 7px;border:1px solid var(--line2);background:var(--glass);color:var(--muted);white-space:nowrap;border-radius:var(--r)}
+.chip.cam{color:var(--green);border-color:var(--green)}
+.chip.steps{color:var(--amber);border-color:var(--amber)}
+.chip.none{color:var(--red);border-color:var(--red)}
+.chip.sim{color:var(--on-action);background:var(--action);border-color:var(--action);font-weight:700}
+.guide{display:flex;align-items:center;gap:12px;background:var(--glass);border:1px solid var(--line);border-left:3px solid var(--action);padding:8px 12px;border-radius:var(--r)}
+.guide svg{width:76px;height:76px;flex-shrink:0;display:block}
+.g-txt{min-width:0}
+.g-dist{font-family:var(--mono);font-size:34px;font-weight:700;line-height:1;color:var(--action);font-variant-numeric:tabular-nums}
+.g-say{font-size:18px;font-weight:750;margin-top:6px}
+.g-to{font-size:11px;letter-spacing:.12em;color:var(--muted);margin-top:3px}
+.g-sub{font-size:12px;color:var(--amber);margin-top:4px;line-height:1.35}
+.guide.done{border-left-color:var(--green)}
+.guide.done .g-dist{color:var(--green)}
+.mid{flex:1;min-height:0}
+.aim{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;pointer-events:none}
+.aim::before,.aim::after{content:"";position:absolute;background:var(--text);opacity:.85;box-shadow:0 0 2px #000}
+.aim::before{left:21px;top:6px;width:2px;height:32px}
+.aim::after{top:21px;left:6px;height:2px;width:32px}
+.aim-hint{position:absolute;left:0;right:0;top:calc(50% + 30px);text-align:center;font-size:13px;color:var(--text);text-shadow:0 1px 3px #000,0 0 8px #000;pointer-events:none}
+.lbl{position:absolute;left:0;top:0;background:var(--glass);border:1px solid var(--line2);color:var(--text);font-size:12px;padding:2px 6px;white-space:nowrap;font-family:var(--mono);border-radius:var(--r);will-change:transform}
+.lbl.t{background:var(--action);border-color:var(--action);color:var(--on-action);font-weight:700}
+.lbl.s{border-color:var(--action);color:var(--action)}
+#bigmap{position:absolute;inset:0;width:100%;height:100%;display:block;border:1px solid var(--line);background:var(--bg);touch-action:none;border-radius:var(--r)}
+.cover{position:absolute;inset:0;background:var(--scrim);display:grid;place-items:center;text-align:center;font-size:15px;line-height:1.5;color:var(--amber);padding:24px;pointer-events:none}
+.note{align-self:center;max-width:100%;background:var(--glass);border:1px solid var(--line2);padding:6px 10px;font-size:13px;line-height:1.4;text-align:center;border-radius:var(--r)}
+.panel{background:var(--glass2);border:1px solid var(--line);padding:8px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;border-radius:var(--r)}
+#map{width:132px;height:132px;display:block;border:1px solid var(--line);background:var(--bg);touch-action:none}
+.ctl{display:grid;grid-template-columns:1fr 1fr;gap:6px;align-content:start}
+.ctl .btn{min-height:44px;font-size:14px;padding:4px 6px;line-height:1.15}
+.chips{grid-column:1/-1;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.tchip{flex-shrink:0;min-height:36px;padding:4px 10px;border:1px solid var(--line2);background:var(--panel);font-size:13px;border-radius:var(--r);color:var(--text)}
+.tchip.on{border-color:var(--action);color:var(--action);font-weight:700}
+.tchip.mark{border-style:dashed}
+.marks{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.marks span{font-size:12px;color:var(--muted);margin-right:4px}
+.foot{grid-column:1/-1;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-family:var(--mono)}
+.foot .sp{margin-right:auto;line-height:1.35;min-width:0}
+.foot .btn{min-height:36px;font-size:13px;padding:2px 10px;font-family:var(--font)}
+.nocam .panel{grid-template-columns:minmax(0,1fr)}
+.nocam #map{display:none}
+.simpad{position:absolute;right:0;bottom:0;display:grid;grid-template-columns:repeat(3,48px);grid-auto-rows:48px;gap:4px}
+.simpad button{border:1px solid var(--line2);background:var(--glass);font-size:17px;border-radius:var(--r);touch-action:none;user-select:none;-webkit-user-select:none}
+.simpad button.on{border-color:var(--amber);color:var(--amber)}
+.simkeys{position:absolute;left:0;top:0;max-width:60%;font-size:11px;line-height:1.5;color:var(--text);text-shadow:0 1px 3px #000;font-family:var(--mono);pointer-events:none}
+.again{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);min-width:200px}
+.sheet-full{position:absolute;inset:0;z-index:5;background:var(--bg);overflow-y:auto}
+@media (max-width:370px){#map{width:112px;height:112px}.g-dist{font-size:28px}.guide svg{width:62px;height:62px}.ctl .btn{font-size:13px}}
+</style>
+</head>
+<body>
+<canvas id="gl" hidden></canvas>
+<div id="ui">
+  <section id="home" class="home">
+    <div class="wrap">
+      <header class="top"><span class="brand"><i></i>RIDGELINE</span><a class="link" href="/">Back to the app</a></header>
+      <p class="eyebrow">VENUE DEMO · AUTO-PACE</p>
+      <h1>Walk <em>here</em></h1>
+      <p class="lead">Drop a pin on the floor, follow the arrow, and the phone buzzes when you get there. The camera tracks the walk. In a pocket the phone falls back to counting steps, and its circle shows how sure it still is</p>
+      <div class="rows">
+        <div class="row"><span>Camera tracking</span><span class="v" id="cap-xr">Checking</span></div>
+        <div class="row"><span>Step sensor</span><span class="v" id="cap-motion">Waiting for a move</span></div>
+        <div class="row"><span>Turn sensor</span><span class="v" id="cap-ori">Waiting</span></div>
+      </div>
+      <p id="home-err" class="err" hidden></p>
+      <div class="stack">
+        <button id="go-cam" class="btn primary">Start with the camera</button>
+        <button id="go-steps" class="btn">Steps only</button>
+        <button id="go-sim" class="btn ghost">Simulate on this screen</button>
+      </div>
+      <p class="hint">Stand on the tape X, face into the room, then start. Ahead on the map is the way the phone faces at the start</p>
+      <section class="card">
+        <h2>MEASURE IT</h2>
+        <ol>
+          <li><b>①</b><span>Tape an X on the floor and start standing on it, the phone held over it</span></li>
+          <li><b>②</b><span>Drop a pin 5 to 15 m away and follow the arrow until the phone buzzes</span></li>
+          <li><b>③</b><span>Tap Back to start and follow the arrow home. For the steps test, walk back with the phone in a pocket</span></li>
+          <li><b>④</b><span>Standing on the tape, the phone held over it, tap On the X twice. How far the phone thinks you are from the start is the error, and the next loop starts from there</span></li>
+        </ol>
+      </section>
+      <section class="card">
+        <h2>LOOPS</h2>
+        <div id="trials-home"></div>
+      </section>
+    </div>
+  </section>
+
+  <section id="hud" class="hud" hidden>
+    <div id="labels"></div>
+    <div class="bar">
+      <span class="brand"><i></i>WALK HERE</span>
+      <span id="c-sim" class="chip sim" hidden>SIMULATED</span>
+      <span id="c-mode" class="chip none">WAITING</span>
+      <span id="c-r95" class="chip">±0.25 m</span>
+    </div>
+    <div id="guide" class="guide" aria-live="polite">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="46" fill="none" stroke="var(--line2)" stroke-width="2"/>
+        <path d="M50 2 L54 9 L46 9 Z" fill="var(--muted)"/>
+        <g id="arrow-g"><path id="arrow" d="M50 10 L78 50 L60 50 L60 88 L40 88 L40 50 L22 50 Z" fill="var(--action)"/></g>
+        <path id="check" d="M27 52 L44 69 L75 34" fill="none" stroke="var(--green)" stroke-width="9" stroke-linecap="square" style="display:none"/>
+      </svg>
+      <div class="g-txt">
+        <div id="g-dist" class="g-dist">0.0 m</div>
+        <div id="g-say" class="g-say">Straight ahead</div>
+        <div id="g-to" class="g-to">TO THE START</div>
+        <div id="g-sub" class="g-sub" hidden></div>
+      </div>
+    </div>
+    <div id="mid" class="mid">
+      <canvas id="bigmap" hidden aria-label="Map of the walk, tap to drop a pin"></canvas>
+      <div id="aim" class="aim"></div>
+      <div id="aim-hint" class="aim-hint"></div>
+      <div id="cover" class="cover" hidden></div>
+      <div id="simkeys" class="simkeys" hidden>W A S D or the arrows walk<br>P pocket, R restart the camera frame<br>Space drops a pin, B back to start</div>
+      <div id="simpad" class="simpad" hidden>
+        <button data-k="left" aria-label="Turn left">↶</button><button data-k="fwd" aria-label="Walk ahead">↑</button><button data-k="right" aria-label="Turn right">↷</button>
+        <button id="sim-pocket" aria-label="Phone in the pocket">P</button><button data-k="back" aria-label="Step back">↓</button><button id="sim-restart" aria-label="Restart the camera frame on the way back">R</button>
+      </div>
+      <button id="again" class="btn primary again" hidden>Camera again</button>
+    </div>
+    <div id="note" class="note" hidden></div>
+    <div id="panel" class="panel">
+      <canvas id="map" aria-label="Map of the walk, tap to drop a pin"></canvas>
+      <div class="ctl">
+        <button id="b-pin" class="btn primary">Drop pin</button>
+        <button id="b-mark" class="btn">Mark here</button>
+        <button id="b-home" class="btn">Back to start</button>
+        <button id="b-x" class="btn">On the X</button>
+      </div>
+      <div id="marks" class="marks" hidden>
+        <span>Mark this spot as</span>
+        <button class="tchip" data-m="Water">Water</button><button class="tchip" data-m="Exit">Exit</button><button class="tchip" data-m="Shelter">Shelter</button><button class="tchip" data-m="Crash site">Crash site</button><button class="tchip" data-m="">Cancel</button>
+      </div>
+      <div id="targets" class="chips"></div>
+      <div class="foot"><span id="stats" class="sp"></span><button id="b-trials" class="btn">Loops</button><button id="b-end" class="btn">End</button></div>
+    </div>
+  </section>
+
+  <section id="sheet" class="sheet-full" hidden>
+    <div class="wrap">
+      <header class="top"><span class="brand"><i></i>LOOPS</span><button id="sheet-close" class="btn" style="min-height:40px">Close</button></header>
+      <div id="trials-sheet"></div>
+      <div class="pair"><button id="t-copy" class="btn">Copy as a table</button><button id="t-clear" class="btn ghost">Clear</button></div>
+      <p id="t-msg" class="hint"></p>
+      <p class="sec">PINS</p>
+      <p id="pins-line" class="hint"></p>
+      <button id="pins-clear" class="btn ghost">Clear pins</button>
+    </div>
+  </section>
+</div>
+<script src="/pace.js"></script>
+<script src="/walk/walk_core.js"></script>
+<script>
+'use strict';
+const W = window.RidgelineWalk, PC = window.RidgelinePace || null;
+const $ = id => document.getElementById(id);
+const now = () => performance.now() / 1000;
+const D2R = Math.PI / 180;
+const fmtM = m => !Number.isFinite(m) ? 'n/a' : m < 10 ? m.toFixed(1) + ' m' : m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(2) + ' km';
+const fmtR = r => '±' + (r < 10 ? r.toFixed(2) : r.toFixed(1)) + ' m';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// colours come from the CSS tokens only. WebGL and the 2D maps read them here
+const COL = {};
+let FONT = 'sans-serif', MONO = 'monospace';
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['action', 'cyan', 'green', 'amber', 'red', 'text', 'muted', 'faint', 'line', 'line2', 'bg', 'panel']) COL[k] = cs.getPropertyValue('--' + k).trim() || '#ffffff';
+  FONT = cs.getPropertyValue('--font').trim() || FONT;
+  MONO = cs.getPropertyValue('--mono').trim() || MONO;
+}
+function rgb(hex, a) {
+  let h = String(hex || '#ffffff').replace('#', '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  return [parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255, a == null ? 1 : a];
+}
+function rgba(hex, a) { const c = rgb(hex, a); return `rgba(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)},${c[3]})`; }
+readColors();
+
+// ---------- state ----------
+const START = Object.freeze({ key: 'start', label: 'Start', e: 0, n: 0, kind: 'start' });
+let st = null, run = null, ending = false;   // run: camera, camera-off (the session ended, steps carry on), steps, sim
+let pins = [], pinSeq = 0, target = START, chipsDirty = true;
+let floorY = null, arrowAng = null, hudAt = 0, mapAt = 0, wake = null, evT = null, noteTimer = 0;
+const xr = { session: null, space: null, hit: null, gl: null, R: null, reticle: null, view: null, cam: null, headY: 1.4, floor: false, supported: null };
+const sim = { x: 0, z: 0, h: 0, p: -32, eye: 1.45, pocket: false, u: 0, keys: new Set(), hold: {}, acc: 0, next: 0.74, t: 0, t0: 0, bias: 0.05, oriFrame: 211,
+  off: { x: 0, z: 0 }, restart: false, loss: null, gl: null, R: null, reticle: null, view: null };
+
+const TKEY = 'ridgeline-walk-trials-v1';
+function loadTrials() {
+  try { const v = JSON.parse(localStorage.getItem(TKEY) || '[]'); return Array.isArray(v) ? v.filter(r => r && Number.isFinite(r.err_m) && Number.isFinite(r.walked_m)) : []; } catch (e) { return []; }
+}
+function saveTrials() { try { localStorage.setItem(TKEY, JSON.stringify(trials)); } catch (e) { /* private window, the table lives for this visit */ } }
+let trials = loadTrials();
+
+// ---------- sensors ----------
+// steps from the accelerometer (pace.js), the phone's facing from the orientation sensor. One orientation stream at a
+// time, relative (gyro) first, because the walk learns its offset to the map and a switch would break it
+const motion = { det: null, last: 0, seen: false };
+window.addEventListener('devicemotion', e => {
+  const a = e.accelerationIncludingGravity;
+  if (!a || a.x == null || a.y == null || a.z == null) return;
+  const t = now();
+  motion.last = t;
+  if (!motion.seen) { motion.seen = true; renderCaps(); }
+  if (!st || run === 'sim' || !PC) return;
+  if (!motion.det) motion.det = PC.stepDetector();
+  const n = motion.det.push(t, a.x, a.y, a.z);
+  if (n > 0) W.step(st, n, t);
+});
+const ori = { mode: null, rel: 0, abs: 0, f: null, t: 0 };
+function onOri(e, kind) {
+  if (e.alpha == null || e.beta == null || e.gamma == null) return;
+  const t = now();
+  if (kind === 'relative') ori.rel = t; else ori.abs = t;
+  const want = t - ori.rel < 2 ? 'relative' : 'absolute';
+  if (kind !== want) return;
+  const f = W.yawFromEuler(e.alpha, e.beta, e.gamma);
+  if (ori.mode !== want) {
+    const was = ori.mode;
+    ori.mode = want;
+    if (was && st) W.reorient(st, f);
+    renderCaps();
+  }
+  ori.f = f; ori.t = t;
+  if (st && run !== 'sim') W.orient(st, f, t, W.upFromEuler(e.beta, e.gamma));
+}
+window.addEventListener('deviceorientation', e => onOri(e, 'relative'));
+window.addEventListener('deviceorientationabsolute', e => onOri(e, 'absolute'));
+// STEPS with the motion sensor silent: the walk may still be going on, so the circle grows (pace.js idle)
+setInterval(() => {
+  if (!st || run === 'sim' || st.mode !== 'steps') return;
+  if (!motion.seen || now() - motion.last > 3) W.idle(st, 0.5);
+}, 500);
+function askSensors() {
+  try { if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') DeviceMotionEvent.requestPermission().catch(() => {}); } catch (e) { /* iOS only */ }
+  try { if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') DeviceOrientationEvent.requestPermission().catch(() => {}); } catch (e) { /* iOS only */ }
+}
+async function keepAwake() { try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (e) { wake = null; } }
+function releaseWake() { try { if (wake) wake.release(); } catch (e) { /* gone already */ } wake = null; }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && run) keepAwake(); });
+function buzz(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) { /* no vibration */ } }
+
+// ---------- 3D, one flat colour shader for everything ----------
+const mat = {
+  // translate x rotate about y (a radians) x scale, column-major
+  trs(x, y, z, a, sx, sy, sz) {
+    const c = Math.cos(a), s = Math.sin(a);
+    return new Float32Array([c * sx, 0, -s * sx, 0, 0, sy, 0, 0, s * sz, 0, c * sz, 0, x, y, z, 1]);
+  },
+  persp(fovy, aspect, near, far) {
+    const f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+    return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0]);
+  },
+  // the view of an eye at (x, y, z) facing h radians clockwise from -z, pitched p radians (up positive)
+  view(x, y, z, h, p) {
+    const ch = Math.cos(h), sh = Math.sin(h), cp = Math.cos(p), sp = Math.sin(p);
+    const r0 = [ch, 0, sh], r1 = [-sp * sh, cp, sp * ch], r2 = [-cp * sh, -sp, cp * ch];
+    const t = r => -(r[0] * x + r[1] * y + r[2] * z);
+    return new Float32Array([r0[0], r1[0], r2[0], 0, r0[1], r1[1], r2[1], 0, r0[2], r1[2], r2[2], 0, t(r0), t(r1), t(r2), 1]);
+  },
+};
+function makeRenderer(gl) {
+  const vs = 'attribute vec3 p;uniform mat4 P,V,M;void main(){gl_Position=P*V*M*vec4(p,1.0);}';
+  const fs = 'precision mediump float;uniform vec4 c;void main(){gl_FragColor=c;}';
+  const sh = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'shader');
+    return s;
+  };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) || 'link');
+  const loc = { p: gl.getAttribLocation(prog, 'p'), P: gl.getUniformLocation(prog, 'P'), V: gl.getUniformLocation(prog, 'V'), M: gl.getUniformLocation(prog, 'M'), c: gl.getUniformLocation(prog, 'c') };
+  const mesh = (arr, mode) => {
+    const b = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr), gl.STATIC_DRAW);
+    return { b, n: arr.length / 3, mode: mode == null ? gl.TRIANGLES : mode };
+  };
+  const disk = [], ring = [];
+  for (let k = 0; k < 36; k++) {
+    const a0 = k / 36 * 2 * Math.PI, a1 = (k + 1) / 36 * 2 * Math.PI, c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1), r = 0.7;
+    disk.push(0, 0, 0, c0, 0, s0, c1, 0, s1);
+    ring.push(r * c0, 0, r * s0, c0, 0, s0, c1, 0, s1, r * c0, 0, r * s0, c1, 0, s1, r * c1, 0, r * s1);
+  }
+  const B = [[-.5, 0, -.5], [.5, 0, -.5], [.5, 1, -.5], [-.5, 1, -.5], [-.5, 0, .5], [.5, 0, .5], [.5, 1, .5], [-.5, 1, .5]], box = [];
+  for (const f of [[0, 1, 2, 3], [5, 4, 7, 6], [4, 0, 3, 7], [1, 5, 6, 2], [3, 2, 6, 7], [4, 5, 1, 0]]) for (const i of [f[0], f[1], f[2], f[0], f[2], f[3]]) box.push(...B[i]);
+  const O = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]], oct = [];
+  for (const [a, b, c] of [[0, 2, 4], [4, 2, 1], [1, 2, 5], [5, 2, 0], [4, 3, 0], [1, 3, 4], [5, 3, 1], [0, 3, 5]]) oct.push(...O[a], ...O[b], ...O[c]);
+  const grid = [];
+  for (let k = -20; k <= 20; k++) grid.push(k, 0, -20, k, 0, 20, -20, 0, k, 20, 0, k);
+  const M = {
+    quad: mesh([-.5, 0, 0, .5, 0, 0, .5, 0, -1, -.5, 0, 0, .5, 0, -1, -.5, 0, -1]),   // from its origin along -z
+    bar: mesh([-.5, 0, .5, .5, 0, .5, .5, 0, -.5, -.5, 0, .5, .5, 0, -.5, -.5, 0, -.5]),   // centred
+    disk: mesh(disk), ring: mesh(ring), box: mesh(box), oct: mesh(oct), grid: mesh(grid, gl.LINES),
+  };
+  return {
+    M,
+    begin(P, V) {
+      gl.useProgram(prog);
+      gl.uniformMatrix4fv(loc.P, false, P); gl.uniformMatrix4fv(loc.V, false, V);
+      gl.enable(gl.DEPTH_TEST); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.disable(gl.CULL_FACE);
+    },
+    draw(m, model, color) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, m.b);
+      gl.enableVertexAttribArray(loc.p); gl.vertexAttribPointer(loc.p, 3, gl.FLOAT, false, 0, 0);
+      gl.uniformMatrix4fv(loc.M, false, model); gl.uniform4fv(loc.c, color);
+      gl.drawArrays(m.mode, 0, m.n);
+    },
+  };
+}
+function xMark(R, x, y, z, col, len, w) {
+  R.draw(R.M.bar, mat.trs(x, y, z, Math.PI / 4, w, 1, len), col);
+  R.draw(R.M.bar, mat.trs(x, y, z, -Math.PI / 4, w, 1, len), col);
+}
+// everything in the camera frame. eye {x, z} is the phone above the floor, reticle where a pin would land,
+// env the simulated room (its 1 m grid and the real tape X), t seconds for the spin of the pin heads
+function drawScene(R, eye, reticle, env, t) {
+  const M = R.M, fy = floorY == null ? 0 : floorY;
+  if (env) {
+    R.draw(M.grid, mat.trs(env.ox, 0, env.oz, 0, 1, 1, 1), rgb(COL.line2, 0.55));
+    xMark(R, env.ox, 0.002, env.oz, rgb(COL.text, 0.9), 0.7, 0.07);
+  }
+  if (!st) return;
+  const s0 = W.toCam(st.link, 0, 0);   // the start, where the phone believes it is
+  xMark(R, s0.x, fy + 0.005, s0.z, rgb(COL.action, 0.95), 0.55, 0.05);
+  let last = null, n = 0;
+  for (let k = st.trail.length - 1; k >= 0 && n < 160; k--) {
+    const p = st.trail[k];
+    if (p.m === 'x' || p.m === 'start' || p.m === 'jump') continue;
+    if (last && Math.hypot(p.e - last.e, p.n - last.n) < 0.5) continue;
+    last = p; n += 1;
+    const c = W.toCam(st.link, p.e, p.n);
+    R.draw(M.disk, mat.trs(c.x, fy + 0.003, c.z, 0, 0.045, 1, 0.045), p.m === 'steps' ? rgb(COL.amber, 0.75) : rgb(COL.cyan, 0.5));
+  }
+  const tg = target || START;
+  if (eye) {
+    const b = W.toCam(st.link, tg.e, tg.n), dx = b.x - eye.x, dz = b.z - eye.z, L = Math.hypot(dx, dz);
+    if (L > 0.9) {
+      const ang = Math.atan2(-dx, -dz), ux = dx / L, uz = dz / L;
+      for (let s = 0.6, k = 0; s < L - 0.35 && k < 120; s += 0.45, k += 1) {
+        const len = Math.min(0.25, L - 0.35 - s);
+        R.draw(M.quad, mat.trs(eye.x + ux * s, fy + 0.007, eye.z + uz * s, ang, 0.07, 1, len), rgb(COL.action, 0.8));
+      }
+    }
+  }
+  for (const p of pins) {
+    const c = W.toCam(st.link, p.e, p.n), y = Number.isFinite(p.y) ? p.y : fy, on = tg.key === p.key;
+    const col = on ? COL.action : p.kind === 'mark' ? COL.green : COL.cyan, r = on ? 0.3 : 0.22;
+    R.draw(M.disk, mat.trs(c.x, y + 0.004, c.z, 0, r, 1, r), rgb(col, 0.3));
+    R.draw(M.box, mat.trs(c.x, y, c.z, 0, 0.035, 1.05, 0.035), rgb(col, 0.95));
+    R.draw(M.oct, mat.trs(c.x, y + 1.17, c.z, t * 1.3, 0.1, 0.14, 0.1), rgb(col, 1));
+  }
+  if (reticle) R.draw(M.ring, mat.trs(reticle.x, reticle.y + 0.003, reticle.z, 0, 0.16, 1, 0.16), rgb(COL.action, 0.95));
+}
+function project(P, V, x, y, z, w, h) {
+  const vx = V[0] * x + V[4] * y + V[8] * z + V[12], vy = V[1] * x + V[5] * y + V[9] * z + V[13];
+  const vz = V[2] * x + V[6] * y + V[10] * z + V[14], vw = V[3] * x + V[7] * y + V[11] * z + V[15];
+  const cx = P[0] * vx + P[4] * vy + P[8] * vz + P[12] * vw, cy = P[1] * vx + P[5] * vy + P[9] * vz + P[13] * vw;
+  const cw = P[3] * vx + P[7] * vy + P[11] * vz + P[15] * vw;
+  if (cw < 0.1) return null;
+  return { x: (cx / cw * 0.5 + 0.5) * w, y: (0.5 - cy / cw * 0.5) * h };
+}
+
+// ---------- a walk ----------
+function newWalk(kind) {
+  st = W.create();
+  pins = []; pinSeq = 0; target = START; chipsDirty = true;
+  floorY = null; arrowAng = null; evT = null;
+  run = kind; ending = false;
+  motion.det = null;
+  if (kind === 'steps') {
+    W.beginSteps(st, now());
+    if (ori.f != null && now() - ori.t < 1.5) W.orient(st, ori.f, now());
+  }
+  keepAwake();
+}
+function setTarget(p) { target = p || START; chipsDirty = true; hudAt = 0; }
+function addPin(e, n, y, kind, label) {
+  if (!st) return null;
+  pinSeq += 1;
+  const p = { key: 'p' + pinSeq, label: label || `Pin ${pinSeq}`, e, n, y: Number.isFinite(y) ? y : null, kind };
+  pins.push(p);
+  if (kind === 'pin') target = p;
+  chipsDirty = true; hudAt = 0;
+  buzz(30);
+  flash(kind === 'pin' ? `${p.label} dropped ${fmtM(W.dist(st.pos, p))} away` : `${p.label} marked where you stand`);
+  return p;
+}
+function dropAt(ret) {   // ret {x, y, z} in the camera frame
+  const m = W.toMap(st.link, ret.x, ret.z);
+  return addPin(m.e, m.n, ret.y, 'pin');
+}
+function dropPin() {
+  if (!st) return;
+  if (run === 'camera') { if (xr.reticle) dropAt(xr.reticle); return; }
+  if (run === 'sim') { if (sim.reticle) dropAt(sim.reticle); return; }
+  if (st.facing == null) { flash('Facing unknown. Tap the map to drop a pin'); return; }
+  const a = st.facing * D2R;
+  addPin(st.pos.e + 5 * Math.sin(a), st.pos.n + 5 * Math.cos(a), null, 'pin');
+}
+function markHere(label) {
+  $('marks').hidden = true;
+  if (!label || !st) return;
+  const same = pins.filter(p => p.label === label || p.label.startsWith(label + ' ')).length;
+  addPin(st.pos.e, st.pos.n, null, 'mark', same ? `${label} ${same + 1}` : label);
+}
+function onX() {
+  if (!st) return;
+  const walked = st.walked_m - st.trial.walked0;
+  if (walked < 1) { W.onTheX(st, now()); flash('Back at the start. Walk out and back first, then tap On the X on the tape'); setTarget(START); return; }
+  const rec = W.onTheX(st, now(), { sim: run === 'sim', at: new Date().toISOString(), run });
+  trials.push(rec); saveTrials(); renderTrials();
+  setTarget(START);
+  buzz([60, 60, 200]);
+  const pct = rec.walked_m > 0 ? `, ${(100 * rec.err_m / rec.walked_m).toFixed(1)}% of the walk` : '';
+  flash(`Loop ${trials.length}. ${rec.err_m.toFixed(2)} m off after ${fmtM(rec.walked_m)}${pct}. The next loop starts here`);
+}
+function flash(msg) {
+  const el = $('note');
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => { el.hidden = true; }, 5000);
+}
+function homeError(msg) { const el = $('home-err'); el.textContent = msg; el.hidden = !msg; }
+
+// ---------- the camera (WebXR, ARCore underneath) ----------
+async function startCamera(again) {
+  askSensors();
+  if (!navigator.xr) { const m = 'This browser has no camera tracking (WebXR). Use Steps only'; if (again) flash(m); else homeError(m); return; }
+  let session;
+  try {
+    session = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['local', 'dom-overlay'], optionalFeatures: ['hit-test', 'local-floor'], domOverlay: { root: $('ui') },
+    });
+  } catch (e) {
+    const m = `Camera tracking did not start (${e && (e.message || e.name) || 'refused'}). Use Steps only, or try again`;
+    if (again) flash(m); else homeError(m);
+    return;
+  }
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl', { xrCompatible: true, alpha: true, antialias: true });
+    if (!gl) throw new Error('no WebGL');
+    if (gl.makeXRCompatible) await gl.makeXRCompatible();
+    session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl, { alpha: true, antialias: true }) });
+    xr.gl = gl; xr.R = makeRenderer(gl);
+    try { xr.space = await session.requestReferenceSpace('local-floor'); xr.floor = true; } catch (e) { xr.space = await session.requestReferenceSpace('local'); xr.floor = false; }
+    if (xr.space.addEventListener) xr.space.addEventListener('reset', () => { if (st) W.lose(st, now(), 'reset'); });
+    xr.hit = null;
+    try { const viewer = await session.requestReferenceSpace('viewer'); xr.hit = await session.requestHitTestSource({ space: viewer }); } catch (e) { xr.hit = null; }
+  } catch (e) {
+    try { await session.end(); } catch (e2) { /* over */ }
+    const m = `Camera tracking failed to set up (${e.message || e}). Use Steps only`;
+    if (again) flash(m); else homeError(m);
+    return;
+  }
+  xr.session = session; xr.reticle = null; xr.view = null; xr.cam = null;
+  session.addEventListener('end', onXrEnd);
+  session.addEventListener('select', () => { if (run === 'camera' && xr.reticle) dropAt(xr.reticle); });
+  if (!again || !st) newWalk('camera'); else run = 'camera';
+  homeError('');
+  showHud();
+  if (!xr.hit) flash('No floor finder on this phone. Use Mark here or tap the map to drop pins');
+  session.requestAnimationFrame(xrFrame);
+}
+function xrFrame(time, frame) {
+  const s = frame.session;
+  if (s !== xr.session) return;
+  s.requestAnimationFrame(xrFrame);
+  const t = now(), vp = frame.getViewerPose(xr.space);
+  if (vp && !vp.emulatedPosition) {
+    const p = vp.transform.position, q = vp.transform.orientation;
+    if (floorY == null) floorY = xr.floor ? 0 : p.y - 1.35;
+    xr.headY = p.y;
+    W.camera(st, { x: p.x, z: p.z, yaw: W.yawFromQuat(q.x, q.y, q.z, q.w) }, t);
+    xr.cam = { x: p.x, z: p.z };
+  } else W.camera(st, null, t);
+  xr.reticle = null;
+  if (xr.hit && vp && !vp.emulatedPosition) {
+    for (const h of frame.getHitTestResults(xr.hit)) {
+      const hp = h.getPose(xr.space);
+      if (!hp) continue;
+      const o = hp.transform.orientation, up = 1 - 2 * (o.x * o.x + o.z * o.z);
+      if (up < 0.85) continue;   // a wall or a slope, not somewhere to stand
+      const P = hp.transform.position;
+      xr.reticle = { x: P.x, y: P.y, z: P.z };
+      if (P.y < xr.headY - 0.7) floorY = floorY == null ? P.y : floorY + 0.1 * (P.y - floorY);
+      break;
+    }
+  }
+  const gl = xr.gl, layer = s.renderState.baseLayer;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  xr.view = null;
+  if (vp) for (const view of vp.views) {
+    const v = layer.getViewport(view);
+    gl.viewport(v.x, v.y, v.width, v.height);
+    xr.R.begin(view.projectionMatrix, view.transform.inverse.matrix);
+    drawScene(xr.R, vp.emulatedPosition ? null : xr.cam, xr.reticle, null, t);
+    if (!vp.emulatedPosition) xr.view = { P: view.projectionMatrix, V: view.transform.inverse.matrix };
+  }
+  hudTick(t);
+}
+function onXrEnd() {
+  xr.session = null; xr.hit = null; xr.view = null; xr.reticle = null;
+  if (ending || !st || run !== 'camera') return;
+  // ended on its own (the back gesture, another app): the walk carries on with steps until the camera is back
+  W.lose(st, now(), 'reset');
+  run = 'camera-off';
+  showHud();
+  flash('The camera session ended. Counting steps. Tap Camera again to bring it back');
+}
+
+// ---------- the simulation (a laptop, or a fallback) ----------
+function startSim() {
+  newWalk('sim');
+  Object.assign(sim, { x: 0, z: 0, h: 0, pocket: false, u: 0, acc: 0, next: 0.74, off: { x: 0, z: 0 }, restart: false, loss: null, t: now(), t0: now(), reticle: null, view: null });
+  sim.keys.clear(); sim.hold = {};
+  floorY = 0;
+  const cv = $('gl');
+  cv.hidden = false;
+  if (!sim.gl) {
+    sim.gl = cv.getContext('webgl', { antialias: true, alpha: false });
+    if (!sim.gl) { run = null; cv.hidden = true; homeError('This screen has no WebGL, so it cannot simulate'); return; }
+    sim.R = makeRenderer(sim.gl);
+  }
+  homeError('');
+  showHud();
+  setSimButtons();
+}
+// the sensors of a real phone report 60 times a second, so a slow frame is cut into steps of 40 ms at most
+function simStep(t) {
+  const span = Math.min(1, Math.max(0, t - sim.t)), n = Math.max(1, Math.ceil(span / 0.04));
+  for (let i = 1; i <= n; i++) simAdvance(sim.t + span * i / n, span / n);
+  sim.t = t;
+  simDraw(t);
+}
+function simAdvance(t, dt) {
+  const k = sim.keys, h = sim.hold;
+  const turn = (k.has('arrowright') || k.has('d') || h.right ? 1 : 0) - (k.has('arrowleft') || k.has('a') || h.left ? 1 : 0);
+  const fwd = (k.has('arrowup') || k.has('w') || h.fwd ? 1 : 0) - (k.has('arrowdown') || k.has('s') || h.back ? 1 : 0);
+  sim.h = W.wrap360(sim.h + turn * 75 * dt);
+  const sp = 1.3 * dt * fwd, hr = sim.h * D2R;
+  sim.x += Math.sin(hr) * sp;
+  sim.z -= Math.cos(hr) * sp;
+  if (sp !== 0) {
+    // a true stride of 0.74 m, give or take 5% a step
+    sim.acc += Math.abs(sp);
+    while (sim.acc >= sim.next) { sim.acc -= sim.next; sim.next = 0.74 * (0.95 + 0.1 * Math.random()); W.step(st, 1, t); }
+  }
+  // going into the pocket takes half a second: the phone turns 180 deg and ends upside down, camera out
+  sim.u += Math.sign((sim.pocket ? 1 : 0) - sim.u) * Math.min(Math.abs((sim.pocket ? 1 : 0) - sim.u), 2 * dt);
+  const u = sim.u, uy = 0.8 - 1.8 * u, uz = 0.6 * (1 - u), um = Math.hypot(uy, uz) || 1;
+  // the gyro, in its own frame and drifting 0.05 deg a second
+  W.orient(st, W.wrap360(sim.h + 180 * u + sim.oriFrame + sim.bias * (t - sim.t0)), t, [0, uy / um, uz / um]);
+  if (sim.pocket || u > 0.05) W.camera(st, null, t);
+  else W.camera(st, { x: sim.x + sim.off.x, z: sim.z + sim.off.z, yaw: sim.h }, t);
+}
+function simDraw(t) {
+  const gl = sim.gl, cv = $('gl');
+  const dpr = Math.min(2, devicePixelRatio || 1), w = Math.max(1, Math.round(cv.clientWidth * dpr)), h = Math.max(1, Math.round(cv.clientHeight * dpr));
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, w, h);
+  const bg = rgb(COL.bg);
+  gl.clearColor(bg[0], bg[1], bg[2], 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  const cx = sim.x + sim.off.x, cz = sim.z + sim.off.z, hr = sim.h * D2R, pr = sim.p * D2R;
+  const P = mat.persp(64 * D2R, w / h, 0.05, 80), V = mat.view(cx, sim.eye, cz, hr, pr);
+  sim.R.begin(P, V);
+  sim.view = { P, V };
+  const d = sim.eye / Math.tan(-pr);
+  sim.reticle = sim.pocket ? null : { x: cx + Math.sin(hr) * d, y: 0, z: cz - Math.cos(hr) * d };
+  drawScene(sim.R, { x: cx, z: cz }, sim.reticle, { ox: sim.off.x, oz: sim.off.z }, t);
+}
+function simPocket() {
+  if (run !== 'sim') return;
+  sim.pocket = !sim.pocket;
+  if (sim.pocket) sim.loss = { x: sim.x, z: sim.z, off: { x: sim.off.x, z: sim.off.z } };
+  else if (sim.restart && sim.loss) {
+    // the camera starts over believing it is where it got lost, so the steps must carry the walk
+    sim.off = { x: sim.loss.x + sim.loss.off.x - sim.x, z: sim.loss.z + sim.loss.off.z - sim.z };
+    sim.restart = false;
+  }
+  setSimButtons();
+}
+function setSimButtons() {
+  $('sim-pocket').classList.toggle('on', sim.pocket);
+  $('sim-restart').classList.toggle('on', sim.restart);
+}
+addEventListener('keydown', e => {
+  if (run !== 'sim' || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'].includes(k)) { sim.keys.add(k); e.preventDefault(); }
+  else if (k === 'p' && !e.repeat) simPocket();
+  else if (k === 'r' && !e.repeat) { sim.restart = !sim.restart; setSimButtons(); }
+  else if ((k === ' ' || k === 'enter') && !e.repeat && (e.target === document.body || e.target === $('ui'))) { e.preventDefault(); dropPin(); }
+  else if (k === 'b' && !e.repeat) setTarget(START);
+});
+addEventListener('keyup', e => sim.keys.delete(e.key.toLowerCase()));
+addEventListener('blur', () => { sim.keys.clear(); sim.hold = {}; });
+for (const b of document.querySelectorAll('#simpad [data-k]')) {
+  const k = b.dataset.k, off = () => { sim.hold[k] = false; };
+  b.addEventListener('pointerdown', e => { e.preventDefault(); sim.hold[k] = true; try { b.setPointerCapture(e.pointerId); } catch (e2) { /* fine */ } });
+  b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('lostpointercapture', off);
+}
+$('sim-pocket').addEventListener('click', simPocket);
+$('sim-restart').addEventListener('click', () => { sim.restart = !sim.restart; setSimButtons(); });
+
+// one loop for everything that is not the camera, with a timer behind it for a page whose animation frames stop
+let loopT = 0;
+function tick() {
+  const t = now();
+  loopT = t;
+  if (run === 'sim') simStep(t);
+  if (run && run !== 'camera') hudTick(t);
+}
+(function loop() { requestAnimationFrame(loop); tick(); })();
+setInterval(() => { if (run && run !== 'camera' && now() - loopT > 0.1) tick(); }, 50);
+
+// ---------- the HUD ----------
+function showHud() {
+  $('home').hidden = true; $('sheet').hidden = true; $('hud').hidden = false;
+  const nocam = run === 'steps' || run === 'camera-off';
+  $('hud').classList.toggle('nocam', nocam);
+  $('bigmap').hidden = !nocam;
+  $('aim').hidden = nocam; $('aim-hint').hidden = nocam;
+  $('again').hidden = run !== 'camera-off';
+  $('simpad').hidden = run !== 'sim'; $('simkeys').hidden = run !== 'sim'; $('c-sim').hidden = run !== 'sim';
+  $('gl').hidden = run !== 'sim';
+  $('marks').hidden = true;
+  hudAt = 0; mapAt = 0; chipsDirty = true;
+}
+function showHome() {
+  run = null;
+  $('hud').hidden = true; $('sheet').hidden = true; $('gl').hidden = true; $('home').hidden = false;
+  for (const el of labelEls.values()) el.remove();
+  labelEls.clear();
+  renderTrials(); renderCaps();
+}
+async function endWalk() {
+  ending = true;
+  if (xr.session) { try { await xr.session.end(); } catch (e) { /* over already */ } }
+  sim.keys.clear(); sim.hold = {};
+  releaseWake();
+  showHome();
+  ending = false;
+}
+const labelEls = new Map();
+function placeLabels() {
+  const view = run === 'camera' ? xr.view : run === 'sim' ? sim.view : null, seen = new Set();
+  if (view && st) {
+    const fy = floorY == null ? 0 : floorY, w = innerWidth, h = innerHeight, tg = target || START;
+    for (const p of [START, ...pins]) {
+      const c = W.toCam(st.link, p.e, p.n), y = p.kind === 'start' ? fy + 0.3 : (Number.isFinite(p.y) ? p.y : fy) + 1.4;
+      const s = project(view.P, view.V, c.x, y, c.z, w, h);
+      if (!s || s.x < -60 || s.x > w + 60 || s.y < -30 || s.y > h + 30) continue;
+      let el = labelEls.get(p.key);
+      if (!el) { el = document.createElement('div'); $('labels').appendChild(el); labelEls.set(p.key, el); }
+      const txt = `${p.label} ${fmtM(W.dist(st.pos, p))}`, cls = 'lbl' + (tg.key === p.key ? ' t' : p.kind === 'start' ? ' s' : '');
+      if (el.textContent !== txt) el.textContent = txt;
+      if (el.className !== cls) el.className = cls;
+      el.style.transform = `translate(${s.x.toFixed(0)}px,${s.y.toFixed(0)}px) translate(-50%,-100%)`;
+      seen.add(p.key);
+    }
+  }
+  for (const [k, el] of labelEls) if (!seen.has(k)) { el.remove(); labelEls.delete(k); }
+}
+function renderChips() {
+  chipsDirty = false;
+  const tg = target || START, list = [START, ...pins];
+  $('targets').innerHTML = list.map(p => `<button class="tchip${tg.key === p.key ? ' on' : ''}${p.kind === 'mark' ? ' mark' : ''}" data-key="${p.key}">${esc(p.label)}</button>`).join('');
+}
+$('targets').addEventListener('click', e => {
+  const b = e.target.closest('[data-key]');
+  if (!b) return;
+  setTarget(b.dataset.key === 'start' ? START : pins.find(p => p.key === b.dataset.key));
+});
+function hudTick(t) {
+  if (!st) return;
+  const tg = target || START, g = W.guide(st, tg, tg.key);
+  const fresh = tg.key === 'start' && st.walked_m - st.trial.walked0 < 1;   // still on the X, nowhere to go yet
+  if (g.buzz && !fresh) buzz(tg.key === 'start' ? [300, 120, 300, 120, 300] : [300, 120, 300]);
+  const want = g.turn_deg == null ? g.bearing_deg : g.turn_deg;
+  arrowAng = arrowAng == null ? want : arrowAng + W.wrap180(want - arrowAng) * 0.25;
+  $('arrow-g').setAttribute('transform', `rotate(${arrowAng.toFixed(1)} 50 50)`);
+  placeLabels();
+  if (t - hudAt < 0.12) return;
+  hudAt = t;
+  const nocam = run === 'steps' || run === 'camera-off', mode = st.mode;
+  const mc = $('c-mode');
+  mc.textContent = mode === 'camera' ? 'CAMERA' : mode === 'steps' ? (run === 'steps' ? 'STEPS ONLY' : 'STEPS') : 'WAITING';
+  mc.className = 'chip ' + (mode === 'camera' ? 'cam' : mode === 'steps' ? 'steps' : 'none');
+  $('c-r95').textContent = fmtR(st.r95);
+  $('guide').classList.toggle('done', g.arrived && !fresh);
+  $('arrow').style.display = g.arrived || fresh ? 'none' : '';
+  $('check').style.display = g.arrived && !fresh ? '' : 'none';
+  $('g-dist').textContent = fresh ? 'On the X' : g.arrived ? 'Here' : fmtM(g.dist_m);
+  $('g-say').textContent = fresh ? (run === 'camera' || run === 'sim' ? 'Aim at the floor, drop a pin' : 'Tap the map to drop a pin')
+    : g.arrived ? (tg.key === 'start' ? 'Arrived at the start' : `Arrived, within ${g.thr_m} m`) : g.say;
+  $('g-to').textContent = fresh ? 'THEN FOLLOW THE ARROW' : 'TO ' + (tg.key === 'start' ? 'THE START' : tg.label.toUpperCase());
+  let sub = '';
+  if (mode === 'idle') sub = run === 'sim' ? '' : 'Move the phone slowly, the camera is finding the room';
+  else if (mode === 'steps' && run !== 'steps') sub = `Camera lost. Steps at ${st.stride.m.toFixed(2)} m${st.stride.learnt ? ', measured by the camera' : ''}. The circle grows until it is back`;
+  else if (g.arrived && tg.key === 'start') sub = 'On the tape? Tap On the X twice';
+  if (mode === 'steps' && !motion.seen && run !== 'sim') sub = 'No step sensor on this device, so the circle grows with time';
+  $('g-sub').textContent = sub; $('g-sub').hidden = !sub;
+  const camLike = run === 'camera' || run === 'sim', ret = run === 'camera' ? xr.reticle : run === 'sim' ? sim.reticle : null;
+  const pb = $('b-pin');
+  if (camLike) { pb.disabled = !ret; pb.textContent = ret ? 'Drop pin' : 'Find the floor'; }
+  else { pb.disabled = st.facing == null; pb.textContent = 'Pin 5 m ahead'; }
+  $('aim-hint').textContent = !camLike ? '' : ret ? 'Tap the screen or Drop pin' : run === 'camera' && !xr.hit ? 'No floor finder, use Mark here or the map' : 'Point at the floor and move the phone slowly';
+  const cover = $('cover');
+  const covered = (run === 'sim' && sim.pocket) || (run === 'camera' && mode === 'steps');
+  cover.hidden = !covered;
+  if (covered) cover.textContent = run === 'sim' ? 'In the pocket. The camera sees nothing, so the phone counts steps. P takes it out' : 'Camera lost. Counting steps. Take the phone out and point it at the room';
+  $('stats').textContent = `${fmtM(st.walked_m)} walked · ${st.steps} steps · stride ${st.stride.m.toFixed(2)} m ${st.stride.learnt ? 'measured' : 'assumed'}`;
+  const ev = st.events[st.events.length - 1];
+  if (ev && ev.t !== evT) { evT = ev.t; if (st.events.length > 1 || ev.text !== 'Camera tracking') flash(ev.text); }
+  if (chipsDirty) renderChips();
+  if (t - mapAt > 0.2) { mapAt = t; drawMap(nocam ? $('bigmap') : $('map'), nocam); }
+}
+
+// the 2D map, ahead at the start is up
+const mapXf = new WeakMap();
+function drawMap(cv, big) {
+  if (!st || !cv) return;
+  const dpr = Math.min(2, devicePixelRatio || 1), w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  const W2 = Math.round(w * dpr), H2 = Math.round(h * dpr);
+  if (cv.width !== W2 || cv.height !== H2) { cv.width = W2; cv.height = H2; }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = COL.bg; ctx.fillRect(0, 0, w, h);
+  const tg = target || START, pos = st.pos;
+  let e0 = Math.min(pos.e, 0, tg.e), e1 = Math.max(pos.e, 0, tg.e), n0 = Math.min(pos.n, 0, tg.n), n1 = Math.max(pos.n, 0, tg.n);
+  for (const p of pins) if (W.dist(p, pos) < 40) { e0 = Math.min(e0, p.e); e1 = Math.max(e1, p.e); n0 = Math.min(n0, p.n); n1 = Math.max(n1, p.n); }
+  const pad = Math.max(1.5, Math.min(st.r95, 30));
+  const halfW = Math.max(4, (e1 - e0) / 2 + pad), halfH = Math.max(4, (n1 - n0) / 2 + pad);
+  const ce = (e0 + e1) / 2, cn = (n0 + n1) / 2, sc = Math.min(w / (2 * halfW), h / (2 * halfH));
+  const X = e => w / 2 + (e - ce) * sc, Y = n => h / 2 - (n - cn) * sc;
+  mapXf.set(cv, { ce, cn, sc, w, h });
+  const span = Math.max(w, h) / sc, step = span > 60 ? 10 : span > 18 ? 5 : 1;
+  ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let e = Math.ceil((ce - w / 2 / sc) / step) * step; e <= ce + w / 2 / sc; e += step) { const x = Math.round(X(e)) + 0.5; ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+  for (let n = Math.ceil((cn - h / 2 / sc) / step) * step; n <= cn + h / 2 / sc; n += step) { const y = Math.round(Y(n)) + 0.5; ctx.moveTo(0, y); ctx.lineTo(w, y); }
+  ctx.stroke();
+  // the walk, camera solid, steps dashed. A jump (On the X, or the camera correcting the steps) is not walked
+  ctx.lineWidth = big ? 3 : 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  let prev = null;
+  for (const p of st.trail) {
+    if (prev && p.m !== 'x' && p.m !== 'start' && p.m !== 'jump') {
+      ctx.strokeStyle = p.m === 'steps' ? COL.amber : rgba(COL.cyan, 0.7);
+      ctx.setLineDash(p.m === 'steps' ? [4, 4] : []);
+      ctx.beginPath(); ctx.moveTo(X(prev.e), Y(prev.n)); ctx.lineTo(X(p.e), Y(p.n)); ctx.stroke();
+    }
+    prev = p;
+  }
+  ctx.setLineDash([]);
+  // the start
+  const sx = X(0), sy = Y(0), k = big ? 8 : 6;
+  ctx.strokeStyle = COL.action; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(sx - k, sy - k); ctx.lineTo(sx + k, sy + k); ctx.moveTo(sx + k, sy - k); ctx.lineTo(sx - k, sy + k); ctx.stroke();
+  const px = X(pos.e), py = Y(pos.n);
+  // the way to the target
+  ctx.strokeStyle = COL.action; ctx.lineWidth = 1.5; ctx.setLineDash([3, 4]);
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(X(tg.e), Y(tg.n)); ctx.stroke(); ctx.setLineDash([]);
+  // pins
+  ctx.font = `600 ${big ? 13 : 10}px ${FONT}`; ctx.textBaseline = 'bottom';
+  for (const p of pins) {
+    const on = tg.key === p.key, x = X(p.e), y = Y(p.n);
+    ctx.fillStyle = on ? COL.action : p.kind === 'mark' ? COL.green : COL.cyan;
+    ctx.beginPath(); ctx.arc(x, y, on ? 6 : 4.5, 0, 2 * Math.PI); ctx.fill();
+    ctx.strokeStyle = COL.bg; ctx.lineWidth = 1.5; ctx.stroke();
+    if (big || on) { ctx.fillStyle = on ? COL.action : COL.text; ctx.fillText(p.label, x + 8, y - 4); }
+  }
+  // the 95% circle, the facing, the position
+  ctx.fillStyle = rgba(COL.action, 0.12); ctx.strokeStyle = rgba(COL.action, 0.65); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(px, py, Math.max(st.r95 * sc, 3), 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+  if (st.facing != null) {
+    const a = st.facing * D2R, L = big ? 36 : 20, s2 = 22 * D2R;
+    ctx.fillStyle = rgba(COL.action, 0.5);
+    ctx.beginPath(); ctx.moveTo(px, py);
+    ctx.lineTo(px + L * Math.sin(a - s2), py - L * Math.cos(a - s2)); ctx.lineTo(px + L * Math.sin(a + s2), py - L * Math.cos(a + s2));
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = COL.text; ctx.strokeStyle = COL.bg; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(px, py, big ? 6 : 4.5, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+  // scale and orientation
+  ctx.fillStyle = COL.muted; ctx.font = `600 ${big ? 12 : 9}px ${MONO}`; ctx.textBaseline = 'alphabetic';
+  ctx.fillRect(6, h - 7, step * sc, 2);
+  ctx.fillText(`${step} m`, 6, h - 11);
+  if (big) ctx.fillText('UP IS AHEAD AT THE START', 8, 18);
+}
+function mapTap(ev) {
+  const cv = ev.currentTarget, xf = mapXf.get(cv);
+  if (!xf || !st) return;
+  const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+  addPin(xf.ce + (x - xf.w / 2) / xf.sc, xf.cn - (y - xf.h / 2) / xf.sc, null, 'pin');
+}
+$('map').addEventListener('click', mapTap);
+$('bigmap').addEventListener('click', mapTap);
+
+// ---------- home and the loop table ----------
+async function renderCaps() {
+  const xe = $('cap-xr');
+  if (xr.supported == null) {
+    xr.supported = false;
+    try { xr.supported = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-ar')); } catch (e) { xr.supported = false; }
+  }
+  xe.textContent = xr.supported ? 'Ready' : !window.isSecureContext ? 'Needs localhost or https' : 'Not in this browser';
+  xe.className = 'v ' + (xr.supported ? 'ok' : 'warn');
+  $('go-cam').disabled = !xr.supported;
+  const me = $('cap-motion');
+  me.textContent = motion.seen ? 'Working' : 'Waiting for a move';
+  me.className = 'v ' + (motion.seen ? 'ok' : '');
+  const oe = $('cap-ori');
+  oe.textContent = ori.mode ? (ori.mode === 'relative' ? 'Gyro' : 'Compass, gyro silent') : 'Waiting';
+  oe.className = 'v ' + (ori.mode === 'relative' ? 'ok' : ori.mode ? 'warn' : '');
+}
+function trialsHtml() {
+  if (!trials.length) return '<p class="hint">No loops yet. Start on the tape X, walk out to a pin and back, then tap On the X standing on the tape</p>';
+  const real = trials.filter(r => !r.sim), use = real.length ? real : trials, s = W.trialStats(use);
+  const rows = trials.map((r, k) => `<tr><td>${k + 1}${r.sim ? '<span class="simtag">SIM</span>' : ''}</td><td>${r.walked_m.toFixed(1)} m</td><td>${r.err_m.toFixed(2)} m</td><td>${r.walked_m > 0 ? (100 * r.err_m / r.walked_m).toFixed(1) + '%' : 'n/a'}</td><td class="src">${esc(W.source(r))}</td></tr>`).join('');
+  const who = real.length ? `${s.n} real loop${s.n > 1 ? 's' : ''}` : `${s.n} simulated loop${s.n > 1 ? 's' : ''}`;
+  return `<table class="tr"><thead><tr><th>#</th><th>WALKED</th><th>OFF AT X</th><th>OF WALK</th><th>SOURCE</th></tr></thead><tbody>${rows}</tbody></table>`
+    + `<p class="sum">Median <b>${s.median_m.toFixed(2)} m</b> off, worst ${s.max_m.toFixed(2)} m, over ${who} and ${s.walked_m.toFixed(0)} m walked${s.median_pct == null ? '' : `, median ${s.median_pct.toFixed(1)}% of the walk`}</p>`;
+}
+function renderTrials() {
+  const h = trialsHtml();
+  $('trials-home').innerHTML = h; $('trials-sheet').innerHTML = h;
+  $('pins-line').textContent = pins.length ? `${pins.length} on this walk, ${pins.map(p => p.label).join(', ')}` : 'None on this walk';
+}
+async function copyTrials() {
+  const real = trials.filter(r => !r.sim), md = W.trialMarkdown(real.length ? real : trials);
+  $('t-msg').textContent = '';
+  try { await navigator.clipboard.writeText(md); $('t-msg').textContent = 'Copied as a Markdown table, ready for the README or a slide'; }
+  catch (e) {
+    let ta = document.querySelector('.copybox');
+    if (!ta) { ta = document.createElement('textarea'); ta.className = 'copybox'; ta.readOnly = true; $('t-msg').after(ta); }
+    ta.value = md; ta.focus(); ta.select();
+    $('t-msg').textContent = 'Select the table below and copy it';
+  }
+}
+function twoTap(id, label, armedLabel, fn) {
+  const b = $(id);
+  let timer = 0;
+  b.addEventListener('click', () => {
+    if (timer) { clearTimeout(timer); timer = 0; b.classList.remove('arm'); b.textContent = label; fn(); return; }
+    b.classList.add('arm'); b.textContent = armedLabel;
+    timer = setTimeout(() => { timer = 0; b.classList.remove('arm'); b.textContent = label; }, 3000);
+  });
+}
+
+// ---------- wiring ----------
+$('go-cam').addEventListener('click', () => startCamera(false));
+$('go-steps').addEventListener('click', () => { askSensors(); homeError(''); newWalk('steps'); showHud(); });
+$('go-sim').addEventListener('click', startSim);
+$('again').addEventListener('click', () => startCamera(true));
+$('b-pin').addEventListener('click', dropPin);
+$('b-mark').addEventListener('click', () => { $('marks').hidden = !$('marks').hidden; });
+$('marks').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (b) markHere(b.dataset.m); });
+$('b-home').addEventListener('click', () => setTarget(START));
+twoTap('b-x', 'On the X', 'Tap again on the X', onX);
+twoTap('b-end', 'End', 'Tap to end', endWalk);
+twoTap('t-clear', 'Clear', 'Tap to clear all', () => { trials = []; saveTrials(); renderTrials(); $('t-msg').textContent = 'Cleared'; });
+$('b-trials').addEventListener('click', () => { renderTrials(); $('t-msg').textContent = ''; $('sheet').hidden = false; });
+$('sheet-close').addEventListener('click', () => { $('sheet').hidden = true; });
+$('t-copy').addEventListener('click', copyTrials);
+$('pins-clear').addEventListener('click', () => { pins = []; setTarget(START); renderTrials(); });
+// a tap on the panels is for the page, not a pin drop in the camera view
+$('ui').addEventListener('beforexrselect', e => { if (e.target.closest && e.target.closest('button, canvas, .bar, .guide, .panel, .note, .sheet-full')) e.preventDefault(); });
+// in the simulation a click on the view drops a pin at the ring, like a tap on the camera view
+$('ui').addEventListener('click', e => { if (run === 'sim' && e.target === $('ui')) dropPin(); });
+addEventListener('resize', () => { hudAt = 0; mapAt = 0; });
+
+window.RIDGELINE_WALK = {
+  get st() { return st; }, get run() { return run; }, get pins() { return pins; }, get target() { return target; }, get trials() { return trials; },
+  sim, xr, W, setTarget, addPin, dropPin, onX, simPocket, markHere, endWalk, startSim,
+};
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => { /* an older server.py has no /sw.js */ });
+renderCaps();
+renderTrials();
+</script>
+</body>
+</html>
