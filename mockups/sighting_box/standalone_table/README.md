@@ -1,6 +1,6 @@
 # 照準の箱の単独モードの表
 
-2026年11月8日 1時半 EST 作成（Claude Code）。Code Metal Forge 2026（Team-8）の照準の箱が、PCもスマホも無く電池だけで動くときに使う早見表である。組み立ての中での位置づけは `C:\Users\seika\Obsidian\2_Areas\BHCC\マネーハンティング\2026-11-07_CodeMetalForge_照準の箱の組み立て手順.md` の手順12。
+2026年11月8日 1時半 EST 作成（Claude Code）。Code Metal Forge 2026（Team-8）の照準の箱が、PCもスマホも無く電池だけで動くときに使う早見表である。組み立ての中での位置づけは 組み立て手順のメモ（リポジトリの外）の手順12。
 
 ## これは何
 
@@ -30,11 +30,11 @@
 ## 作り直し方
 
 ```
-cd C:\Users\seika\Obsidian\_ai\workspace
-python -I 2026-11-08_codemetal_standalone_table\make_standalone_table.py 2026-11-08_codemetal_phone_screen\input\dem_5m.tif "C:\Users\seika\Obsidian\3_Resources\attachments\2026-11-07_CodeMetalForge_地図見本\stats.json" 2026-11-08_codemetal_standalone_table\out --scene 2026-11-08_codemetal_sighting_box\box_scene.json --phone-state 2026-11-08_codemetal_phone_screen\phone_state.json
+cd mockups
+python -I sighting_box/standalone_table/make_standalone_table.py <dem_5m.tif> <stats.json> sighting_box/standalone_table/out --scene sighting_box/box_scene.json --phone-state phone_screen/phone_state.json
 ```
 
-約15秒で終わる。`--n` で行の上限を変えられる（今は3つの山が見える地点が少なく、60 m間隔で164行に収まった）。
+5 mの地形（dem_5m.tif）と地図見本の stats.json は大きいかリポジトリの外の資料なので入れていない。手元の写しを渡す。約15秒で終わる。`--n` で行の上限を変えられる（今は3つの山が見える地点が少なく、60 m間隔で164行に収まった）。
 
 ## 模擬の結果
 
