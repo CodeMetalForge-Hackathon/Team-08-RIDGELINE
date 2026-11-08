@@ -65,6 +65,8 @@ class Grid:
     origin_xy: tuple[float, float] = (0.0, 0.0)  # (x_west, y_north) of cell (0,0) corner
     blocked: np.ndarray | None = None   # bool (R, C): cliffs, water, ...
     trails: np.ndarray | None = None    # bool (R, C)
+    water: np.ndarray | None = None     # uint8 classes from water.py (display + messages)
+    cost_mult: np.ndarray | None = None  # float (R, C) >= 1: multiplier on time to ENTER a cell
 
     def __post_init__(self):
         R, C = self.dem.shape
@@ -144,6 +146,8 @@ def build_edge_costs(grid: Grid, cfg: CostConfig):
         mult += cfg.rough_penalty * 0.5 * (rough + _shifted(rough, dr, dc, 0.0)) / 10.0
         both_trail = grid.trails & _shifted(grid.trails, dr, dc, False)
         mult = np.where(both_trail, mult * cfg.trail_bonus, mult)
+        if grid.cost_mult is not None:                      # streams, wet ground, ...
+            mult = mult * _shifted(grid.cost_mult, dr, dc, 1.0)
         cost = t * mult
 
         # Hard blocks
@@ -155,9 +159,20 @@ def build_edge_costs(grid: Grid, cfg: CostConfig):
             | grid.blocked
             | _shifted(grid.blocked, dr, dc, True)
         )
-        # Knight moves jump over cells: also block if either cell they pass between is blocked
-        if abs(dr) == 2 or abs(dc) == 2:
-            mr, mc = dr // 2 if abs(dr) == 2 else 0, dc // 2 if abs(dc) == 2 else 0
+        # Moves must not squeeze through a gap between blocked cells (e.g. a diagonal step between
+        # two water cells that only touch at their corners): every cell the move passes beside or
+        # over has to be walkable.
+        if abs(dr) == 1 and abs(dc) == 1:
+            passed = [(dr, 0), (0, dc)]
+        elif abs(dr) == 2:
+            sr = int(np.sign(dr))
+            passed = [(sr, 0), (sr, dc)]
+        elif abs(dc) == 2:
+            sc = int(np.sign(dc))
+            passed = [(0, sc), (dr, sc)]
+        else:
+            passed = []
+        for mr, mc in passed:
             bad |= _shifted(grid.blocked, mr, mc, True)
         out.append(((dr, dc), np.where(bad, np.inf, cost)))
     return out

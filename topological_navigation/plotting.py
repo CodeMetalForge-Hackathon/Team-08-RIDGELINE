@@ -33,12 +33,20 @@ def shaded_relief(dem, cell):
 
 
 def draw_water(ax, water, extent, zorder=1.5):
-    """Paint known water (bool mask, same shape as the DEM) blue. The only blue on the map."""
-    if water is None or not water.any():
+    """
+    Paint known water. `water` is a bool mask (all open water) or the uint8 class raster from
+    water.py: 1 open water (solid blue), 2 stream/river line (darker blue), 3 drainageway
+    that may be dry (pale blue). These are the only blue things on the map.
+    """
+    if water is None:
+        return
+    w = np.asarray(water)
+    w = w.astype(np.uint8) if w.dtype == bool else w
+    if not w.any():
         return
     from matplotlib.colors import ListedColormap
-    ax.imshow(np.ma.masked_where(~water, np.ones(water.shape)), extent=extent, origin="upper",
-              cmap=ListedColormap(["#3b8ed0"]), vmin=0, vmax=1, alpha=0.95, zorder=zorder)
+    cmap = ListedColormap([(0, 0, 0, 0), "#3b8ed0", "#1f6fb2", "#8cc0e6"])
+    ax.imshow(w, extent=extent, origin="upper", cmap=cmap, vmin=0, vmax=3, zorder=zorder)
 
 
 def _xy(grid, rc):
@@ -57,6 +65,8 @@ def plot_routes(grid, paths: dict, start, reach_mask=None, basemap=False, water=
     H, W = dem.shape
     x0, y0 = grid.origin_xy
     extent = (x0, x0 + W * grid.cell, y0 - H * grid.cell, y0)   # left, right, bottom, top
+    if water is None:
+        water = grid.water                                      # set by water.load_water()
 
     fig, ax = plt.subplots(figsize=(11, 9))
 

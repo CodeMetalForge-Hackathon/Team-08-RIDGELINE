@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from water import load_water
 
 from nav_integration import inspect_raster, load_grid, latlon_to_rc, guidance
 from hiker_router import CostConfig, build_edge_costs, cost_to_go
@@ -48,4 +49,9 @@ print(res["severity"], res["tier"])
 for w in res["warnings"]:
     print(" -", w)
 
+load_water(grid, crs.to_epsg(), cache_dir=HERE)   # first run downloads, later runs read the cache
+print("Water Rendered.")
+
 pick_destination(planner)             # click anywhere on the map to choose
+
+

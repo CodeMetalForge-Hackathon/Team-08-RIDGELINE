@@ -20,6 +20,7 @@ import textwrap
 import numpy as np
 
 from hiker_router import CostConfig, Grid, build_edge_costs, forward_tree, tobler_speed
+from water import OPEN, STREAM
 
 _INJ = CostConfig.injured()
 
@@ -43,6 +44,8 @@ class Planner:
         self.start = tuple(int(x) for x in start)
         self.tiers = tiers
         self._layers = {}
+        if grid.water is not None:                       # never route over open water, whatever the load order
+            grid.blocked = grid.blocked | (grid.water == OPEN)
         self._gy, self._gx = np.gradient(grid.dem, grid.cell)
         self._slope = np.hypot(self._gy, self._gx)
 
@@ -68,20 +71,28 @@ class Planner:
             out.append(i)
         return [(k // C, k % C) for k in reversed(out)]
 
-    def plan(self, goal, snap_m: float = 300.0):
-        """Route to `goal` (row, col). Blocked cells (water/no data) snap to the nearest walkable cell."""
+    def plan(self, goal, snap_m: float | None = None):
+        """
+        Route to `goal` (row, col). A goal on blocked cells (open water, missing data) is moved to
+        the nearest walkable cell, however far away that is (snap_m=None), and the warning says so.
+        Pass snap_m to refuse snapping farther than that many metres.
+        """
         R, C = self.grid.dem.shape
         goal = tuple(int(x) for x in goal)
         note = None
         if 0 <= goal[0] < R and 0 <= goal[1] < C and self.grid.blocked[goal]:
             snapped, d = self._nearest_walkable(goal)
-            if snapped is not None and d <= snap_m:
-                note = (f"That point is on blocked terrain (water, missing map data or an obstacle), "
-                        f"so the route goes to the nearest walkable point, {d:.0f} m away.")
-                goal = snapped
+            if snapped is not None and (snap_m is None or d <= snap_m):
+                what = ("in open water (lake or river)"
+                        if self.grid.water is not None and self.grid.water[goal] == OPEN
+                        else "on blocked terrain (missing map data or an obstacle)")
+                note = (f"That point is {what}, so the route goes to the nearest walkable "
+                        f"point, {d:.0f} m away.")
+                requested, goal = goal, snapped
         res = self._plan_cell(goal)
         if note:
             res["warnings"].insert(0, note)
+            res["requested_goal"] = requested
         return res
 
     def _nearest_walkable(self, goal):
@@ -152,6 +163,14 @@ class Planner:
                     max_up=float(max(g.max(), 0)), max_down=float(max((-g).max(), 0)),
                     max_cross=float(cross.max()), hard_sections=sections)
 
+    def _stream_crossings(self, path):
+        """Number of separate stream/river-line stretches the route passes through."""
+        wcls = self.grid.water
+        if wcls is None or len(path) < 2:
+            return 0
+        on = np.array([wcls[r, c] == STREAM for r, c in path])
+        return int(on[0]) + int(np.sum(on[1:] & ~on[:-1]))
+
     def _report(self, path, tier_idx, goal):
         cfg0 = self.tiers[0][1]
         m = self._analyze(path)
@@ -176,6 +195,10 @@ class Planner:
         if sev == "extreme":
             w.append("Scrambling-level terrain. Not recommended while injured: consider staying put and "
                      "signaling for help, or choosing a different destination.")
+        n_cross = self._stream_crossings(path)
+        if n_cross:
+            w.append(f"The route crosses {n_cross} stream or river channel(s). Crossings can be slow or "
+                     f"dangerous, especially in high water; pick a safe spot to cross.")
         if detour > 1.8 and straight > 200:
             w.append(f"Terrain forces a detour: the route is {detour:.1f}x longer than the straight line.")
         if m["ascent_m"] > 300:
@@ -202,8 +225,14 @@ class Planner:
         barrier = float(self._slope[rr, cc].max())
 
         w = []
-        if g_.blocked[goal]:
-            w.append("The destination is on blocked terrain (water, missing map data or an obstacle).")
+        if g_.water is not None and g_.water[goal] == OPEN:
+            w.append("The destination is in open water (lake or river).")
+        elif g_.blocked[goal]:
+            w.append("The destination is on blocked terrain (missing map data or an obstacle).")
+        elif g_.water is not None and (g_.water[max(goal[0] - 5, 0):goal[0] + 6,
+                                                max(goal[1] - 5, 0):goal[1] + 6] == OPEN).sum() > 20:
+            w.append("The destination looks like an island or a spit surrounded by water, with no "
+                     "dry route to it from where you are.")
         else:
             w.append(f"No walkable route exists, even allowing scrambling-level slopes: the destination "
                      f"is walled off by blocked terrain or slopes steeper than "
@@ -299,8 +328,8 @@ def pick_destination(planner: Planner, radius_m: float | None = None, show: bool
       x ................. clear route      f ... fullscreen
     The toolbar's zoom/pan tools still work (clicks are ignored while one is active).
     radius_m: start zoomed to this radius around the start instead of the whole map.
-    water:    optional bool mask (same shape as the DEM) of KNOWN water; drawn blue. Nothing
-              else on the map is blue (low ground is green).
+    water:    KNOWN water to draw blue: a bool mask or the class raster from water.py. Defaults
+              to grid.water (set by load_water). Nothing else on the map is blue.
     """
     import warnings
     import matplotlib.pyplot as plt
@@ -309,6 +338,8 @@ def pick_destination(planner: Planner, radius_m: float | None = None, show: bool
     warnings.filterwarnings("ignore", message="Ignoring fixed .* limits")
 
     g = planner.grid
+    if water is None:
+        water = g.water                                               # from water.load_water()
     H, W = g.dem.shape
     x0, y0 = g.origin_xy
     extent = (x0, x0 + W * g.cell, y0 - H * g.cell, y0)               # left, right, bottom, top
