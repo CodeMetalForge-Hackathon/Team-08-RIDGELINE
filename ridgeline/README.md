@@ -83,8 +83,8 @@ Peaks are found with Rohan's `find_true_peaks` rule converted to meters (800 m i
 
 The server creates Cursor on Target events for the fix, its modelled 95% circle, the candidate route, HIDE and SIGNAL marks, and a disagreeing simulated GPS point. These are intended for ATAK native items, but their display inside real ATAK is not yet verified. The point is labelled GPS DISAGREES and states that the cause is unknown. `ce` is the 1 sigma circular error in the CoT base event schema, so ce = r95 / 2.4477. `hae` is ground + 1.7 m plus the GEOID18 offset for the tile (about −8.7 m), because the lidar heights are NAVD88. The fix reaches ATAK only with 2 or more Locks and no mismatch, and a reset deletes the items. The server resends every 15 s with fresh `time` and `stale`, so the survivor's remarks carry the age in words, for example "Position as of 14:05Z, 12 min ago." Past 10 minutes they add "the person may have moved since". A new route or new marks around the same fix keep its time, a new position or radius resets it.
 
-1. Keep the server running and run `adb reverse tcp:8087 tcp:8087`.
-2. In ATAK-CIV, Settings, Network Preferences, Manage Server Connections, Add. Address 127.0.0.1, no authentication, Advanced Options, TCP, then set the port to 8087.
+1. Keep the server running and run `adb reverse tcp:18087 tcp:8087`. ATAK-CIV itself listens on 8087 and 4242 on the phone, so `adb reverse tcp:8087 tcp:8087` fails and the phone side uses 18087.
+2. In ATAK-CIV, Settings, Network Preferences, Manage Server Connections, Add. Address 127.0.0.1, no authentication, Advanced Options, TCP, then set the port to 18087.
 3. The board's ATAK line shows "linked, 1 client".
 
 With no ATAK setup at all, start the server with `--atak-push 127.0.0.1:4242` after `adb forward tcp:4242 tcp:4242` to use ATAK's default TCP input (one event per connection, as ATAK reads it).

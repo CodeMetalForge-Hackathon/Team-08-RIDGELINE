@@ -108,7 +108,7 @@ cd Team-8
 python -I ridgeline/server.py
 ```
 
-The server listens on `127.0.0.1:8768`, and its CoT server uses TCP port `8087`. It binds only to the PC's loopback address, so a phone without the USB reverse connection cannot reach it directly. Repository access may require authentication during the event.
+The server listens on `127.0.0.1:8768`, and its CoT server uses TCP port `8087`, which the phone reaches as `18087` through `adb reverse` because ATAK itself holds 8087 on the phone. It binds only to the PC's loopback address, so a phone without the USB reverse connection cannot reach it directly. Repository access may require authentication during the event.
 
 ② Enable USB debugging, connect the phone and accept its debugging prompt. In a second terminal run
 

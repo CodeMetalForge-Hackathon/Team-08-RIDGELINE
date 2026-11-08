@@ -1,6 +1,6 @@
 """Pre-demo check for RIDGELINE. Run it in the 10 minutes before the judges arrive.
 
-    python -I ridgeline/scripts/preflight.py            (server on 8768, ATAK link on 8087)
+    python -I ridgeline/scripts/preflight.py            (server on 8768, ATAK link from phone 18087 to PC 8087)
     python -I ridgeline/scripts/preflight.py --port 8779 --cot-port 8089
 
 It only reads. It never changes the phone, adb or the server. Each line says PASS, WARN, FAIL or INFO and
@@ -38,9 +38,12 @@ def parse_devices(out: str) -> list[tuple[str, str]]:
     return rows
 
 
-def has_reverse(out: str, port: int) -> bool:
-    """True when `adb reverse --list` maps the phone's tcp:port to the PC's tcp:port."""
-    want = (f'tcp:{port}', f'tcp:{port}')
+ATAK_PHONE_PORT = 18087   # ATAK-CIV itself listens on 8087 and 4242 on the phone, so the reverse uses another phone port
+
+
+def has_reverse(out: str, port: int, phone_port: int | None = None) -> bool:
+    """True when `adb reverse --list` maps the phone's tcp:phone_port (default the same number) to the PC's tcp:port."""
+    want = (f'tcp:{phone_port or port}', f'tcp:{port}')
     return any(tuple(line.split()[-2:]) == want for line in out.splitlines() if len(line.split()) >= 2)
 
 
@@ -199,10 +202,10 @@ def phone_checks(port: int, cot_port: int) -> list[tuple[str, str, str]]:
         add(PASS, 'usb link', f'adb reverse tcp:{port} is set, the phone reaches http://localhost:{port}')
     else:
         add(FAIL, 'usb link', f'run: adb reverse tcp:{port} tcp:{port}')
-    if has_reverse(rev, cot_port):
-        add(PASS, 'atak link', f'adb reverse tcp:{cot_port} is set for ATAK on the phone')
+    if has_reverse(rev, cot_port, ATAK_PHONE_PORT):
+        add(PASS, 'atak link', f'adb reverse tcp:{ATAK_PHONE_PORT} tcp:{cot_port} is set, ATAK connects to 127.0.0.1, TCP, {ATAK_PHONE_PORT}')
     else:
-        add(INFO, 'atak link', f'only for ATAK on the phone: adb reverse tcp:{cot_port} tcp:{cot_port}')
+        add(INFO, 'atak link', f'only for ATAK on the phone: adb reverse tcp:{ATAK_PHONE_PORT} tcp:{cot_port} (ATAK itself holds 8087 and 4242 on the phone)')
 
     airplane = (adb('shell', 'settings', 'get', 'global', 'airplane_mode_on') or '').strip()
     if airplane == '1':
