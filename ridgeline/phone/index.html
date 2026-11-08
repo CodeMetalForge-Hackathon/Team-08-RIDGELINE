@@ -234,7 +234,7 @@ html.night .lock[data-state=ready]{animation:none;border-color:var(--amber);box-
 <div class="app">
   <header class="top">
     <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 26 13 6 19 17 23 10 30 26M9 26l7-12 7 12" fill="none" stroke="#86dce9" stroke-width="2.2" stroke-linejoin="round"/></svg>RIDGELINE</div>
-    <span class="chip off" id="chip-gps">GPS OFF</span>
+    <span class="chip off" id="chip-gps">GPS NOT USED</span>
     <span class="chip on" id="chip-mode">TERRAIN</span>
     <button class="icon-btn" id="open-settings" aria-label="Settings"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg></button>
   </header>
@@ -249,9 +249,9 @@ html.night .lock[data-state=ready]{animation:none;border-color:var(--amber);box-
     <label class="check"><input type="checkbox" id="camopt"> Rear camera behind the crosshair</label>
     <label class="check"><input type="checkbox" id="nightopt"> Night (red)</label>
     <label>Aim error assumed (deg, 1 sigma)<input id="sigma" type="number" min="0.5" max="10" step="0.5" value="3"></label>
-    <label>Test GPS<select id="gpsopt"><option value="off">Off</option><option value="spoof">Spoofed, 2.5 km NE of the demo spot</option><option value="honest">Honest, 40 m from the demo spot</option><option value="custom">Custom lat lon</option></select></label>
+    <label>Test GPS<select id="gpsopt"><option value="off">Off</option><option value="spoof">Far test point, 2.5 km NE of the demo spot</option><option value="honest">Near test point, 40 m from the demo spot</option><option value="custom">Custom lat lon</option></select></label>
     <div class="pair" id="gps-custom" hidden><label>Lat<input id="gps-lat" type="number" step="0.00001" inputmode="decimal"></label><label>Lon<input id="gps-lon" type="number" step="0.00001" inputmode="decimal"></label></div>
-    <p class="foot">A pretend GPS reading, checked against the terrain fix to show spoofing. The phone GPS is never read.</p>
+    <p class="foot">A simulated GPS reading, compared with the terrain estimate. A disagreement does not identify its cause. The phone GPS is never read.</p>
     <label>Barometer altitude (m, simulated)<input id="baro" type="number" step="1"></label>
     <button class="btn" id="assist">Demo assist: aim at the current card (keyboard only)</button>
     <button class="btn" id="reset">Start a new fix and clear marks</button>
@@ -371,7 +371,7 @@ function mgrsOf(lat, lon, digits) {
 const mgrsDigits = () => result && result.r95_m < 50 ? 4 : 3;   // 10 m squares only when the fix is that good
 function fixMgrs() { return result && result.n_locks ? mgrsOf(result.estimate.lat, result.estimate.lon, mgrsDigits()).text : null; }
 
-// ---------- test GPS: a terrain integrity check against GPS spoofing ----------
+// ---------- simulated GPS comparison (not a spoofing detector) ----------
 // The phone GPS is never read. A test reading is set in Settings and compared with the terrain fix.
 let gpsMode = 'off', gpsCustom = null;
 function gpsPoint() {
@@ -389,14 +389,15 @@ function gpsCheck() {
   const g = gpsPoint();
   if (!g || !result || result.n_locks < 2 || result.status === 'mismatch') return null;
   const dist = distM(result.estimate.lat, result.estimate.lon, g.lat, g.lon);
+  // Keep the legacy REJECTED wire value for existing board and CoT consumers. It means disagreement only.
   return { lat: +g.lat.toFixed(6), lon: +g.lon.toFixed(6), verdict: dist > result.r95_m ? 'REJECTED' : 'AGREE', dist_m: Math.round(dist) };
 }
 function gpsHtml() {
   const g = gpsCheck();
   if (!g) return '';
   return g.verdict === 'REJECTED'
-    ? `<div class="gps bad" role="status"><b>GPS REJECTED</b><span>The GPS reading is ${fmtM(g.dist_m)} from the terrain fix, outside the 95% circle. Possible spoofing, do not trust it.</span></div>`
-    : `<div class="gps good" role="status"><b>GPS AGREES</b><span>The GPS reading is ${fmtM(g.dist_m)} from the terrain fix, inside the 95% circle.</span></div>`;
+    ? `<div class="gps bad" role="status"><b>GPS DISAGREES</b><span>The test reading is ${fmtM(g.dist_m)} from the terrain estimate, outside its modelled 95% circle. Either estimate may be wrong. Cross-check before moving.</span></div>`
+    : `<div class="gps good" role="status"><b>GPS CONSISTENT</b><span>The test reading is ${fmtM(g.dist_m)} from the terrain estimate, inside its modelled 95% circle. Agreement does not verify either position.</span></div>`;
 }
 
 function summaryForBoard() {
@@ -491,7 +492,8 @@ function destList() {
 // ---------- walkable start (ridgeline/hide.js walkableStart) ----------
 // A hand-held fix is often a few hundred metres off, so its cell can be a cliff, water or a ledge boxed in by cliffs.
 // Routes and the Hide and Signal reach then start from the nearest walkable cell inside the 95% circle that the
-// route planner (its own 20 m grid) can really leave toward Rendezvous. The fix itself never moves.
+// route planner (its own 20 m grid) can leave toward Rendezvous. This does not validate a connection from the fix.
+// The fix itself never moves. This alternate start is a candidate for verification, not a movement instruction.
 const wstart = { key: '', ws: null, pick: null, rt: null, rtKey: '' };
 const startKeyOf = p => `${p.lon.toFixed(6)},${p.lat.toFixed(6)}|${nav.health}`;
 function startNow() {
@@ -530,7 +532,7 @@ function startHtml() {
   const ws = wstart.ws, why = ws && ws.moved
     ? { steep: `The fix is on ground over ${CAP[nav.health]}°.`, water: 'The fix is on water.', boxed: 'The fix is boxed in by steep ground.' }[ws.reason] || ''
     : 'No route leaves the fix cell.';
-  return `<p class="leg start-ln">${why ? `<b>${why}</b> ` : ''}Start from walkable ground ${fmtM(Math.max(10, Math.round(s.dist_m / 10) * 10))} ${s.dir} of the fix, inside the 95% circle.</p>`;
+  return `<p class="leg start-ln">${why ? `<b>${why}</b> ` : ''}Candidate route start ${fmtM(Math.max(10, Math.round(s.dist_m / 10) * 10))} ${s.dir} of the estimate, inside the 95% circle. The connection from your position is unverified. Confirm your position and the terrain before using this route.</p>`;
 }
 
 // ---------- HIDE and SIGNAL (ridgeline/hide.js). Terrain only, never a promise of cover ----------
@@ -674,11 +676,14 @@ function drawMap(canvas, zoom) {
     ctx.restore();
   }
   const ws0 = screen === 'fix' ? startNow() : null;
-  if (ws0 && ws0.moved) {   // the walkable start: a dashed line from the fix and a white dot
+  if (ws0 && ws0.moved) {   // candidate start only; no line implies an unverified walk from the fix
     const q = S.toEN(model, ws0.lon, ws0.lat), x = X(q.e), y = Y(q.n), s = dpr;
-    ctx.save(); ctx.lineCap = 'round'; ctx.setLineDash([4 * s, 4 * s]); ctx.strokeStyle = '#2b2418'; ctx.lineWidth = 2 * s;
-    ctx.beginPath(); ctx.moveTo(X(result.estimate.e_m), Y(result.estimate.n_m)); ctx.lineTo(x, y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.save(); ctx.strokeStyle = '#2b2418'; ctx.lineWidth = 2 * s;
     ctx.beginPath(); ctx.arc(x, y, 5 * s, 0, Math.PI * 2); ctx.fillStyle = '#f5f1e6'; ctx.fill(); ctx.lineWidth = 2.2 * s; ctx.stroke();
+    ctx.font = `${11 * s}px sans-serif`; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    const label = 'Candidate start', labelX = Math.max(4 * s, Math.min(x + 9 * s, W - ctx.measureText(label).width - 4 * s));
+    ctx.lineWidth = 3 * s; ctx.strokeStyle = '#f5f1e6'; ctx.strokeText(label, labelX, y - 7 * s);
+    ctx.fillStyle = '#2b2418'; ctx.fillText(label, labelX, y - 7 * s);
     ctx.restore();
   }
   if (screen === 'fix') {   // HIDE ring and SIGNAL flag, as on the board
@@ -734,13 +739,13 @@ function drawMap(canvas, zoom) {
     }
   }
   const gc = screen === 'fix' ? gpsCheck() : null;
-  if (gc) {   // the test GPS reading: red X when the terrain rejects it, green ring when it agrees
+  if (gc) {   // the test GPS reading: red X for disagreement, green ring for consistency
     const q = S.toEN(model, gc.lon, gc.lat), x = X(q.e), y = Y(q.n), s = dpr, bad = gc.verdict === 'REJECTED';
     ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(245,241,230,.95)'; ctx.lineWidth = 7 * s;
     const mark = () => { ctx.beginPath(); if (bad) { ctx.moveTo(x - 8 * s, y - 8 * s); ctx.lineTo(x + 8 * s, y + 8 * s); ctx.moveTo(x + 8 * s, y - 8 * s); ctx.lineTo(x - 8 * s, y + 8 * s); } else ctx.arc(x, y, 8 * s, 0, Math.PI * 2); ctx.stroke(); };
     mark(); ctx.strokeStyle = bad ? '#b42318' : '#2b7a3d'; ctx.lineWidth = 3.2 * s; mark();
     ctx.font = `800 ${11 * s}px "Noto Sans JP",sans-serif`; ctx.lineWidth = 3 * s; ctx.strokeStyle = 'rgba(245,241,230,.95)';
-    const lab = bad ? 'GPS REJECTED' : 'GPS', tw = ctx.measureText(lab).width, tx = x + 12 * s + tw > W - 6 * s ? x - 12 * s - tw : x + 12 * s;
+    const lab = bad ? 'GPS DISAGREES' : 'GPS TEST', tw = ctx.measureText(lab).width, tx = x + 12 * s + tw > W - 6 * s ? x - 12 * s - tw : x + 12 * s;
     ctx.strokeText(lab, tx, y + 4 * s); ctx.fillStyle = bad ? '#b42318' : '#1e5a2c'; ctx.fillText(lab, tx, y + 4 * s);
     ctx.restore();
   }
@@ -772,15 +777,15 @@ function render() {
   if (screen === 'check') {
     const live = performance.now() - sensorSeen < 1500;
     m.innerHTML = `<div class="eyebrow"><span>System check</span><span>${new Date().toISOString().slice(11, 16).replace(':', '')}Z</span></div>
-      <h1>GPS is jammed.<br>Use the mountains.</h1>
+      <h1>A terrain fix.<br>Without GPS.</h1>
       <div class="rows">
-        <div class="row"><b>GPS</b><span class="v off">No signal</span></div>
-        <div class="row"><b>Network</b><span class="v off">None</span></div>
+        <div class="row"><b>GPS</b><span class="v">Not used</span></div>
+        <div class="row"><b>Network</b><span class="v">Not required for a fix</span></div>
         <div class="row"><b>Barometer</b><span class="v ok">${Math.round(baro).toLocaleString('en-US')} m <span class="foot">sim</span></span></div>
         <div class="row"><b>Motion sensor</b><span class="v ${live ? 'ok' : source === 'keyboard' ? 'warn' : 'off'}" id="motion-v">${live ? 'Streaming' : source === 'keyboard' ? 'Keyboard' : 'Waiting'}</span></div>
-        <div class="row"><b>Compass</b><span class="v">Not needed</span></div>
+        <div class="row"><b>Heading offset</b><span class="v">Fitted from peak angles</span></div>
       </div>
-      <div class="card pace"><i></i><div><b>Auto-PACE switched to terrain.</b><p class="lead" style="margin-top:4px">Aim at ${wall.length} peaks you can name. RIDGELINE uses only the angles between them.</p></div></div>
+      <div class="card pace"><i></i><div><b>Terrain mode ready.</b><p class="lead" style="margin-top:4px">Aim at ${wall.length} peaks you can name. RIDGELINE combines the angles between peaks with a height band. In this demo the height is simulated.</p></div></div>
       <div class="stack"><button class="btn primary" id="start">Start terrain fix</button></div>`;
     $('start').onclick = start;
   } else if (screen === 'aim') {
@@ -825,7 +830,7 @@ function render() {
     const e = result.estimate, o = result.others[0];
     const ns = `${Math.abs(e.lat).toFixed(5)}° ${e.lat >= 0 ? 'N' : 'S'}`, ew = `${Math.abs(e.lon).toFixed(5)}° ${e.lon >= 0 ? 'E' : 'W'}`;
     const dir = o ? ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(W360(deg(Math.atan2(o.lon - e.lon, o.lat - e.lat))) / 45) % 8] : '';
-    m.innerHTML = `<div class="eyebrow"><span>Position</span><span>NO GPS · NO NETWORK</span></div>
+    m.innerHTML = `<div class="eyebrow"><span>Position</span><span>SOLVED ON DEVICE</span></div>
       <h1>You are here.</h1>
       <div class="coords" id="coords"></div>
       <div class="mgrs" id="mgrs">${fixMgrs()}<small>MGRS · ${mgrsDigits() === 4 ? '10' : '100'} m squares</small></div>
@@ -1066,7 +1071,7 @@ $('baro').onchange = e => { const v = Number(e.target.value); if (Number.isFinit
 $('reset').onclick = () => { $('sheet').hidden = true; clearMarks(); resetFix(); };   // the demo reset: a new fix and no saved marks
 $('clear-marks').onclick = () => { clearMarks(); if (screen === 'fix') { render(); post(); } };
 function gpsChanged() {
-  $('chip-gps').textContent = gpsMode === 'off' ? 'GPS OFF' : 'GPS TEST';
+  $('chip-gps').textContent = gpsMode === 'off' ? 'GPS NOT USED' : 'GPS TEST';
   if (screen === 'fix') render();
   if (result && result.n_locks) post();
 }

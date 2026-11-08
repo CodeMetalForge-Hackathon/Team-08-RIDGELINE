@@ -269,14 +269,18 @@ class ServerToAtak(unittest.TestCase):
         self.assertNotEqual(pts[0], pts[-1])   # equal ends would make ATAK close and fill it
         self.assertIn('Rendezvous', line.find('detail/contact').get('callsign'))
 
-        # marks and the rejected GPS as spot markers
+        # marks and the disagreeing simulated GPS as spot markers
         names = {u: e.find('detail/contact').get('callsign') for u, e in ev.items() if e.get('type') == 'b-m-p-s-m'}
         self.assertEqual(names, {'RIDGELINE-1.hide-1': 'HIDE 1', 'RIDGELINE-1.hide-2': 'HIDE 2',
-                                 'RIDGELINE-1.signal-1': 'SIGNAL 1', 'RIDGELINE-1.gps': 'GPS REJECTED'})
+                                 'RIDGELINE-1.signal-1': 'SIGNAL 1', 'RIDGELINE-1.gps': 'GPS DISAGREES'})
         hide1 = ev['RIDGELINE-1.hide-1']   # rank 1 is HIDE 1, whatever the order the phone sent them in
         self.assertAlmostEqual(float(hide1.find('point').get('lat')), DEMO['lat'] - 0.001, places=6)
         self.assertEqual(ev['RIDGELINE-1.gps'].find('detail/color').get('argb'), str(-65536))
         self.assertEqual(ev['RIDGELINE-1.gps'].get('how'), 'm-g')
+        gps_remarks = ev['RIDGELINE-1.gps'].find('detail/remarks').text
+        self.assertIn('Cause unknown. Either estimate may be wrong.', gps_remarks)
+        self.assertNotIn('spoofing', gps_remarks)
+        self.assertIn('Either estimate may be wrong.', me.find('detail/remarks').text)
 
         # a client that connects later gets the current set at once, and /api/cot holds the same set
         b = self.client()
@@ -352,6 +356,9 @@ class ServerToAtak(unittest.TestCase):
         self.assertEqual(deleted(ev), {'RIDGELINE-1.route', 'RIDGELINE-1.hide-2', 'RIDGELINE-1.signal-1', 'RIDGELINE-1.gps'})
         self.assertAlmostEqual(float(by_uid(ev)['RIDGELINE-1'].find('point').get('ce')), 150 / 2.4477, delta=0.06)
         self.assertEqual(float(by_uid(ev)['RIDGELINE-1.r95'].find('detail/shape/ellipse').get('major')), 150.0)
+        remarks = by_uid(ev)['RIDGELINE-1'].find('detail/remarks').text
+        self.assertIn('consistent with the terrain estimate', remarks)
+        self.assertIn('Agreement does not verify either position.', remarks)
 
     def test_lock_relay_to_the_board_stays_fast(self):
         a = self.client()

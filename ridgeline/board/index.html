@@ -69,7 +69,7 @@ td.r{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
 <body>
 <div class="wrap">
   <div class="mapbox" id="mapbox"><canvas id="cv"></canvas>
-    <div class="legend" id="legend"><i></i><span>Pencil line from a locked peak</span><i class="t"></i><span>Error triangle</span><i class="b"></i><span>95% bubble</span><i class="x"></i><span>Best estimate</span><span class="lg-m" id="lg-h"></span><span class="lg-m">HIDE, seen by the fewest summits</span><span class="lg-m" id="lg-s"></span><span class="lg-m">SIGNAL, open ground seen by the most summits</span><span class="lg-g" id="lg-g"></span><span class="lg-g">Phone GPS reading</span><span class="wide lg-m">Terrain only. Trees and buildings are not in the model.</span></div>
+    <div class="legend" id="legend"><i></i><span>Pencil line from a locked peak</span><i class="t"></i><span>Error triangle</span><i class="b"></i><span>95% bubble</span><i class="x"></i><span>Best estimate</span><span class="lg-m" id="lg-h"></span><span class="lg-m">HIDE, seen by the fewest summits</span><span class="lg-m" id="lg-s"></span><span class="lg-m">SIGNAL, open ground seen by the most summits</span><span class="lg-g" id="lg-g"></span><span class="lg-g">Test GPS reading</span><span class="wide lg-m">Terrain only. Trees and buildings are not in the model.</span></div>
   </div>
   <aside class="side">
     <div class="brand"><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><path d="M2 26 13 6 19 17 23 10 30 26M9 26l7-12 7 12" fill="none" stroke="#1f2326" stroke-width="2.4" stroke-linejoin="round"/></svg>RIDGELINE <small>live fix</small><span class="live" id="live" style="margin-left:auto"><i></i><span>WAITING</span></span></div>
@@ -118,7 +118,7 @@ function fixEN() {
 }
 const gpsLook = g => {
   const v = String(g.verdict || '').toUpperCase();
-  return v === 'REJECTED' ? { col: '#b3261e', say: d => `GPS rejected, ${d} off` } : v === 'AGREE' ? { col: '#2b7a3d', say: d => `GPS agrees, ${d}` } : { col: '#1f2326', say: d => `GPS reading, ${d} off` };
+  return v === 'REJECTED' ? { col: '#b3261e', say: d => `GPS disagrees, ${d} off` } : v === 'AGREE' ? { col: '#2b7a3d', say: d => `GPS consistent, ${d}` } : { col: '#1f2326', say: d => `GPS reading, ${d} off` };
 };
 // map symbols, the same shapes on the canvas and in the legend
 function symSvg(kind, col) {
