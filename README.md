@@ -64,6 +64,7 @@ python tools/live_server.py              # serves the repo on http://localhost:8
    The first Reveal also opens the **Trust** card (the Trust button opens it any time). It shows what 200 simulated fixes say about this ± N m: how many test fixes came that close, how the error shrinks with each peak, wrong-aim and heading-frame results, solve time, and what the test leaves out. It reads `terrain_viewer/data/moran/solver_eval.json`, the file `tests/solver.test.mjs` writes.
 5. Wrong aim: lock while aiming at a different peak. The phone names the lock that does not fit and its line turns red on the judge screen. Aim again and Lock (it replaces that lock), or press Re-aim. **Backspace** removes the last lock.
 6. Where to go: after **Use this fix** the phone offers the home point (the first fix, the landing spot), the saved points, or a pin on its map. Tap the map to drop a pin, press and hold to lock it, unlock with **Unlock pin** and then **Unlock**. With the keyboard, focus the map, move the cursor with the arrow keys, Enter drops the pin, hold Enter to lock it. The route keeps off water and off ground steeper than 30° (Able) or 18° (Injured, half speed), is coloured easy, moderate and steep, and says why it goes that way in one sentence. If there is no safe way the phone says **Stay. Signal. Wait.** The judge screen draws the same route.
+7. Offline: after the first load the phone app works with no server and no network. `mockups/phone_screen/sw.js` keeps a copy of the page, the scenario, the solver and route modules, the 30 m grid and the icons (11 files, 1.0 MB). Settings says *Works offline* when the copy is complete. Online it still fetches fresh files first and falls back to the copy after 3 s; the live link (`/lock`, `/state`) is never cached, so with no server the phone says *Viewer link offline. The fix still works on this phone.* `manifest.webmanifest` makes it installable (Add to Home Screen). Service workers need https or localhost, so over plain http on the LAN there is no offline copy and Settings says so.
 
 Phone on the same Wi-Fi: run `python tools/live_server.py --lan` and open `http://<laptop IP>:8768/mockups/phone_screen/`. Phone motion sensors need a secure page, so add `--cert cert.pem --key key.pem` (any self-signed certificate) and open `https://` instead. This path has not been tested on a real phone.
 
@@ -73,7 +74,9 @@ How it works. The phone sends headings in its own frame, so only the differences
 node --test tests/solver.test.mjs          # 200 noisy trials, wrong-aim test, speed; writes terrain_viewer/data/moran/solver_eval.json
 node --test tests/route.test.mjs           # routes to the saved points, able and injured, never through water or over the limit
 node tests/live_e2e.mjs                    # phone + server + viewer in headless Chrome, driven by key presses, on free ports (CHROME=<path> if needed)
+node tests/pwa_offline.mjs                 # load the phone once, stop the server, reload and Lock from the offline copy
 node mockups/phone_screen/verify_ui.mjs    # phone UI logic checks
+python mockups/phone_screen/icons/make_icons.py   # redraw the app icons (Pillow)
 cd terrain_viewer && python -I scripts/team8_solver_grid.py data/moran   # rebuild solver_grid.json (numpy, scipy, Pillow), about 20 s
 ```
 
@@ -90,6 +93,7 @@ Measured on the synthetic Mount Moran demo spot. The same 30 m DEM makes the loc
 | Lock to judge screen | `tests/live_e2e.mjs`, Enter on the phone to the first viewer frame painted with it, same laptop, software WebGL, 6 locks × 7 runs | 110 to 898 ms, all under 1 s |
 | Safe route, able (30°) | demo spot to the 3 saved points | 4.9 to 11.8 km, 3 h 00 to 4 h 26 min, planned in 21 to 157 ms |
 | Safe route, injured (18°) | same | no safe route to any of them, so Stay. Signal. Wait. |
+| Offline after the first load | `tests/pwa_offline.mjs`, headless desktop Chrome 156, server stopped (not a phone in airplane mode), 2 runs | copy ready 2.4 to 4.6 s after the first load, offline reload 149 to 287 ms, a keyboard Lock solved on the page (30 to 173 ms), no installability errors reported by Chrome |
 
 ## What we measured
 
