@@ -265,6 +265,6 @@ Pre-existing libraries, frameworks, SDKs and datasets used across this repositor
 - [ ] Run the exact submitted revision and record remaining phone checks
 - [x] No keys, tokens or `.env` files are tracked (checked Nov 8). Terrain and map data are the public datasets listed in Credits
 - [x] Final look for CUI, ITAR and unconsented personal data in the mockup images. All 21 are our own rendered screens and maps, no people, no personal data, no markings, no EXIF or GPS tags (checked Nov 8)
-- [x] No large files. The largest tracked file is 3.7 MB, so Git LFS is not needed (checked Nov 8)
+- [x] No large files. The largest tracked file is 41.4 MB (the navigation PDF in `Images/`), under GitHub's 50 MB warning, so Git LFS is not needed (checked Nov 8, 11:36 EST)
 - [ ] Final commit is on `main` before Sun Nov 8, 12:00 PM EST
 - [ ] `git tag submission && git push origin submission`
